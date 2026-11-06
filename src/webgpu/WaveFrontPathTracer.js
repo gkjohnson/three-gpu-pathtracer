@@ -135,21 +135,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	setBVHData( bvhData ) {
 
 		this.materialKernel.context.bvhData = bvhData;
-		this.materialKernel.needsUpdate = true;
-
 		this.traceRayKernel.context.bvhData = bvhData;
-		this.traceRayKernel.needsUpdate = true;
-
 		this.traceShadowRayKernel.context.bvhData = bvhData;
-		this.traceShadowRayKernel.needsUpdate = true;
-
 		this.mediumKernel.context.bvhData = bvhData;
-		this.mediumKernel.needsUpdate = true;
-
 		this.cameraMediumKernel.context.bvhData = bvhData;
-		this.cameraMediumKernel.needsUpdate = true;
-
-		this.reset();
+		this.rebuild();
 
 	}
 
@@ -157,8 +147,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.rebuild();
 
-		// MaterialKernel bakes in the camera ray function, so a camera swap needs a recompile
+		// recompile the kernels that bake in the scene, camera, random and shading model functions
+		this.logicKernel.needsUpdate = true;
 		this.materialKernel.needsUpdate = true;
+		this.traceRayKernel.needsUpdate = true;
+		this.traceShadowRayKernel.needsUpdate = true;
+		this.mediumKernel.needsUpdate = true;
+		this.cameraMediumKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -166,42 +161,23 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	setRandom( random ) {
 
 		this.logicKernel.context.random = random;
-		this.logicKernel.needsUpdate = true;
-
 		this.materialKernel.context.random = random;
-		this.materialKernel.needsUpdate = true;
-
 		this.traceRayKernel.context.random = random;
-		this.traceRayKernel.needsUpdate = true;
-
 		this.traceShadowRayKernel.context.random = random;
-		this.traceShadowRayKernel.needsUpdate = true;
-
 		this.mediumKernel.context.random = random;
-		this.mediumKernel.needsUpdate = true;
-
-		this.reset();
+		this.rebuild();
 
 	}
 
 	setShadingModel( shadingModel ) {
 
-		this.materialKernel.context.shadingModel = shadingModel;
-		this.materialKernel.needsUpdate = true;
-
 		// the ray traversal reads the shading model's materials
+		this.materialKernel.context.shadingModel = shadingModel;
 		this.traceRayKernel.context.shadingModel = shadingModel;
-		this.traceRayKernel.needsUpdate = true;
-
 		this.traceShadowRayKernel.context.shadingModel = shadingModel;
-		this.traceShadowRayKernel.needsUpdate = true;
-
 		this.mediumKernel.context.shadingModel = shadingModel;
-		this.mediumKernel.needsUpdate = true;
-
 		this.cameraMediumKernel.context.shadingModel = shadingModel;
-		this.cameraMediumKernel.needsUpdate = true;
-		this.reset();
+		this.rebuild();
 
 	}
 
@@ -236,7 +212,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setLights( lights ) {
 
-		this.lightsInfo.updateFrom( this.renderer, lights );
+		if ( this.lightsInfo.updateFrom( this.renderer, lights ) ) {
+
+			this.rebuild();
+
+		}
+
 		this.reset();
 
 	}
@@ -473,21 +454,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			mediumDispatchConverter,
 			zeroDispatchKernel,
 			populatePixelIndicesKernel,
+			resetSlotsKernel,
+			copyRayDataKernel,
 		} = this;
 
-		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
-		// lifetime. The slot pool starts tight, at the budget, and is resized in the loop below.
-		const targetDimensions = new Vector2();
-		this.getSize( targetDimensions );
-
-		// referenced via "this" since the buffers may be replaced here and in the loop
-		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
-
-		// the populate pass below overwrites whatever the resize carried over
-		const pixelCount = targetDimensions.x * targetDimensions.y;
-		this._applyBudget( pixelCount );
-
-		// compile the kernels before their first dispatch
+		// compile the kernels before their first dispatch, including the pool resize's below
 		yield* this.compileKernels( [
 			logicKernel,
 			materialKernel,
@@ -501,7 +472,21 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			mediumDispatchConverter,
 			zeroDispatchKernel,
 			populatePixelIndicesKernel,
+			resetSlotsKernel,
+			copyRayDataKernel,
 		] );
+
+		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
+		// lifetime. The slot pool starts tight, at the budget, and is resized in the loop below.
+		const targetDimensions = new Vector2();
+		this.getSize( targetDimensions );
+
+		// referenced via "this" since the buffers may be replaced here and in the loop
+		this._updatePixelQueue( targetDimensions.x, targetDimensions.y );
+
+		// the populate pass below overwrites whatever the resize carried over
+		const pixelCount = targetDimensions.x * targetDimensions.y;
+		this._applyBudget( pixelCount );
 
 		// reset the trace queues — only their lengths need zeroing
 		zeroDispatchKernel.target = this.queueCounters;

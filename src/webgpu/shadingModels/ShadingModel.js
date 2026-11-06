@@ -1,12 +1,32 @@
+/** @import { WebGPURenderer } from 'three/webgpu' */
 import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute } from 'three/webgpu';
-import { storage } from 'three/tsl';
-import { wgslTagFn, proxyFn } from 'three-mesh-bvh/webgpu';
+import { storage, texture, uniformArray } from 'three/tsl';
+import { wgslTagFn, proxyFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
+import { AtlasTexture } from '../AtlasTexture.js';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
-import { materialStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { hitRecordStruct, materialStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
+import { sampleTexelFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
+
+function encodeTextureWrap( wrap ) {
+
+	switch ( wrap ) {
+
+		case RepeatWrapping:
+			return 0;
+		case ClampToEdgeWrapping:
+			return 1;
+		case MirroredRepeatWrapping:
+			return 2;
+		default:
+			return 0;
+
+	}
+
+}
 
 /**
  * Defines how the pathtracer interprets the scene's materials
@@ -20,7 +40,7 @@ import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
  * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",
  * "frontFace", "transmission", "thinWall" and "dispersion".
  *
- * The kernels read the "storage" and "fns" members through the node context as "shadingModel".
+ * The kernels read the "structs", "storage" and "fns" members through the node context as "shadingModel".
  */
 export class ShadingModel {
 
@@ -28,12 +48,14 @@ export class ShadingModel {
 
 		// members are accessed through proxy nodes so they can be referenced up front and keep working
 		// across rebuilds, like BVHComputeData
-		this.structs = new NodeProxyObject( { material: null } );
+		this.structs = new NodeProxyObject( { material: null, surfaceRecord: null } );
 		this.storage = new NodeProxyObject( { materials: null } );
-		this.fns = new NodeProxyObject( { bsdfSample: null, bsdfEvalPdf: null }, proxyFn );
+		this.fns = new NodeProxyObject( { sampleTexel: null, getSurfaceRecord: null, bsdfSample: null, bsdfEvalPdf: null }, proxyFn );
+		this.textureAtlas = new AtlasTexture();
 		this.materials = [];
 		this.materialsMap = new Map();
 		this.textures = [];
+		this.texturesMap = new Map();
 
 		// whether any material has a volume
 		this.hasVolumes = false;
@@ -51,18 +73,42 @@ export class ShadingModel {
 	}
 
 	/**
-	 *
-	 * Must return a bsdf sampling function node with signature
-	 * ( worldView: vec3f, surface: Surface ) -> ScatterRecord
-	 *
+	 * Assigns the structs and functions the kernels read. Subclasses call it and then replace the ones
+	 * they change:
+	 * - "structs.material": the struct each material is written to.
+	 * - "structs.surfaceRecord": the struct a surface is evaluated into at a hit.
+	 * - "fns.sampleTexel": ( uv, map, lod ) -> vec4f, sampling a material's texture from the atlas.
+	 * - "fns.getSurfaceRecord": ( material, objectColor, vertexData, hit, view, blurRoughness ) -> SurfaceRecord,
+	 *   reading the surface from the material struct at a HitRecord, tinted by the object's instance color.
+	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
+	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
+	 *   pdf for a given light direction, used by next event estimation.
 	 */
-	getBsdfNode() {
+	updateFunctions() {
 
-		return wgslTagFn/* wgsl */`
+		const { structs, fns, textureAtlas } = this;
+		structs.material = materialStruct;
+		structs.surfaceRecord = surfaceRecordStruct;
 
-			fn bsdfSample( worldWo: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
+		// the atlas refills its texture info array in place, so this reads the latest placements
+		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
+		fns.sampleTexel = sampleTexelFunc( textureInfo, texture( textureAtlas.texture ) );
 
-				var record: ScatterRecord;
+		// the geometry helpers come from the bvh data through the node context
+		fns.getSurfaceRecord = getSurfaceRecordFunc( {
+			materialStruct: structs.material,
+			surfaceRecordStruct: structs.surfaceRecord,
+			attributesStruct: contextProxy( 'bvhData.structs.attributes' ),
+			sampleTexel: fns.sampleTexel,
+			getUvFromChannel: contextProxyFn( 'bvhData.fns.getUvFromChannel' ),
+			getColor: contextProxyFn( 'bvhData.fns.getColor' ),
+		} );
+
+		fns.bsdfSample = wgslTagFn/* wgsl */`
+
+			fn bsdfSample( hit: ${ hitRecordStruct }, surf: ${ structs.surfaceRecord }, worldWo: vec3f ) -> ${ scatterRecordStruct } {
+
+				var record: ${ scatterRecordStruct };
 
 				let wo = normalize( surf.normalInvBasis * worldWo );
 				let wi = ${ diffuseDirectionFunc }( wo, ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } ) );
@@ -76,23 +122,11 @@ export class ShadingModel {
 
 		`;
 
-	}
+		fns.bsdfEvalPdf = wgslTagFn/* wgsl */`
 
-	/**
-	 *
-	 * Must return a bsdf evaluation function node with signature
-	 * ( worldView: vec3f, worldLight: vec3f, surface: Surface ) -> ScatterRecord
-	 * returning the bsdf value and sampling pdf for a given light direction.
-	 * Used by next event estimation to weight a chosen light direction.
-	 *
-	 */
-	getBsdfEvalPdfNode() {
+			fn bsdfEvalPdf( hit: ${ hitRecordStruct }, surf: ${ structs.surfaceRecord }, worldWo: vec3f, worldWi: vec3f ) -> ${ scatterRecordStruct } {
 
-		return wgslTagFn/* wgsl */`
-
-			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: SurfaceRecord ) -> ScatterRecord {
-
-				var record: ScatterRecord;
+				var record: ${ scatterRecordStruct };
 				record.direction = worldWi;
 
 				let wo = normalize( surf.normalInvBasis * worldWo );
@@ -109,141 +143,115 @@ export class ShadingModel {
 	}
 
 	/**
+	 * Packs the materials' textures into the atlas "fns.sampleTexel" reads. Call after "updateMaterials".
+	 * Returns whether the number of textures changed, so the kernels need rebuilding.
 	 *
-	 * Must return the struct node each material is written to
-	 *
+	 * @param {WebGPURenderer} renderer
+	 * @returns {boolean}
 	 */
-	getMaterialStruct() {
+	updateTextures( renderer ) {
 
-		return materialStruct;
+		// the atlas refills its texture info array in place, but the kernels size it when they're built
+		const { textureAtlas } = this;
+		const { length } = textureAtlas.textureInfo;
+		textureAtlas.setTextures( renderer, this.textures );
+
+		return textureAtlas.textureInfo.length !== length;
 
 	}
 
 	/**
-	 *
-	 * Must return the struct node the surface is evaluated into at a hit
-	 *
+	 * Returns the "*Map" descriptor of a material's texture, or -1 without one, adding the texture to
+	 * "textures" by its shareable source. For use in "writeMaterialsBuffer".
 	 */
-	getSurfaceRecordStruct() {
+	getTextureDescriptor( material, key ) {
 
-		return surfaceRecordStruct;
+		if ( key in material && material[ key ] ) {
+
+			const { textures, texturesMap } = this;
+			const texture = material[ key ];
+			const hash = getTextureHash( texture );
+
+			if ( ! texturesMap.has( hash ) ) {
+
+				texturesMap.set( hash, textures.length );
+				textures.push( texture );
+
+			}
+
+			const idx = texturesMap.get( hash );							// 23 bits
+			const channel = texture.channel & 7;							// 3 bits
+			const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
+			const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
+			const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
+			return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
+
+		} else {
+
+			return - 1;
+
+		}
 
 	}
 
 	/**
-	 *
-	 * Must return a function node with signature
-	 * ( material: Material, objectColor: vec4f, vertexData: bvh_GeometryStruct, side: f32, faceNormal: vec3f, view: vec3f, blurRoughness: f32 ) -> SurfaceRecord
-	 * reading the surface from the material struct at a hit, tinted by the object's instance color
-	 *
+	 * Returns the material's field, or the default when it has none. For use in "writeMaterialsBuffer".
 	 */
-	getSurfaceRecordNode( sampleTexel, getUvFromChannel, getColor ) {
+	getField( material, key, def ) {
 
-		return getSurfaceRecordFunc( this.getSurfaceRecordStruct(), sampleTexel, getUvFromChannel, getColor );
+		return key in material ? material[ key ] : def;
+
+	}
+
+	/**
+	 * Writes the uv transform of a material's texture as a padded mat3, returning the floats written. For
+	 * use in "writeMaterialsBuffer".
+	 */
+	writeTextureMatrixToArray( material, textureKey, array, offset ) {
+
+		const texture = material[ textureKey ] && material[ textureKey ].isTexture ? material[ textureKey ] : null;
+
+		// check if texture exists
+		if ( texture ) {
+
+			if ( texture.matrixAutoUpdate ) {
+
+				texture.updateMatrix();
+
+			}
+
+			const elements = texture.matrix.elements;
+
+			// Both wgsl struct and elements should be in column-major format
+			for ( let i = 0; i < 3; i ++ ) {
+
+				array[ offset + 4 * i + 0 ] = elements[ 3 * i + 0 ];
+				array[ offset + 4 * i + 1 ] = elements[ 3 * i + 1 ];
+				array[ offset + 4 * i + 2 ] = elements[ 3 * i + 2 ];
+				array[ offset + 4 * i + 3 ] = 0; // padding float
+
+			}
+
+		}
+
+		return 12;
 
 	}
 
 	/**
 	 *
 	 * Must write the given materials to an array in the material struct layout, returning
-	 * { materialData, textures } with the textures the "*Map" fields index
+	 * { materialData }. The "*Map" fields index the textures added with "getTextureDescriptor"
 	 *
 	 */
 	writeMaterialsBuffer( materials ) {
 
-		function encodeTextureWrap( wrap ) {
-
-			switch ( wrap ) {
-
-				case RepeatWrapping:
-					return 0;
-				case ClampToEdgeWrapping:
-					return 1;
-				case MirroredRepeatWrapping:
-					return 2;
-				default:
-					return 0;
-
-			}
-
-		}
-
-		function getTexture( material, key ) {
-
-			if ( key in material && material[ key ] ) {
-
-				const texture = material[ key ];
-				const hash = getTextureHash( texture );
-
-				if ( ! textureLookUp.has( hash ) ) {
-
-					textureLookUp.set( hash, textureLookUp.size );
-					textures.push( texture );
-
-				}
-
-				const idx = textureLookUp.get( hash );							// 23 bits
-				const channel = texture.channel & 7;							// 3 bits
-				const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
-				const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
-				const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
-				return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
-
-			} else {
-
-				return - 1;
-
-			}
-
-		}
-
-		function getField( material, key, def ) {
-
-			return key in material ? material[ key ] : def;
-
-		}
-
-		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
-
-			const texture = material[ textureKey ] && material[ textureKey ].isTexture ? material[ textureKey ] : null;
-
-			// check if texture exists
-			if ( texture ) {
-
-				if ( texture.matrixAutoUpdate ) {
-
-					texture.updateMatrix();
-
-				}
-
-				const elements = texture.matrix.elements;
-
-				// Both wgsl struct and elements should be in column-major format
-				for ( let i = 0; i < 3; i ++ ) {
-
-					array[ offset + 4 * i + 0 ] = elements[ 3 * i + 0 ];
-					array[ offset + 4 * i + 1 ] = elements[ 3 * i + 1 ];
-					array[ offset + 4 * i + 2 ] = elements[ 3 * i + 2 ];
-					array[ offset + 4 * i + 3 ] = 0; // padding float
-
-				}
-
-			}
-
-			return 12;
-
-		}
-
 		let index = 0;
-
-		// Collect and index the list of textures based on shareable source
-		const textureLookUp = new Map();
-		const textures = [];
 
 		// NOTE: make the minimum material buffer length 2 in order to avoid TSL converting it to a scalar
 		// TODO: remove this when fixed in three
 		const materialBufferLength = Math.max( materials.length, 2 );
-		const floatArray = new Float32Array( materialBufferLength * this.getMaterialStruct().getLength() );
+		const floatArray = new Float32Array( materialBufferLength * this.structs.material.proxyNode.getLength() );
 		const intArray = new Int32Array( floatArray.buffer );
 
 		// TODO: make features work
@@ -257,20 +265,20 @@ export class ShadingModel {
 			floatArray[ index ++ ] = m.color.r;
 			floatArray[ index ++ ] = m.color.g;
 			floatArray[ index ++ ] = m.color.b;
-			intArray[ index ++ ] = getTexture( m, 'map' );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'map' );
 
 			// metalness & roughness - offset 4
-			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'metalnessMap' );
-			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'roughnessMap' );
+			floatArray[ index ++ ] = this.getField( m, 'metalness', 0.0 );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'metalnessMap' );
+			floatArray[ index ++ ] = this.getField( m, 'roughness', 0.0 );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'roughnessMap' );
 
 			// transmission & emissiveIntensity - offset 8
 			// three.js assumes a default f0 of 0.04 if no ior is provided which equates to an ior of 1.5
-			floatArray[ index ++ ] = getField( m, 'ior', 1.5 );
-			floatArray[ index ++ ] = getField( m, 'transmission', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'transmissionMap' );
-			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
+			floatArray[ index ++ ] = this.getField( m, 'ior', 1.5 );
+			floatArray[ index ++ ] = this.getField( m, 'transmission', 0.0 );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'transmissionMap' );
+			floatArray[ index ++ ] = this.getField( m, 'emissiveIntensity', 0.0 );
 
 			// emission - offset 12
 			if ( 'emissive' in m ) {
@@ -287,10 +295,10 @@ export class ShadingModel {
 
 			}
 
-			intArray[ index ++ ] = getTexture( m, 'emissiveMap' );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'emissiveMap' );
 
 			// normals - offset 16
-			intArray[ index ++ ] = getTexture( m, 'normalMap' );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'normalMap' );
 			index ++; // because of vec2 alignment
 			if ( 'normalScale' in m ) {
 
@@ -305,9 +313,9 @@ export class ShadingModel {
 			}
 
 			// clearcoat - offset 20
-			floatArray[ index ++ ] = getField( m, 'clearcoat', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'clearcoatMap' );
-			intArray[ index ++ ] = getTexture( m, 'clearcoatNormalMap' );
+			floatArray[ index ++ ] = this.getField( m, 'clearcoat', 0.0 );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'clearcoatMap' );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'clearcoatNormalMap' );
 			index ++; // because of vec2 alignment
 
 			// offset 24
@@ -323,21 +331,21 @@ export class ShadingModel {
 
 			}
 
-			floatArray[ index ++ ] = getField( m, 'clearcoatRoughness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'clearcoatRoughnessMap' );
+			floatArray[ index ++ ] = this.getField( m, 'clearcoatRoughness', 0.0 );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'clearcoatRoughnessMap' );
 
 			// iridescence - offset 28
-			intArray[ index ++ ] = getTexture( m, 'iridescenceMap' );
-			intArray[ index ++ ] = getTexture( m, 'iridescenceThicknessMap' );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'iridescenceMap' );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'iridescenceThicknessMap' );
 
-			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 );
-			floatArray[ index ++ ] = getField( m, 'iridescenceIOR', 1.3 );
+			floatArray[ index ++ ] = this.getField( m, 'iridescence', 0.0 );
+			floatArray[ index ++ ] = this.getField( m, 'iridescenceIOR', 1.3 );
 
 			// offset 32
-			floatArray[ index ++ ] = getField( m, 'iridescenceThicknessMinimum', 100 );
-			floatArray[ index ++ ] = getField( m, 'iridescenceThicknessMaximum', 400 );
-			floatArray[ index ++ ] = getField( m, 'diffuseRoughness', 0.0 );
-			floatArray[ index ++ ] = getField( m, 'dispersion', 0.0 );
+			floatArray[ index ++ ] = this.getField( m, 'iridescenceThicknessMinimum', 100 );
+			floatArray[ index ++ ] = this.getField( m, 'iridescenceThicknessMaximum', 400 );
+			floatArray[ index ++ ] = this.getField( m, 'diffuseRoughness', 0.0 );
+			floatArray[ index ++ ] = this.getField( m, 'dispersion', 0.0 );
 
 			// specular color - offset 36
 			if ( 'specularColor' in m ) {
@@ -354,14 +362,14 @@ export class ShadingModel {
 
 			}
 
-			intArray[ index ++ ] = getTexture( m, 'specularColorMap' );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'specularColorMap' );
 
 			// specular intensity - offset 40
-			floatArray[ index ++ ] = getField( m, 'specularIntensity', 1.0 );
-			intArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
+			floatArray[ index ++ ] = this.getField( m, 'specularIntensity', 1.0 );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'specularIntensityMap' );
 
 			// isThinWall
-			const isThinWall = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
+			const isThinWall = this.getField( m, 'thickness', 0.0 ) === 0.0 && this.getField( m, 'attenuationDistance', Infinity ) === Infinity;
 			intArray[ index ++ ] = Number( isThinWall );
 			index ++;
 
@@ -392,13 +400,13 @@ export class ShadingModel {
 
 			} else {
 
-				floatArray[ index ++ ] = getField( m, 'attenuationDistance', Infinity );
+				floatArray[ index ++ ] = this.getField( m, 'attenuationDistance', Infinity );
 
 			}
 
 			// alphaMap - offset 48
-			intArray[ index ++ ] = getTexture( m, 'alphaMap' );
-			intArray[ index ++ ] = Number( getField( m, 'castShadow', true ) ); // shadow
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'alphaMap' );
+			intArray[ index ++ ] = Number( this.getField( m, 'castShadow', true ) ); // shadow
 			floatArray[ index ++ ] = m.opacity;
 			floatArray[ index ++ ] = m.alphaTest;
 
@@ -425,8 +433,8 @@ export class ShadingModel {
 
 			}
 
-			intArray[ index ++ ] = Number( getField( m, 'matte', false ) ); // matte
-			floatArray[ index ++ ] = getField( m, 'sheen', 0.0 );
+			intArray[ index ++ ] = Number( this.getField( m, 'matte', false ) ); // matte
+			floatArray[ index ++ ] = this.getField( m, 'sheen', 0.0 );
 			index ++; // vec3 alignment requirements
 
 			// sheenColor - offset 56
@@ -444,11 +452,11 @@ export class ShadingModel {
 
 			}
 
-			intArray[ index ++ ] = getTexture( m, 'sheenColorMap' );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'sheenColorMap' );
 
 			// sheenRoughness, flags - offset 60
-			floatArray[ index ++ ] = getField( m, 'sheenRoughness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'sheenRoughnessMap' );
+			floatArray[ index ++ ] = this.getField( m, 'sheenRoughness', 0.0 );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'sheenRoughnessMap' );
 
 			intArray[ index ++ ] = Number( m.vertexColors );
 			intArray[ index ++ ] = Number( m.flatShading );
@@ -458,85 +466,83 @@ export class ShadingModel {
 			intArray[ index ++ ] = Number( isFogVolume );
 
 			// anisotropy, anisotropyRotation, anisotropyMap - offset 66
-			floatArray[ index ++ ] = getField( m, 'anisotropy', 0.0 );
-			floatArray[ index ++ ] = getField( m, 'anisotropyRotation', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'anisotropyMap' );
+			floatArray[ index ++ ] = this.getField( m, 'anisotropy', 0.0 );
+			floatArray[ index ++ ] = this.getField( m, 'anisotropyRotation', 0.0 );
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'anisotropyMap' );
 			index ++; // padding for mat3 alignment
 			index ++;
 			index ++;
 
 			// map transform - offset 72
-			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'map', floatArray, index );
 
 			// metalnessMap transform - offset 84
-			index += writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
 
 			// roughnessMap transform - offset 96
-			index += writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
 
 			// transmissionMap transform - offset 108
-			index += writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
 
 			// emissiveMap transform - offset 120
-			index += writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
 
 			// normalMap transform - offset 132
-			index += writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
 
 			// clearcoatMap transform - offset 144
-			index += writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
 
 			// clearcoatNormalMap transform - offset 156
-			index += writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
 
 			// clearcoatRoughnessMap transform - offset 168
-			index += writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
 
 			// sheenColorMap transform - offset 180
-			index += writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
 
 			// sheenRoughnessMap transform - offset 192
-			index += writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
 
 			// iridescenceMap transform - offset 204
-			index += writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
 
 			// iridescenceThicknessMap transform - offset 216
-			index += writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
 
 			// specularColorMap transform - offset 228
-			index += writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
 
 			// specularIntensityMap transform - offset 240
-			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
 
 			// alphaMap transform - offset 252
-			index += writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
 
 			// anisotropyMap transform - offset 264
-			index += writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
 
 			// scattering volume - offset 276. A fog volume's color is its single scatter albedo, used as is
-			const multiscatterColor = isFogVolume ? m.color : getField( m, 'multiscatterColor', null );
+			const multiscatterColor = isFogVolume ? m.color : this.getField( m, 'multiscatterColor', null );
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.r : 1.0;
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.g : 1.0;
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.b : 1.0;
-			floatArray[ index ++ ] = getField( m, 'scatterStrength', 0.0 );
-			floatArray[ index ++ ] = getField( m, 'scatterAnisotropy', 0.0 );
+			floatArray[ index ++ ] = this.getField( m, 'scatterStrength', 0.0 );
+			floatArray[ index ++ ] = this.getField( m, 'scatterAnisotropy', 0.0 );
 
 			// padding to the struct's 16 byte alignment
 			index += 3;
 
 		}
 
-		return { materialData: intArray, textures };
+		return { materialData: intArray };
 
 	}
 
 	/**
-	 *
 	 * Must return whether a path refracting into the material or crossing a fog volume's boundary enters a volume
-	 *
 	 */
 	hasMedium( material ) {
 
@@ -557,19 +563,15 @@ export class ShadingModel {
 
 	}
 
-	updateFunctions() {
-
-		const { fns } = this;
-		fns.bsdfSample = this.getBsdfNode();
-		fns.bsdfEvalPdf = this.getBsdfEvalPdfNode();
-
-	}
-
 	updateMaterials( root ) {
 
-		const { materials, materialsMap, structs } = this;
+		const { materials, materialsMap, textures, texturesMap, structs } = this;
 		materialsMap.clear();
 		materials.length = 0;
+
+		// collected again by "getTextureDescriptor" as the materials are written
+		texturesMap.clear();
+		textures.length = 0;
 		root.traverse( o => {
 
 			if ( o.material ) {
@@ -600,17 +602,16 @@ export class ShadingModel {
 
 			} );
 
-		// the storage is created once per material struct so the kernels keep referencing it as it grows
-		if ( structs.material.proxyNode === null ) {
+		// the storage is created once so the kernels keep referencing it as it grows
+		if ( this.storage.materials.proxyNode === null ) {
 
-			const materialStruct = this.getMaterialStruct();
+			const materialStruct = structs.material.proxyNode;
 			const attr = new StorageBufferAttribute( new Uint8Array(), materialStruct.getLength() );
-			structs.material = materialStruct;
 			this.storage.materials = storage( attr, materialStruct ).toReadOnly().setName( 'bvh_materials' );
 
 		}
 
-		const { materialData, textures } = this.writeMaterialsBuffer( materials );
+		const { materialData } = this.writeMaterialsBuffer( materials );
 		const materialStruct = structs.material.proxyNode;
 		const materialsStorage = this.storage.materials.proxyNode;
 		const count = materialData.length / materialStruct.getLength();
@@ -624,7 +625,6 @@ export class ShadingModel {
 		materialsStorage.value.array.set( materialData );
 		materialsStorage.value.needsUpdate = true;
 
-		this.textures = textures;
 		this.hasVolumes = materials.some( m => this.hasMedium( m ) );
 
 		function add( mat ) {
@@ -651,7 +651,7 @@ export class ShadingModel {
 
 		this.storage.materials.proxyNode?.value.dispose();
 		this.storage.materials = null;
-		this.structs.material = null;
+		this.textureAtlas.dispose();
 		this.initialized = false;
 
 	}

@@ -49,7 +49,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 					rayDataStorage[ pixelIndex ].pixelIndex = pixelHash;
 					rayDataStorage[ pixelIndex ].resultColor = vec4f( 0.0 );
 					rayDataStorage[ pixelIndex ].throughputColor = vec3f( 0.0 );
-					rayDataStorage[ pixelIndex ].objectIndex = - 1;
+					rayDataStorage[ pixelIndex ].hit.objectIndex = - 1;
 					rayDataStorage[ pixelIndex ].alphaDepth = 0u;
 					rayDataStorage[ pixelIndex ].rayIntersectionIndex = - 1;
 					rayDataStorage[ pixelIndex ].shadowRayIntersectionIndex = - 1;

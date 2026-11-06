@@ -55,7 +55,7 @@ export class MediumKernel extends ComputeKernel {
 				let medium = ${ loadMediumFn }( input.medium );
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
-				${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.currentBounce + input.alphaDepth + input.subsurfaceBounces );
+				${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.hit.bounce + input.alphaDepth + input.subsurfaceBounces );
 
 				// A finished walk's hit takes an entry from the back of the ray results, counted by its own counter,
 				// while the traced rays fill them from the front. A path slot walking a medium queued no ray this

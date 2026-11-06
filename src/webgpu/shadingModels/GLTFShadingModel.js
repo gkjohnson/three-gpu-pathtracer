@@ -6,7 +6,7 @@ import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js'
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
-import { bxdfContextStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
+import { bxdfContextStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { TurquinTexture } from '../TurquinTexture.js';
 import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
@@ -55,10 +55,13 @@ export class GLTFShadingModel extends ShadingModel {
 
 	}
 
-	getBsdfNode() {
+	updateFunctions() {
 
-		const surfaceRecordStruct = this.getSurfaceRecordStruct();
-		this._bsdfEvalFunc = wgslTagFn/* wgsl */`
+		super.updateFunctions();
+
+		const { structs, fns } = this;
+		const surfaceRecordStruct = structs.surfaceRecord;
+		const bsdfEvalFunc = wgslTagFn/* wgsl */`
 
 			// The material is organized as one scoped block per lobe in cascade order - clearcoat,
 			// sheen, transmission, specular, diffuse - each accumulating into a shared result and
@@ -269,11 +272,9 @@ export class GLTFShadingModel extends ShadingModel {
 
 		`;
 
-		const bsdfEvalPdfFn = this.getBsdfEvalPdfNode();
+		fns.bsdfSample = wgslTagFn/* wgsl */`
 
-		return wgslTagFn/* wgsl */`
-
-			fn bsdfSample( worldWo: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
+			fn bsdfSample( hit: ${ hitRecordStruct }, surf: ${ surfaceRecordStruct }, worldWo: vec3f ) -> ${ scatterRecordStruct } {
 
 				var result: ${ scatterRecordStruct };
 				result.color = vec3f( 0.0 );
@@ -449,7 +450,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 					// evaluate the shared eval / pdf function for the sampled direction so the sample
 					// and light-sampling paths can never disagree on color or pdf
-					result = ${ bsdfEvalPdfFn }( worldWo, worldWi, surf );
+					result = ${ fns.bsdfEvalPdf }( hit, surf, worldWo, worldWi );
 
 				}
 
@@ -464,32 +465,12 @@ export class GLTFShadingModel extends ShadingModel {
 
 		`;
 
-	}
+		// Evaluates the BSDF and its sampling pdf for an arbitrary light direction ( both world space ).
+		// Used by next event estimation to weight a chosen light/environment direction. Shares the same
+		// bsdfEval and lobe-mixture pdf as bsdfSample so MIS weights stay consistent.
+		fns.bsdfEvalPdf = wgslTagFn/* wgsl */`
 
-	// Evaluates the BSDF and its sampling pdf for an arbitrary light direction ( both world space ).
-	// Used by next event estimation to weight a chosen light/environment direction. Shares the same
-	// bsdfEval and lobe-mixture pdf as bsdfSample so MIS weights stay consistent.
-	getBsdfEvalPdfNode() {
-
-		// bsdfSample embeds this node so both share a single instance
-		if ( this._bsdfEvalPdfNode ) {
-
-			return this._bsdfEvalPdfNode;
-
-		}
-
-		if ( ! this._bsdfEvalFunc ) {
-
-			this.getBsdfNode();
-
-		}
-
-		const bsdfEvalFunc = this._bsdfEvalFunc;
-		const surfaceRecordStruct = this.getSurfaceRecordStruct();
-
-		this._bsdfEvalPdfNode = wgslTagFn/* wgsl */`
-
-			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
+			fn bsdfEvalPdf( hit: ${ hitRecordStruct }, surf: ${ surfaceRecordStruct }, worldWo: vec3f, worldWi: vec3f ) -> ${ scatterRecordStruct } {
 
 				var result: ${ scatterRecordStruct };
 				result.color = vec3f( 0.0 );
@@ -623,8 +604,6 @@ export class GLTFShadingModel extends ShadingModel {
 			}
 
 		`;
-
-		return this._bsdfEvalPdfNode;
 
 	}
 

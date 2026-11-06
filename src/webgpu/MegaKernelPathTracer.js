@@ -86,16 +86,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 	setRandom( random ) {
 
 		this.kernel.context.random = random;
-		this.kernel.needsUpdate = true;
-		this.reset();
+		this.rebuild();
 
 	}
 
 	setShadingModel( shadingModel ) {
 
 		this.kernel.context.shadingModel = shadingModel;
-		this.kernel.needsUpdate = true;
-		this.reset();
+		this.rebuild();
 
 	}
 
@@ -123,7 +121,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	setLights( lights ) {
 
-		this.lightsInfo.updateFrom( this.renderer, lights );
+		if ( this.lightsInfo.updateFrom( this.renderer, lights ) ) {
+
+			this.rebuild();
+
+		}
+
 		this.reset();
 
 	}

@@ -47,7 +47,7 @@ export class CameraMediumKernel extends ComputeKernel {
 				// a camera ray spawned this frame: MaterialKernel gave a freed slot a ray to trace. Whole structs are
 				// read from the buffer, not the pointer alias, which Safari fails to compile
 				let input = ${ params.rayDataStorage }[ index ];
-				if ( input.objectIndex >= 0 || input.rayIntersectionIndex < 0 ) {
+				if ( input.hit.objectIndex >= 0 || input.rayIntersectionIndex < 0 ) {
 
 					return;
 
@@ -60,7 +60,7 @@ export class CameraMediumKernel extends ComputeKernel {
 				if ( medium.inside ) {
 
 					rayDataStorage[ index ].walkPending = ${ WALK_PENDING_CAMERA }u;
-					rayDataStorage[ index ].objectIndex = 0;
+					rayDataStorage[ index ].hit.objectIndex = 0;
 
 				}
 

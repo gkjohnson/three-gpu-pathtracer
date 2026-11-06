@@ -47,7 +47,7 @@ export class ResetSlotsKernel extends ComputeKernel {
 					rayDataStorage[ index ].pixelIndex = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + previousCount - 1u ] );
 					rayDataStorage[ index ].resultColor = vec4f( 0.0 );
 					rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
-					rayDataStorage[ index ].objectIndex = - 1;
+					rayDataStorage[ index ].hit.objectIndex = - 1;
 					rayDataStorage[ index ].alphaDepth = 0u;
 					rayDataStorage[ index ].rayIntersectionIndex = - 1;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;

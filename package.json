@@ -42,7 +42,7 @@
   ],
   "devDependencies": {
     "@lookingglass/webxr": "^0.6.0",
-    "@monogrid/gainmap-js": "^3.0.5",
+    "@monogrid/gainmap-js": "^3.7.3",
     "@pmndrs/upscaler": "^0.3.0",
     "@types/node": "^24.3.1",
     "@types/three": "^0.186.0",
@@ -64,14 +64,14 @@
     "rollup": "^2.70.0",
     "simple-git": "^3.10.0",
     "three": "^0.187.0",
-    "three-mesh-bvh": "^0.9.17",
+    "three-mesh-bvh": "^0.9.18",
     "typescript": "^5.9.2",
     "vite": "^8.2.2",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {
     "three": ">=0.187.0",
-    "three-mesh-bvh": ">=0.9.17",
+    "three-mesh-bvh": ">=0.9.18",
     "xatlas-web": "^0.1.0"
   },
   "scripts": {

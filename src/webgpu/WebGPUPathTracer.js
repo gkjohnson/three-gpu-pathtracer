@@ -580,7 +580,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	get textureAtlas() {
 
-		return this._bvhData.textureAtlas;
+		return this._shadingModel.textureAtlas;
 
 	}
 
@@ -948,12 +948,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene, shadingModel );
 		bvhData.update();
-		bvhData.textureAtlas.setTextures( this._renderer, shadingModel.textures );
+		shadingModel.updateTextures( this._renderer );
 
 		if ( this._bvhData ) {
 
 			this._bvhData.dispose();
-			this._bvhData.textureAtlas.dispose();
 
 		}
 
@@ -1137,8 +1136,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( _bvhData ) {
 
 			shadingModel.updateMaterials( scene );
+			shadingModel.updateTextures( _renderer );
 			_bvhData.setShadingModel( shadingModel );
-			_bvhData.textureAtlas.setTextures( _renderer, shadingModel.textures );
 			this._pathTracer.hasVolumes = shadingModel.hasVolumes;
 
 		}
@@ -1226,8 +1225,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const { _bvhData, _renderer, _shadingModel, scene } = this;
 		_shadingModel.updateMaterials( scene );
 		_bvhData.updateMaterialIndices();
-		_bvhData.textureAtlas.setTextures( _renderer, _shadingModel.textures );
 		this._pathTracer.hasVolumes = _shadingModel.hasVolumes;
+
+		// the kernels size the texture info when they're built, so a new texture count needs a rebuild
+		if ( _shadingModel.updateTextures( _renderer ) ) {
+
+			this._pathTracer.rebuild();
+
+		}
+
 		this.reset();
 
 	}
@@ -1329,7 +1335,17 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( this._size.x !== x || this._size.y !== y ) {
 
 			this._size.set( x, y );
-			this.reset();
+
+			// cameras can depend on the size
+			if ( this._cameraRayFnHandle ) {
+
+				this.updateCamera();
+
+			} else {
+
+				this.reset();
+
+			}
 
 		}
 
@@ -1357,12 +1373,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		if ( this._fullFrameBudget !== null ) {
+		// undo the adaptation's last changes, unless the app has since taken over the budget
+		if ( this.adaptiveFrameBudget && this._fullFrameBudget !== null ) {
 
 			this.frameBudget = this._fullFrameBudget;
-			this._fullFrameBudget = null;
 
 		}
+
+		this._fullFrameBudget = null;
 
 	}
 
@@ -1401,9 +1419,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 			// skip if the render was reset or a new scene started building meanwhile
 			if ( counts === this._lastSampleCounts && this._stage === STAGE_RENDERING ) {
 
-				// save the budget once the first pixels finish
+				// save the adaptive budget once the first pixels finish, to undo the adaptation on reset
 				const { maxSamples } = this;
-				if ( this._fullFrameBudget === null && maxSamples > 0 && samples.max >= maxSamples ) {
+				if ( this.adaptiveFrameBudget && this._fullFrameBudget === null && maxSamples > 0 && samples.max >= maxSamples ) {
 
 					this._fullFrameBudget = this.frameBudget;
 
@@ -1890,7 +1908,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser?.dispose();
 		this._upscaler?.dispose();
 		this._bvhData.dispose();
-		this._bvhData.textureAtlas.dispose();
 		this._shadingModel.dispose();
 		this._environmentCache.dispose();
 		this._backgroundCache.dispose();
