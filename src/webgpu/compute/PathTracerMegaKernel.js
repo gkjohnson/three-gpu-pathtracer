@@ -498,11 +498,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							var stack = medium.stack;
 							if ( hit.side > 0.0 ) {
 
-								${ addToMediumStackFn }( &stack, u32( hit.objectIndex ) );
+								${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
 
 							} else {
 
-								${ removeFromMediumStackFn }( &stack, u32( hit.objectIndex ) );
+								${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
 
 							}
 

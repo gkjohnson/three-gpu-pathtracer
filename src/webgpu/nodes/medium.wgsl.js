@@ -16,8 +16,10 @@ export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 // inversion and the Henyey-Greenstein pdf divide by zero at
 const MEDIUM_MAX_ANISOTROPY = 0.999;
 
-// The volumes a path is inside of, by medium id, as in Cycles' volume_stack.h. A slot without a volume holds
+// The volumes a path is inside of, by material index, as in Cycles' volume_stack.h. A slot without a volume holds
 // MEDIUM_STACK_EMPTY
+// TODO: separate objects with the same material share a slot, so overlapping or nested ones aren't tracked
+// apart. This could be handled more robustly with a per object id, but is skipped for now
 const MEDIUM_STACK_SIZE = 4;
 const MEDIUM_STACK_EMPTY = 0xffffffff;
 export const mediumStackStruct = new StructTypeNode( {
@@ -64,7 +66,6 @@ const getSingleScatterAlbedoFn = wgslTagFn/* wgsl */`
 
 `;
 
-const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 
 // returns a material's extinction from its glTF attenuation, zero for one without a volume
@@ -78,14 +79,13 @@ const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Adds the object's volume to an empty slot of the stack. A volume without extinction, one already on the stack,
+// Adds the material's volume to an empty slot of the stack. A volume without extinction, one already on the stack,
 // or one past a full stack is not added
 export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
-	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) -> void {
+	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, materialIndex: u32 ) -> void {
 
-		let transform = ${ transformsStorage }[ object ];
-		let material = ${ materialsStorage }[ transform.materialIndex ];
+		let material = ${ materialsStorage }[ materialIndex ];
 		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
 
 			return;
@@ -94,7 +94,7 @@ export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			if ( stack.ids[ i ] == transform.mediumId ) {
+			if ( stack.ids[ i ] == materialIndex ) {
 
 				return;
 
@@ -106,7 +106,7 @@ export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
 			if ( stack.ids[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
 
-				stack.ids[ i ] = transform.mediumId;
+				stack.ids[ i ] = materialIndex;
 				return;
 
 			}
@@ -117,15 +117,14 @@ export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Empties the slot holding the object's volume
+// Empties the slot holding the material's volume
 export const removeFromMediumStackFn = wgslTagFn/* wgsl */`
 
-	fn removeFromMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) -> void {
+	fn removeFromMediumStack( stack: ptr<function, ${ mediumStackStruct }>, materialIndex: u32 ) -> void {
 
-		let id = ${ transformsStorage }[ object ].mediumId;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			if ( stack.ids[ i ] == id ) {
+			if ( stack.ids[ i ] == materialIndex ) {
 
 				stack.ids[ i ] = ${ MEDIUM_STACK_EMPTY }u;
 
@@ -195,7 +194,7 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 
 			}
 
-			let material = ${ materialsStorage }[ ${ transformsStorage }[ ids[ i ] ].materialIndex ];
+			let material = ${ materialsStorage }[ ids[ i ] ];
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 			let entryAlbedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy );

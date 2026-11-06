@@ -352,11 +352,11 @@ export class MaterialKernel extends ComputeKernel {
 						var stack = medium.stack;
 						if ( input.hit.side > 0.0 ) {
 
-							${ addToMediumStackFn }( &stack, u32( input.hit.objectIndex ) );
+							${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
 
 						} else {
 
-							${ removeFromMediumStackFn }( &stack, u32( input.hit.objectIndex ) );
+							${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
 
 						}
 

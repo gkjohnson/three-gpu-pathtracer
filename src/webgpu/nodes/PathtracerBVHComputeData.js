@@ -10,9 +10,7 @@ const transformStruct = new StructTypeNode( {
 	visible: 'uint',
 	materialIndex: 'uint',
 	visibleToShadowRays: 'uint',
-
-	// the volume's id: the first slot of the object's bvh groups with this material
-	mediumId: 'uint',
+	_alignment0: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
@@ -30,7 +28,7 @@ const intersectionResultStruct = new StructTypeNode( {
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
-// the volumes a ray hits, by medium id, with each one's nearest hit distance and side
+// the volumes a ray hits, by material index, with each one's nearest hit distance and side
 const VOLUME_HITS_SIZE = 32;
 const volumeHitsStruct = new StructTypeNode( {
 	ids: `array<u32, ${ VOLUME_HITS_SIZE }>`,
@@ -65,9 +63,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.shadingModel = shadingModel;
 		this.structs.transform = transformStruct;
 		this.bvhMap = new Map();
-
-		// each volume's medium id
-		this._mediumIds = new Map();
 
 	}
 
@@ -530,11 +525,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 
-				let mediumId = ${ storage.transforms }[ ${ currentObjectIndex } ].mediumId;
+				let materialIndex = ${ storage.transforms }[ ${ currentObjectIndex } ].materialIndex;
 				${ volumeEntry } = select( ${ VOLUME_ENTRY_SKIPPED }u, result.count, result.count < ${ VOLUME_HITS_SIZE }u );
 				for ( var i = 0u; i < result.count; i ++ ) {
 
-					if ( result.ids[ i ] == mediumId ) {
+					if ( result.ids[ i ] == materialIndex ) {
 
 						${ volumeEntry } = i;
 						break;
@@ -622,7 +617,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 						}
 
-						result.ids[ entry ] = object.mediumId;
+						result.ids[ entry ] = object.materialIndex;
 						result.dist[ entry ] = triResult.dist;
 						result.side[ entry ] = triResult.side;
 						result.count = max( result.count, entry + 1u );
@@ -663,8 +658,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.updateUvAttributesFromScene();
 
 		// the material indices are written with the transforms, so the shading model's materials must
-		// be updated first. The medium ids are slots, so they're found again
-		this._mediumIds.clear();
+		// be updated first
 		super.update();
 
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
@@ -687,7 +681,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const { storage, bvh } = this;
 		const transformsStorage = storage.transforms.proxyNode;
-		this._mediumIds.clear();
 		this._getTransformMap( bvh ).forEach( info => {
 
 			this.writeMaterialData( info, info.slot, transformsStorage.value.array.buffer );
@@ -724,16 +717,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// save the material index
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
-
-		// slots are written in order, so the first one seen for a volume is its medium id
-		const mediumKey = `${ object.uuid }_${ instanceId }_${ index }`;
-		if ( ! this._mediumIds.has( mediumKey ) ) {
-
-			this._mediumIds.set( mediumKey, writeOffset );
-
-		}
-
-		transformBufferU32[ writeOffset * transformStruct.getLength() + 35 ] = this._mediumIds.get( mediumKey );
 
 		// write color
 		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw
