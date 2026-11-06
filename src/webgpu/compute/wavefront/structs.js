@@ -97,9 +97,6 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 
 }, 'TraceQueuedRay' );
 
-// the "walkPending" value of a camera ray's first walk pass, which reuses its queued ray's result entry
-export const WALK_PENDING_CAMERA = 2;
-
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by
 // LogicKernel the following frame. objectIndex < 0 encodes a miss.
 export const intersectionResultStruct = new StructTypeNode( {
@@ -138,11 +135,10 @@ export const RAY_QUEUE_LENGTH = 0;
 export const SHADOW_RAY_QUEUE_LENGTH = 1;
 export const QUEUE_COUNTER_COUNT = 2;
 
-// The path slots walking through a medium this pass, for MediumKernel. Its length and walk hit count lead the
-// same u32 array, ahead of the elements, as MediumKernel is at its storage buffer limit.
+// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
+// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
 export const MEDIUM_QUEUE_LENGTH = 0;
-export const MEDIUM_QUEUE_HIT_COUNT = 1;
-export const MEDIUM_QUEUE_HEADER = 2;
+export const MEDIUM_QUEUE_HEADER = 1;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
 // the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its
