@@ -6,8 +6,7 @@ import { rngInit, rngNextBounce, rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MED
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { sampleHenyeyGreensteinFn } from '../../nodes/sampling.wgsl.js';
 import {
-	loadMediumFn,
-	mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn,
+	getMediumChannelPdfFn, sampleMediumDistanceFn, getMediumDistancePdfFn,
 	MEDIUM_THROUGHPUT_EPSILON,
 } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HIT_COUNT, MEDIUM_QUEUE_HEADER, WALK_PENDING_CAMERA } from './structs.js';
@@ -52,7 +51,7 @@ export class MediumKernel extends ComputeKernel {
 				let index = atomicLoad( &mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + globalId.x ] );
 				// whole structs are read from the buffer, not the pointer alias, which Safari fails to compile
 				let input = ${ params.rayDataStorage }[ index ];
-				let medium = ${ loadMediumFn }( input.medium );
+				let medium = input.medium;
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.hit.bounce + input.alphaDepth + input.subsurfaceBounces );
@@ -70,7 +69,7 @@ export class MediumKernel extends ComputeKernel {
 				for ( var i = 0u; i < stepsPerPass; i ++ ) {
 
 					// only trace up to the sampled scatter event
-					let channelPdf = ${ mediumChannelPdfFn }( input.throughputColor * weight, medium.albedo );
+					let channelPdf = ${ getMediumChannelPdfFn }( input.throughputColor * weight, medium.albedo );
 					let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
 					ray.maxDist = scatterDist;
 
@@ -81,7 +80,7 @@ export class MediumKernel extends ComputeKernel {
 					let scattered = scatterDist < surfaceDist;
 					let segmentDist = select( surfaceDist, scatterDist, scattered );
 					let transmittance = exp( - medium.extinction * segmentDist );
-					let distancePdf = dot( channelPdf, ${ mediumDistancePdfFn }( medium, segmentDist, scattered ) );
+					let distancePdf = dot( channelPdf, ${ getMediumDistancePdfFn }( medium, segmentDist, scattered ) );
 					if ( distancePdf <= 0.0 ) {
 
 						isTerminated = true;

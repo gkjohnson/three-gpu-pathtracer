@@ -5,7 +5,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn } from '../nodes/sampling.wgsl.js';
-import { addVolumeToStackFn, removeVolumeFromStackFn, stackMediumFn, getVolumeStackAtPointFn, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
+import { addVolumeToStackFn, removeVolumeFromStackFn, getStackMediumFn, getVolumeStackAtPointFn, getMediumChannelPdfFn, sampleMediumDistanceFn, getMediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
@@ -171,7 +171,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
 
-				var medium = ${ stackMediumFn }( ${ getVolumeStackAtPointFn }( ray.origin ) );
+				var medium = ${ getStackMediumFn }( ${ getVolumeStackAtPointFn }( ray.origin ) );
 				var subsurfaceBounces = 0u;
 
 				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
@@ -208,9 +208,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var scatterDist = 0.0;
 					var traceRay = ray;
 					traceRay.origin = traceOrigin;
-					if ( medium.scatters ) {
+					if ( medium.scatters != 0u ) {
 
-						channelPdf = ${ mediumChannelPdfFn }( throughputColor, medium.albedo );
+						channelPdf = ${ getMediumChannelPdfFn }( throughputColor, medium.albedo );
 						scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
 						traceRay.maxDist = select( scatterDist, min( ray.maxDist, scatterDist ), ray.maxDist > 0.0 );
 
@@ -220,13 +220,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( traceRay, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					let segmentInMedium = medium.scatters;
-					if ( medium.scatters ) {
+					let segmentInMedium = medium.scatters != 0u;
+					if ( segmentInMedium ) {
 
 						let scattered = scatterDist < surfaceDist;
 						let segmentDist = select( surfaceDist, scatterDist, scattered );
 						let transmittance = exp( - medium.extinction * segmentDist );
-						let distancePdf = dot( channelPdf, ${ mediumDistancePdfFn }( medium, segmentDist, scattered ) );
+						let distancePdf = dot( channelPdf, ${ getMediumDistancePdfFn }( medium, segmentDist, scattered ) );
 						if ( distancePdf <= 0.0 ) {
 
 							break;
@@ -507,7 +507,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							if ( any( stack != medium.stack ) ) {
 
-								medium = ${ stackMediumFn }( stack );
+								medium = ${ getStackMediumFn }( stack );
 
 							}
 

@@ -9,7 +9,7 @@ import {
 	rayDataStruct, traceQueuedRayStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
-import { addVolumeToStackFn, removeVolumeFromStackFn, stackMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
+import { addVolumeToStackFn, removeVolumeFromStackFn, getStackMediumFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -183,8 +183,8 @@ export class MaterialKernel extends ComputeKernel {
 					${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.hit.bounce + input.alphaDepth + input.subsurfaceBounces );
 
 					// the medium the path is in, which the bsdf sample may enter or exit
-					var medium = ${ loadMediumFn }( input.medium );
-					let segmentInMedium = medium.scatters;
+					var medium = input.medium;
+					let segmentInMedium = medium.scatters != 0u;
 
 					let objectInfo = ${ transformsStorage }[ u32( input.hit.objectIndex ) ];
 					let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
@@ -363,7 +363,7 @@ export class MaterialKernel extends ComputeKernel {
 
 						if ( any( stack != medium.stack ) ) {
 
-							medium = ${ stackMediumFn }( stack );
+							medium = ${ getStackMediumFn }( stack );
 							mediumChanged = true;
 
 						}
@@ -374,13 +374,13 @@ export class MaterialKernel extends ComputeKernel {
 					if ( mediumChanged ) {
 
 						// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
-						${ params.rayDataStorage }[ index ].medium = ${ storeMediumFn }( medium );
+						${ params.rayDataStorage }[ index ].medium = medium;
 
 					}
 
 					// the NEE shadow ray below still resolves the surface's direct light, so only
 					// the bounce segment is skipped for finished paths. Inside a medium, MediumKernel walks it
-					if ( ! isTerminated && medium.scatters ) {
+					if ( ! isTerminated && medium.scatters != 0u ) {
 
 						rayDataStorage[ index ].walkPending = 1u;
 						rayDataStorage[ index ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.hit.normal );

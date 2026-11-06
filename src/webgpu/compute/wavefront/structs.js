@@ -1,5 +1,5 @@
 import { StructTypeNode } from 'three/webgpu';
-import { mediumStateStruct } from '../../nodes/medium.wgsl.js';
+import { mediumStruct } from '../../nodes/medium.wgsl.js';
 import { hitRecordStruct } from '../../nodes/structs.wgsl.js';
 
 // StructTypeNode that force-emits dependency structs. TSL can't discover a struct referenced only via
@@ -98,11 +98,11 @@ const rayDataMembers = {
 export const rayDataStruct = new DependentStructTypeNode( {
 	hit: hitRecordStruct.name,
 	...rayDataMembers,
-	medium: mediumStateStruct.name,
-}, 'RayData', [ hitRecordStruct, mediumStateStruct ] );
+	medium: mediumStruct.name,
+}, 'RayData', [ hitRecordStruct, mediumStruct ] );
 
 const rayDataLength = new StructTypeNode( rayDataMembers ).getLength();
-rayDataStruct.getLength = () => hitRecordStruct.getLength() + rayDataLength + mediumStateStruct.getLength();
+rayDataStruct.getLength = () => hitRecordStruct.getLength() + rayDataLength + mediumStruct.getLength();
 
 // A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.
 export const traceQueuedRayStruct = new StructTypeNode( {
