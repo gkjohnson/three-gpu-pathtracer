@@ -1,32 +1,7 @@
 import { StructTypeNode } from 'three/webgpu';
-import { mediumStateStruct } from '../../nodes/medium.wgsl.js';
+import { mediumStruct } from '../../nodes/medium.wgsl.js';
 import { hitRecordStruct } from '../../nodes/structs.wgsl.js';
-
-// StructTypeNode that force-emits dependency structs. TSL can't discover a struct referenced only via
-// a type string, so we build each dependency first, which registers its definition ahead of this struct.
-// TODO: remove this once TSL resolves struct dependencies from string member types itself.
-class DependentStructTypeNode extends StructTypeNode {
-
-	constructor( members, name, dependencies = [] ) {
-
-		super( members, name );
-		this.dependencies = dependencies;
-
-	}
-
-	setup( builder ) {
-
-		for ( const dep of this.dependencies ) {
-
-			dep.build( builder );
-
-		}
-
-		super.setup( builder );
-
-	}
-
-}
+import { DependentStructTypeNode } from '../../nodes/DependentStructTypeNode.js';
 
 // Persistent per-path-slot state. One slot per in-flight path, holding everything needed to resolve
 // the previous frame's trace results and stage the next bounce.
@@ -87,8 +62,7 @@ const rayDataMembers = {
 	subsurfaceBounces: 'uint',
 	fogBounces: 'uint',
 
-	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends.
-	// WALK_PENDING_CAMERA marks a camera ray's first pass
+	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
 	walkPending: 'uint',
 
 	// whether the staged segment starts at a medium scatter event, where no light is sampled
@@ -104,11 +78,11 @@ const rayDataMembers = {
 export const rayDataStruct = new DependentStructTypeNode( {
 	hit: hitRecordStruct.name,
 	...rayDataMembers,
-	medium: mediumStateStruct.name,
-}, 'RayData', [ hitRecordStruct, mediumStateStruct ] );
+	medium: mediumStruct.name,
+}, 'RayData', [ hitRecordStruct, mediumStruct ] );
 
 const rayDataLength = new StructTypeNode( rayDataMembers ).getLength();
-rayDataStruct.getLength = () => hitRecordStruct.getLength() + rayDataLength + mediumStateStruct.getLength();
+rayDataStruct.getLength = () => hitRecordStruct.getLength() + rayDataLength + mediumStruct.getLength();
 
 // A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.
 export const traceQueuedRayStruct = new StructTypeNode( {
@@ -126,17 +100,13 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	_alignment0: 'uint',
 	_alignment1: 'uint',
 
-	// shadow rays only: the media the ray starts in
-	mediumStack: 'vec4u',
+	// shadow rays only: the summed extinction of the media the ray starts in
+	mediumExtinction: 'vec3f',
 
 }, 'TraceQueuedRay' );
 
 // the object index MediumKernel writes for a walk ending at a scatter event in fog
 export const MEDIUM_SCATTER_HIT = - 2;
-
-// The "walkPending" value of a camera ray found inside a scattering medium after it was queued for tracing.
-// Its first walk pass writes its hit into that ray's unused result entry rather than one from the back
-export const WALK_PENDING_CAMERA = 2;
 
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by
 // LogicKernel the following frame. objectIndex < 0 encodes a miss, or a scatter event in fog.
@@ -176,12 +146,10 @@ export const RAY_QUEUE_LENGTH = 0;
 export const SHADOW_RAY_QUEUE_LENGTH = 1;
 export const QUEUE_COUNTER_COUNT = 2;
 
-// The path slots walking through a medium this pass, for MediumKernel. Its length, and the count of walk hits
-// taken from the back of the ray results, lead the same u32 array, ahead of the elements, as MediumKernel is
-// at its storage buffer limit.
+// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
+// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
 export const MEDIUM_QUEUE_LENGTH = 0;
-export const MEDIUM_QUEUE_HIT_COUNT = 1;
-export const MEDIUM_QUEUE_HEADER = 2;
+export const MEDIUM_QUEUE_HEADER = 1;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
 // the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its

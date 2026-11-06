@@ -1,13 +1,12 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { mediumStackEnterFunc, stackMediumFunc, originMediumStackFunc, storeMediumFn } from '../../nodes/medium.wgsl.js';
-import { rayDataStruct, WALK_PENDING_CAMERA } from './structs.js';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { getCombinedMediumFn, getMediumStackAtPointFn } from '../../nodes/medium.wgsl.js';
+import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH } from './structs.js';
 
-// Finds the volumes each new camera ray starts inside of by tracing from the ray's own origin, and starts its
-// medium with them. Runs after MaterialKernel spawns the camera rays and before they are traced. A camera ray
-// starting in a scattering volume is walked by MediumKernel instead, leaving its queued trace unused.
+// Sets the medium of the camera rays CameraRayKernel spawned from the volumes around their origin, then queues
+// each ray to be traced, or walked when it starts in a scattering medium.
 export class CameraMediumKernel extends ComputeKernel {
 
 	constructor( ) {
@@ -16,23 +15,19 @@ export class CameraMediumKernel extends ComputeKernel {
 			rayCount: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
+			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
+			queueCounters: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
 
 			globalId: globalId,
 		};
-
-		const volumeHits = contextProxy( 'bvhData.fns.raycastVolumes.outputType' );
-		const raycastVolumesFn = contextProxy( 'bvhData.fns.raycastVolumes' );
-		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
-		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
-		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
-		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
-		const originMediumStackFn = originMediumStackFunc( raycastVolumesFn, volumeHits, mediumStackEnterFn );
 
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute( rayCount: u32, globalId: vec3u ) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
+				let rayQueue = &${ params.rayQueue };
+				let queueCounters = &${ params.queueCounters };
 
 				let index = globalId.x;
 				if ( index >= rayCount ) {
@@ -41,8 +36,8 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
-				// a camera ray spawned this frame: MaterialKernel gave a freed slot a ray to trace. Whole structs are
-				// read from the buffer, not the pointer alias, which Safari fails to compile
+				// only camera rays spawned this round. Whole structs are read from the buffer, not the pointer alias,
+				// which Safari fails to compile
 				let input = ${ params.rayDataStorage }[ index ];
 				if ( input.hit.objectIndex >= 0 || input.rayIntersectionIndex < 0 ) {
 
@@ -50,15 +45,25 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
-				let medium = ${ stackMediumFn }( ${ originMediumStackFn }( input.origin ) );
-				rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
+				let medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( input.origin ) );
+				rayDataStorage[ index ].medium = medium;
 
-				// the walk hands its hit back in the queued ray's result entry, which its trace leaves unused. Clearing
-				// the free slot marker lets QueueMediumWalksKernel queue it
-				if ( medium.scatters ) {
+				if ( medium.scatters != 0u ) {
 
-					rayDataStorage[ index ].walkPending = ${ WALK_PENDING_CAMERA }u;
+					// walk the medium, marking the slot as in use so it's queued for the walk rather than respawned
+					rayDataStorage[ index ].walkPending = 1u;
 					rayDataStorage[ index ].hit.objectIndex = 0;
+
+				} else {
+
+					let rayIndex = atomicAdd( &queueCounters[ ${ RAY_QUEUE_LENGTH }u ], 1u );
+					rayQueue[ rayIndex ].origin = input.origin;
+					rayQueue[ rayIndex ].direction = input.direction;
+					rayQueue[ rayIndex ].pixelIndex = input.pixelIndex;
+					rayQueue[ rayIndex ].rngIndex = 0u;
+					rayQueue[ rayIndex ].sampleIndex = input.sampleIndex;
+					rayQueue[ rayIndex ].maxDist = input.maxDist;
+					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 
 				}
 
