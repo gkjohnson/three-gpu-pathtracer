@@ -82,7 +82,7 @@ const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
 // or one past a full stack is not added
 export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
-	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) {
+	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) -> void {
 
 		let transform = ${ transformsStorage }[ object ];
 		let material = ${ materialsStorage }[ transform.materialIndex ];
@@ -120,7 +120,7 @@ export const addToMediumStackFn = wgslTagFn/* wgsl */`
 // Empties the slot holding the object's volume
 export const removeFromMediumStackFn = wgslTagFn/* wgsl */`
 
-	fn removeFromMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) {
+	fn removeFromMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) -> void {
 
 		let id = ${ transformsStorage }[ object ].mediumId;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
