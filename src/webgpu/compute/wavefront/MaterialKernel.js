@@ -9,7 +9,7 @@ import {
 	rayDataStruct, traceQueuedRayStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
-import { addVolumeToStackFn, removeVolumeFromStackFn, getStackMediumFn } from '../../nodes/medium.wgsl.js';
+import { addToMediumStackFn, removeFromMediumStackFn, getMediumFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -347,34 +347,27 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].mediumScattered = 0u;
 
 					// refracting through a volume's surface enters or exits it
-					var mediumChanged = false;
 					if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
-						var stack: vec4u;
+						var stack = medium.stack;
+						var stackChanged: bool;
 						if ( input.hit.side > 0.0 ) {
 
-							stack = ${ addVolumeToStackFn }( medium.stack, u32( input.hit.objectIndex ) );
+							stackChanged = ${ addToMediumStackFn }( &stack, u32( input.hit.objectIndex ) );
 
 						} else {
 
-							stack = ${ removeVolumeFromStackFn }( medium.stack, u32( input.hit.objectIndex ) );
+							stackChanged = ${ removeFromMediumStackFn }( &stack, u32( input.hit.objectIndex ) );
 
 						}
 
-						if ( any( stack != medium.stack ) ) {
+						if ( stackChanged ) {
 
-							medium = ${ getStackMediumFn }( stack );
-							mediumChanged = true;
+							// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
+							medium = ${ getMediumFn }( stack );
+							${ params.rayDataStorage }[ index ].medium = medium;
 
 						}
-
-					}
-
-					// keep the medium the path left or entered
-					if ( mediumChanged ) {
-
-						// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
-						${ params.rayDataStorage }[ index ].medium = medium;
 
 					}
 

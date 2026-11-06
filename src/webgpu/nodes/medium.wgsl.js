@@ -1,6 +1,7 @@
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn, rayStruct, contextProxy } from 'three-mesh-bvh/webgpu';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
+import { DependentStructTypeNode } from './DependentStructTypeNode.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
 // https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h
@@ -15,20 +16,37 @@ export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 // inversion and the Henyey-Greenstein pdf divide by zero at
 const MEDIUM_MAX_ANISOTROPY = 0.999;
 
-// The media a path is inside of, as in Cycles' volume_stack.h: up to four medium ids, packed at the front
-const MEDIUM_STACK_EMPTY = 0xffffffff;
+// The volumes a path is inside of, by medium id, as in Cycles' volume_stack.h. A slot without a volume holds
+// MEDIUM_STACK_EMPTY
 const MEDIUM_STACK_SIZE = 4;
+const MEDIUM_STACK_EMPTY = 0xffffffff;
+export const mediumStackStruct = new StructTypeNode( {
+	ids: `array<u32, ${ MEDIUM_STACK_SIZE }>`,
+}, 'MediumStack' );
 
 // The combined media of a stack. "scatters" is a uint so the struct can be held in a storage buffer
-export const mediumStruct = new StructTypeNode( {
-	stack: 'vec4u',
-
+const mediumMembers = {
 	extinction: 'vec3f',
 	scatters: 'uint',
 
 	albedo: 'vec3f',
 	anisotropy: 'float',
-}, 'Medium' );
+};
+
+export const mediumStruct = new DependentStructTypeNode( {
+	stack: mediumStackStruct.name,
+	...mediumMembers,
+}, 'Medium', [ mediumStackStruct ] );
+
+// three.js can't size array or struct members, so the struct is sized with the stack as uints
+const stackAsUints = {};
+for ( let i = 0; i < MEDIUM_STACK_SIZE; i ++ ) {
+
+	stackAsUints[ `stack${ i }` ] = 'uint';
+
+}
+
+mediumStruct.getLength = () => new StructTypeNode( { ...stackAsUints, ...mediumMembers } ).getLength();
 
 // Returns the single scatter albedo of a volume from its perceived multi scatter albedo and phase anisotropy, using
 // the inversion from "KHR_materials_scatter" (after Kulla and Conty 2017). A zero multi scatter albedo maps to zero
@@ -60,63 +78,68 @@ const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// returns the stack with the object's volume added, unless it has no extinction or is already on the stack
-export const addVolumeToStackFn = wgslTagFn/* wgsl */`
+// Adds the object's volume to an empty slot of the stack, returning whether it was added. A volume without
+// extinction, one already on the stack, or one past a full stack is not added
+export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
-	fn addVolumeToStack( stack: vec4u, object: u32 ) -> vec4u {
+	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) -> bool {
 
 		let transform = ${ transformsStorage }[ object ];
 		let material = ${ materialsStorage }[ transform.materialIndex ];
 		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
 
-			return stack;
+			return false;
 
 		}
 
-		var result = stack;
+		var emptySlot = ${ MEDIUM_STACK_SIZE }u;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			if ( result[ i ] == transform.mediumId ) {
+			if ( stack.ids[ i ] == transform.mediumId ) {
 
-				break;
+				return false;
 
 			}
 
-			if ( result[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
+			if ( stack.ids[ i ] == ${ MEDIUM_STACK_EMPTY }u && emptySlot == ${ MEDIUM_STACK_SIZE }u ) {
 
-				result[ i ] = transform.mediumId;
-				break;
+				emptySlot = i;
 
 			}
 
 		}
 
-		return result;
+		if ( emptySlot == ${ MEDIUM_STACK_SIZE }u ) {
+
+			return false;
+
+		}
+
+		stack.ids[ emptySlot ] = transform.mediumId;
+		return true;
 
 	}
 
 `;
 
-// returns the stack with the object's volume removed
-export const removeVolumeFromStackFn = wgslTagFn/* wgsl */`
+// Empties the slot holding the object's volume, returning whether it was on the stack
+export const removeFromMediumStackFn = wgslTagFn/* wgsl */`
 
-	fn removeVolumeFromStack( stack: vec4u, object: u32 ) -> vec4u {
+	fn removeFromMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) -> bool {
 
 		let id = ${ transformsStorage }[ object ].mediumId;
-		var result = vec4u( ${ MEDIUM_STACK_EMPTY }u );
-		var count = 0u;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			if ( stack[ i ] != id ) {
+			if ( stack.ids[ i ] == id ) {
 
-				result[ count ] = stack[ i ];
-				count ++;
+				stack.ids[ i ] = ${ MEDIUM_STACK_EMPTY }u;
+				return true;
 
 			}
 
 		}
 
-		return result;
+		return false;
 
 	}
 
@@ -125,9 +148,9 @@ export const removeVolumeFromStackFn = wgslTagFn/* wgsl */`
 // Returns the stack of volumes containing the point, as in Cycles' integrator_volume_stack_init: a volume whose
 // nearest hit along a ray from the point is a back face contains it. Assumes closed volumes with outward facing
 // normals
-export const getVolumeStackAtPointFn = wgslTagFn/* wgsl */`
+export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
-	fn getVolumeStackAtPoint( point: vec3f ) -> vec4u {
+	fn getMediumStackAtPoint( point: vec3f ) -> ${ mediumStackStruct } {
 
 		var ray: ${ rayStruct };
 		ray.origin = point;
@@ -137,12 +160,18 @@ export const getVolumeStackAtPointFn = wgslTagFn/* wgsl */`
 		var hits: ${ contextProxy( 'bvhData.fns.raycastVolumes.outputType' ) };
 		${ contextProxy( 'bvhData.fns.raycastVolumes' ) }( ray, &hits );
 
-		var stack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+		var stack: ${ mediumStackStruct };
+		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
+
+			stack.ids[ i ] = ${ MEDIUM_STACK_EMPTY }u;
+
+		}
+
 		for ( var i = 0u; i < hits.count; i ++ ) {
 
 			if ( hits.side[ i ] < 0.0 ) {
 
-				stack = ${ addVolumeToStackFn }( stack, hits.ids[ i ] );
+				${ addToMediumStackFn }( &stack, hits.ids[ i ] );
 
 			}
 
@@ -156,24 +185,25 @@ export const getVolumeStackAtPointFn = wgslTagFn/* wgsl */`
 
 // Returns the combined medium of the stack's volumes: coefficients summed as in Cycles, with the anisotropy
 // averaged by scattering
-export const getStackMediumFn = wgslTagFn/* wgsl */`
+export const getMediumFn = wgslTagFn/* wgsl */`
 
-	fn getStackMedium( stack: vec4u ) -> ${ mediumStruct } {
+	fn getMedium( stack: ${ mediumStackStruct } ) -> ${ mediumStruct } {
 
 		var extinction = vec3f( 0.0 );
 		var scattering = vec3f( 0.0 );
 		var maxAlbedo = vec3f( 0.0 );
 		var anisotropy = 0.0;
 		var anisotropyWeight = 0.0;
+		var ids = stack.ids;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			if ( stack[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
+			if ( ids[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
 
-				break;
+				continue;
 
 			}
 
-			let material = ${ materialsStorage }[ ${ transformsStorage }[ stack[ i ] ].materialIndex ];
+			let material = ${ materialsStorage }[ ${ transformsStorage }[ ids[ i ] ].materialIndex ];
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 			let entryAlbedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy );
