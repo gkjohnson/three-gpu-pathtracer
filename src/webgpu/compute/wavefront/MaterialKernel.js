@@ -350,24 +350,19 @@ export class MaterialKernel extends ComputeKernel {
 					if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
 						var stack = medium.stack;
-						var stackChanged: bool;
 						if ( input.hit.side > 0.0 ) {
 
-							stackChanged = ${ addToMediumStackFn }( &stack, u32( input.hit.objectIndex ) );
+							${ addToMediumStackFn }( &stack, u32( input.hit.objectIndex ) );
 
 						} else {
 
-							stackChanged = ${ removeFromMediumStackFn }( &stack, u32( input.hit.objectIndex ) );
+							${ removeFromMediumStackFn }( &stack, u32( input.hit.objectIndex ) );
 
 						}
 
-						if ( stackChanged ) {
-
-							// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
-							medium = ${ getCombinedMediumFn }( stack );
-							${ params.rayDataStorage }[ index ].medium = medium;
-
-						}
+						// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
+						medium = ${ getCombinedMediumFn }( stack );
+						${ params.rayDataStorage }[ index ].medium = medium;
 
 					}
 

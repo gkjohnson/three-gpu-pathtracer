@@ -496,22 +496,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
 							var stack = medium.stack;
-							var stackChanged: bool;
 							if ( hit.side > 0.0 ) {
 
-								stackChanged = ${ addToMediumStackFn }( &stack, u32( hit.objectIndex ) );
+								${ addToMediumStackFn }( &stack, u32( hit.objectIndex ) );
 
 							} else {
 
-								stackChanged = ${ removeFromMediumStackFn }( &stack, u32( hit.objectIndex ) );
+								${ removeFromMediumStackFn }( &stack, u32( hit.objectIndex ) );
 
 							}
 
-							if ( stackChanged ) {
-
-								medium = ${ getCombinedMediumFn }( stack );
-
-							}
+							medium = ${ getCombinedMediumFn }( stack );
 
 						}
 

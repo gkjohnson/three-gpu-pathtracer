@@ -78,54 +78,49 @@ const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Adds the object's volume to an empty slot of the stack, returning whether it was added. A volume without
-// extinction, one already on the stack, or one past a full stack is not added
+// Adds the object's volume to an empty slot of the stack. A volume without extinction, one already on the stack,
+// or one past a full stack is not added
 export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
-	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) -> bool {
+	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) {
 
 		let transform = ${ transformsStorage }[ object ];
 		let material = ${ materialsStorage }[ transform.materialIndex ];
 		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
 
-			return false;
+			return;
 
 		}
 
-		var emptySlot = ${ MEDIUM_STACK_SIZE }u;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
 			if ( stack.ids[ i ] == transform.mediumId ) {
 
-				return false;
-
-			}
-
-			if ( stack.ids[ i ] == ${ MEDIUM_STACK_EMPTY }u && emptySlot == ${ MEDIUM_STACK_SIZE }u ) {
-
-				emptySlot = i;
+				return;
 
 			}
 
 		}
 
-		if ( emptySlot == ${ MEDIUM_STACK_SIZE }u ) {
+		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			return false;
+			if ( stack.ids[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
+
+				stack.ids[ i ] = transform.mediumId;
+				return;
+
+			}
 
 		}
-
-		stack.ids[ emptySlot ] = transform.mediumId;
-		return true;
 
 	}
 
 `;
 
-// Empties the slot holding the object's volume, returning whether it was on the stack
+// Empties the slot holding the object's volume
 export const removeFromMediumStackFn = wgslTagFn/* wgsl */`
 
-	fn removeFromMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) -> bool {
+	fn removeFromMediumStack( stack: ptr<function, ${ mediumStackStruct }>, object: u32 ) {
 
 		let id = ${ transformsStorage }[ object ].mediumId;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
@@ -133,13 +128,10 @@ export const removeFromMediumStackFn = wgslTagFn/* wgsl */`
 			if ( stack.ids[ i ] == id ) {
 
 				stack.ids[ i ] = ${ MEDIUM_STACK_EMPTY }u;
-				return true;
 
 			}
 
 		}
-
-		return false;
 
 	}
 
