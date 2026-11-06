@@ -46,7 +46,8 @@ export class CameraMediumKernel extends ComputeKernel {
 				rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
 				// the walk hands its hit back in the queued ray's result entry, which its trace leaves unused. Clearing
-				// the free slot marker lets QueueMediumWalksKernel queue it
+				// the free slot marker keeps MaterialKernel from respawning the slot and lets QueueMediumWalksKernel
+				// queue the walk
 				if ( medium.scatters ) {
 
 					rayDataStorage[ index ].walkPending = ${ WALK_PENDING_CAMERA }u;

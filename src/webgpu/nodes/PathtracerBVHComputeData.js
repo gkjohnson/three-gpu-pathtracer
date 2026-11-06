@@ -666,7 +666,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.updateUvAttributesFromScene();
 
 		// the material indices are written with the transforms, so the shading model's materials must
-		// be updated first
+		// be updated first. The medium ids are slots, so they're found again for the new packing
+		this._mediumIds.clear();
 		super.update();
 
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist

@@ -317,9 +317,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						hit.dist = hitResult.dist;
 						hit.bounce = bounce;
 
-						// a medium that doesn't scatter only absorbs the light reaching the surface. One that
-						// does has already applied its transmittance above
-						if ( ! segmentInMedium ) {
+						// a medium that doesn't scatter only absorbs the light reaching the surface, so its emission
+						// and NEE resolve against the attenuated throughput. One that does applied its transmittance
+						// above
+						if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
 
 							throughputColor *= exp( - medium.extinction * hit.dist );
 
