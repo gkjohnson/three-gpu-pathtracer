@@ -511,8 +511,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// transformed is checked in both the bounds and range tests. A dedicated hook would be good
 		const skipObject = uint( 0 ).toVar( 'bvh_skipObject' );
 
-		fns.raycastVolumes = this.getShapecastFn( {
-			name: 'raycastVolumes',
+		fns.collectVolumeHits = this.getShapecastFn( {
+			name: 'collectVolumeHits',
 			shapeStruct: rayStruct,
 			resultStruct: volumeHitsStruct,
 

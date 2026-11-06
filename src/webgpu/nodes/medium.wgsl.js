@@ -148,8 +148,8 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 		ray.direction = vec3f( 0.0, 0.0, 1.0 );
 		ray.maxDist = 0.0;
 
-		var hits: ${ contextProxy( 'bvhData.fns.raycastVolumes.outputType' ) };
-		${ contextProxy( 'bvhData.fns.raycastVolumes' ) }( ray, &hits );
+		var hits: ${ contextProxy( 'bvhData.fns.collectVolumeHits.outputType' ) };
+		${ contextProxy( 'bvhData.fns.collectVolumeHits' ) }( ray, &hits );
 
 		var stack: ${ mediumStackStruct };
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
