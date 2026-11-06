@@ -2,7 +2,7 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { getMediumFn, getMediumStackAtPointFn } from '../../nodes/medium.wgsl.js';
+import { getCombinedMediumFn, getMediumStackAtPointFn } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, WALK_PENDING_CAMERA } from './structs.js';
 
 // Sets the medium of new camera rays from the volumes around their origin. A ray starting in a scattering
@@ -41,7 +41,7 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
-				let medium = ${ getMediumFn }( ${ getMediumStackAtPointFn }( input.origin ) );
+				let medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( input.origin ) );
 				rayDataStorage[ index ].medium = medium;
 
 				// walk instead, marking the slot as in use so it's queued for the walk rather than respawned

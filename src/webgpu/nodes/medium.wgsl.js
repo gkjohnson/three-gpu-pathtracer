@@ -183,11 +183,11 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Returns the combined medium of the stack's volumes: coefficients summed as in Cycles, with the anisotropy
-// averaged by scattering
-export const getMediumFn = wgslTagFn/* wgsl */`
+// Returns the combined medium of all the stack's volumes, as if inside them all at once: coefficients summed as
+// in Cycles, with the anisotropy averaged by scattering
+export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 
-	fn getMedium( stack: ${ mediumStackStruct } ) -> ${ mediumStruct } {
+	fn getCombinedMedium( stack: ${ mediumStackStruct } ) -> ${ mediumStruct } {
 
 		var extinction = vec3f( 0.0 );
 		var scattering = vec3f( 0.0 );
