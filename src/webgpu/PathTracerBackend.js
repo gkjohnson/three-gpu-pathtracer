@@ -22,9 +22,6 @@ export class PathTracerBackend {
 		this.maxSubsurfaceBounces = 256;
 		this.lowResMode = false;
 
-		// the shading model the kernels read the materials through
-		this.shadingModel = null;
-
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
 
@@ -97,8 +94,6 @@ export class PathTracerBackend {
 	}
 
 	setShadingModel( shadingModel ) {
-
-		this.shadingModel = shadingModel;
 
 	}
 
