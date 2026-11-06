@@ -60,6 +60,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
 		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
+		const volumeHits = contextProxy( 'bvhData.fns.raycastVolumes.outputType' );
+		const raycastVolumesFn = contextProxyFn( 'bvhData.fns.raycastVolumes' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
@@ -71,7 +73,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
 		const mediumStackExitFn = mediumStackExitFunc( transformsStorage );
 		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
-		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, transformsStorage, materialsStorage, mediumStackEnterFn );
+		const originMediumStackFn = originMediumStackFunc( raycastVolumesFn, volumeHits, mediumStackEnterFn );
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );

@@ -1,7 +1,6 @@
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
-import { offsetRayOriginFunc } from './utils.wgsl.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
 // https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h
@@ -20,9 +19,6 @@ const MEDIUM_MAX_ANISOTROPY = 0.999;
 // at the front with the empty value after them. A volume entered past a full stack is ignored
 export const MEDIUM_STACK_EMPTY = 0xffffffff;
 export const MEDIUM_STACK_SIZE = 4;
-
-// how many surfaces the ray finding the volumes around a camera ray's origin passes
-const MEDIUM_ORIGIN_MAX_HITS = 16;
 
 // The media of a stack combined. One that scatters is walked, while one that only absorbs attenuates the
 // segments through it
@@ -168,50 +164,29 @@ export const mediumStackExitFunc = ( transforms ) => wgslTagFn/* wgsl */`
 `;
 
 // The volumes a camera ray's origin is inside of, found as Cycles' integrator_volume_stack_init does: a ray from
-// the origin meets the boundaries of the volumes around it, and one whose back face comes before any of its front
-// faces contains the origin. Like Cycles, it relies on closed volumes with outward facing normals
-export const originMediumStackFunc = ( raycastFirstHit, raycastOutput, transforms, materials, mediumStackEnterFn ) => wgslTagFn/* wgsl */`
+// the origin meets the boundaries of the volumes around it, and one whose nearest hit is a back face contains the
+// origin. Like Cycles, it relies on closed volumes with outward facing normals
+export const originMediumStackFunc = ( raycastVolumes, volumeHits, mediumStackEnterFn ) => wgslTagFn/* wgsl */`
 
 	fn originMediumStack( origin: vec3f ) -> vec4u {
-
-		var stack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
-
-		// the volumes whose front face was met first, so the origin is outside of them
-		var outside = vec4u( ${ MEDIUM_STACK_EMPTY }u );
-		var outsideCount = 0u;
 
 		var ray: ${ rayStruct };
 		ray.origin = origin;
 		ray.direction = vec3f( 0.0, 0.0, 1.0 );
 		ray.maxDist = 0.0;
-		for ( var i = 0u; i < ${ MEDIUM_ORIGIN_MAX_HITS }u; i ++ ) {
 
-			var hit: ${ raycastOutput };
-			if ( ! ${ raycastFirstHit }( ray, &hit ) ) {
+		var hits: ${ volumeHits };
+		${ raycastVolumes }( ray, &hits );
 
-				break;
+		// a medium id is the slot of the volume's first bvh group, which enters the volume as any of its slots
+		var stack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+		for ( var i = 0u; i < hits.count; i ++ ) {
 
-			}
+			if ( hits.side[ i ] < 0.0 ) {
 
-			let transform = ${ transforms }[ hit.objectIndex ];
-			let material = ${ materials }[ transform.materialIndex ];
-			let isVolume = material.transmission > 0.0 && material.thinWall == 0;
-			if ( isVolume && ! any( outside == vec4u( transform.mediumId ) ) ) {
-
-				if ( hit.side < 0.0 ) {
-
-					stack = ${ mediumStackEnterFn }( stack, hit.objectIndex );
-
-				} else if ( outsideCount < ${ MEDIUM_STACK_SIZE }u ) {
-
-					outside[ outsideCount ] = transform.mediumId;
-					outsideCount ++;
-
-				}
+				stack = ${ mediumStackEnterFn }( stack, hits.ids[ i ] );
 
 			}
-
-			ray.origin = ${ offsetRayOriginFunc }( ray.origin + ray.direction * hit.dist, ray.direction, hit.normal );
 
 		}
 
