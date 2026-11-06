@@ -316,13 +316,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						hit.dist = hitResult.dist;
 						hit.bounce = bounce;
 
-						// a medium that only absorbs attenuates the segment to the hit
-						if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
-
-							throughputColor *= exp( - medium.extinction * hit.dist );
-
-						}
-
 						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
 						let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
@@ -345,6 +338,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							resultColor = vec4f( 0.0 );
 							break;
+
+						}
+
+						// a medium that only absorbs attenuates the segment to the hit
+						if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
+
+							throughputColor *= exp( - medium.extinction * hit.dist );
 
 						}
 
