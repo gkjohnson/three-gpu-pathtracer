@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Added
+- WebGPUPathTracer: AO map and lightmap baking with "AOMapCamera", "LightmapCamera", "UVUnwrapper", "GutterFiller" and "SeamStitcher".
+- WebGPUPathTracer: "getObjectInfo" tells where an object was packed, for cameras that read the scene data.
+- WebGPUPathTracer: "setShadingModel" is public, and the shading model is given the hit it evaluates at, with "AOMapShadingModel" and "LightmapShadingModel" for baking.
+
 ### Changed
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
 - WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
