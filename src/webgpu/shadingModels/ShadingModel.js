@@ -376,7 +376,9 @@ export class ShadingModel {
 			intArray[ index ++ ] = Number( isThinWall );
 			index ++;
 
-			// attenuation - offset 44. A fog volume's "density" is its extinction per unit length
+			// attenuation - offset 44. A fog volume's "density" is its extinction per unit length. The kernels derive
+			// extinction as "- log( attenuationColor ) / attenuationDistance", so a color of e^-1 and a distance of
+			// 1 / density give the density back
 			if ( isFogVolume ) {
 
 				floatArray[ index ++ ] = Math.exp( - 1 );
@@ -414,7 +416,7 @@ export class ShadingModel {
 			floatArray[ index ++ ] = m.alphaTest;
 
 			// side & matte - offset 52. Volumes are entered and left through both faces
-			if ( ! isThinWall && m.transmission > 0.0 || isFogVolume ) {
+			if ( ( ! isThinWall && m.transmission > 0.0 ) || isFogVolume ) {
 
 				floatArray[ index ++ ] = 0;
 

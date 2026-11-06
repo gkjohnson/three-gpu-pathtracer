@@ -4,7 +4,7 @@ import { uniform, storage, globalId } from 'three/tsl';
 import { contextProxy, contextProxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
-import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getShadowMediumStackFn, getShadowMediumDepthFn } from '../../nodes/medium.wgsl.js';
+import { mediumStackStruct, addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getShadowMediumStackFn, getShadowMediumDepthFn } from '../../nodes/medium.wgsl.js';
 import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sampling.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -40,6 +40,27 @@ export class MaterialKernel extends ComputeKernel {
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
+		// Queues the NEE shadow ray from the origin toward the light LogicKernel selected, starting in the given media,
+		// and returns its index in the queue. A whole struct is written to the buffer, which Safari needs
+		const queueShadowRayFn = wgslTagFn/* wgsl */`
+			fn queueShadowRay( input: ${ rayDataStruct }, origin: vec3f, stack: ${ mediumStackStruct } ) -> i32 {
+
+				var queuedRay: ${ traceQueuedRayStruct };
+				queuedRay.origin = origin;
+				queuedRay.direction = input.lightDirection;
+				queuedRay.pixelIndex = input.pixelIndex;
+				queuedRay.rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
+				queuedRay.sampleIndex = input.sampleIndex;
+				queuedRay.maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+				queuedRay.mediumDepth = ${ getShadowMediumDepthFn }( stack, queuedRay.maxDist );
+
+				let shadowIndex = atomicAdd( &${ params.queueCounters }[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
+				${ params.shadowRayQueue }[ shadowIndex ] = queuedRay;
+				return i32( shadowIndex );
+
+			}
+		`;
+
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
@@ -55,7 +76,6 @@ export class MaterialKernel extends ComputeKernel {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 				let rayQueue = &${ params.rayQueue };
-				let shadowRayQueue = &${ params.shadowRayQueue };
 				let queueCounters = &${ params.queueCounters };
 
 				// bound by "rayCount" rather than the pool length. The dispatch rounds up to the
@@ -129,16 +149,7 @@ export class MaterialKernel extends ComputeKernel {
 
 							rayDataStorage[ index ].lightBsdf = vec3f( lightPhasePdf );
 							rayDataStorage[ index ].lightBsdfPdf = lightPhasePdf;
-
-							let shadowIndex = atomicAdd( &queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
-							shadowRayQueue[ shadowIndex ].origin = input.origin;
-							shadowRayQueue[ shadowIndex ].direction = input.lightDirection;
-							shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
-							shadowRayQueue[ shadowIndex ].rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
-							shadowRayQueue[ shadowIndex ].sampleIndex = input.sampleIndex;
-							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
-							shadowRayQueue[ shadowIndex ].mediumDepth = ${ getShadowMediumDepthFn }( medium.stack, shadowRayQueue[ shadowIndex ].maxDist );
-							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
+							rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, input.origin, medium.stack );
 
 						} else {
 
@@ -389,20 +400,12 @@ export class MaterialKernel extends ComputeKernel {
 							rayDataStorage[ index ].lightBsdf = evalRec.color;
 							rayDataStorage[ index ].lightBsdfPdf = evalRec.pdf;
 
-							let shadowIndex = atomicAdd( &queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
-							shadowRayQueue[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
-							shadowRayQueue[ shadowIndex ].direction = input.lightDirection;
-							shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
-							shadowRayQueue[ shadowIndex ].rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
-							shadowRayQueue[ shadowIndex ].sampleIndex = input.sampleIndex;
-							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
-
+							let shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
 							let shadowStack = ${ getShadowMediumStackFn }(
 								surfaceStack, objectInfo.materialIndex, input.hit.side, surface.thinWall,
 								input.direction, input.lightDirection, input.hit.normal,
 							);
-							shadowRayQueue[ shadowIndex ].mediumDepth = ${ getShadowMediumDepthFn }( shadowStack, shadowRayQueue[ shadowIndex ].maxDist );
-							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
+							rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowOrigin, shadowStack );
 
 						} else {
 
