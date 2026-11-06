@@ -5,7 +5,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn } from '../nodes/sampling.wgsl.js';
-import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, originMediumStackFunc, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
+import { mediumStackEnterFn, mediumStackExitFn, stackMediumFn, originMediumStackFn, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
@@ -60,8 +60,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
 		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
-		const volumeHits = contextProxy( 'bvhData.fns.raycastVolumes.outputType' );
-		const raycastVolumesFn = contextProxyFn( 'bvhData.fns.raycastVolumes' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
@@ -69,11 +67,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
-
-		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
-		const mediumStackExitFn = mediumStackExitFunc( transformsStorage );
-		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
-		const originMediumStackFn = originMediumStackFunc( raycastVolumesFn, volumeHits, mediumStackEnterFn );
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );

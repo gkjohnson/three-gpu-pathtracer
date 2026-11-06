@@ -1,8 +1,8 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { contextProxy, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { mediumStackEnterFunc, stackMediumFunc, originMediumStackFunc, storeMediumFn } from '../../nodes/medium.wgsl.js';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { stackMediumFn, originMediumStackFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, WALK_PENDING_CAMERA } from './structs.js';
 
 // Finds the volumes each new camera ray starts inside of by tracing from the ray's own origin, and starts its
@@ -19,14 +19,6 @@ export class CameraMediumKernel extends ComputeKernel {
 
 			globalId: globalId,
 		};
-
-		const volumeHits = contextProxy( 'bvhData.fns.raycastVolumes.outputType' );
-		const raycastVolumesFn = contextProxy( 'bvhData.fns.raycastVolumes' );
-		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
-		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
-		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
-		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
-		const originMediumStackFn = originMediumStackFunc( raycastVolumesFn, volumeHits, mediumStackEnterFn );
 
 		const fn = wgslTagFn/* wgsl */`
 

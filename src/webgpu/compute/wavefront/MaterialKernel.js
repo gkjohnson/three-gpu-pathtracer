@@ -9,7 +9,7 @@ import {
 	rayDataStruct, traceQueuedRayStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
-import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFn, mediumStackExitFn, stackMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -50,10 +50,6 @@ export class MaterialKernel extends ComputeKernel {
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
-
-		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
-		const mediumStackExitFn = mediumStackExitFunc( transformsStorage );
-		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
 
 		const fn = wgslTagFn/* wgsl */`
 

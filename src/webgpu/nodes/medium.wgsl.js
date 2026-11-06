@@ -1,5 +1,5 @@
 import { StructTypeNode } from 'three/webgpu';
-import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, rayStruct, contextProxy } from 'three-mesh-bvh/webgpu';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
@@ -89,6 +89,10 @@ const singleScatterAlbedoFn = wgslTagFn/* wgsl */`
 
 `;
 
+// the object transforms and materials of the kernel's context, which the stack functions read
+const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
+const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+
 // A material's extinction from its glTF attenuation, zero for one without a volume
 const materialExtinctionFn = wgslTagFn/* wgsl */`
 
@@ -102,12 +106,12 @@ const materialExtinctionFn = wgslTagFn/* wgsl */`
 
 // Refracting in through a front face pushes the hit object's volume, by its medium id, unless it has none or
 // is already on the stack
-export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
+export const mediumStackEnterFn = wgslTagFn/* wgsl */`
 
 	fn mediumStackEnter( stack: vec4u, object: u32 ) -> vec4u {
 
-		let transform = ${ transforms }[ object ];
-		let material = ${ materials }[ transform.materialIndex ];
+		let transform = ${ transformsStorage }[ object ];
+		let material = ${ materialsStorage }[ transform.materialIndex ];
 		if ( all( ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
 
 			return stack;
@@ -139,11 +143,11 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 `;
 
 // ... and refracting out through a back face removes it, keeping the rest of the stack packed in order
-export const mediumStackExitFunc = ( transforms ) => wgslTagFn/* wgsl */`
+export const mediumStackExitFn = wgslTagFn/* wgsl */`
 
 	fn mediumStackExit( stack: vec4u, object: u32 ) -> vec4u {
 
-		let id = ${ transforms }[ object ].mediumId;
+		let id = ${ transformsStorage }[ object ].mediumId;
 		var result = vec4u( ${ MEDIUM_STACK_EMPTY }u );
 		var count = 0u;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
@@ -166,7 +170,7 @@ export const mediumStackExitFunc = ( transforms ) => wgslTagFn/* wgsl */`
 // The volumes a camera ray's origin is inside of, found as Cycles' integrator_volume_stack_init does: a ray from
 // the origin meets the boundaries of the volumes around it, and one whose nearest hit is a back face contains the
 // origin. Like Cycles, it relies on closed volumes with outward facing normals
-export const originMediumStackFunc = ( raycastVolumes, volumeHits, mediumStackEnterFn ) => wgslTagFn/* wgsl */`
+export const originMediumStackFn = wgslTagFn/* wgsl */`
 
 	fn originMediumStack( origin: vec3f ) -> vec4u {
 
@@ -175,8 +179,8 @@ export const originMediumStackFunc = ( raycastVolumes, volumeHits, mediumStackEn
 		ray.direction = vec3f( 0.0, 0.0, 1.0 );
 		ray.maxDist = 0.0;
 
-		var hits: ${ volumeHits };
-		${ raycastVolumes }( ray, &hits );
+		var hits: ${ contextProxy( 'bvhData.fns.raycastVolumes.outputType' ) };
+		${ contextProxy( 'bvhData.fns.raycastVolumes' ) }( ray, &hits );
 
 		// a medium id is one of its volume's object slots, so it's entered like a hit object
 		var stack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
@@ -198,7 +202,7 @@ export const originMediumStackFunc = ( raycastVolumes, volumeHits, mediumStackEn
 
 // The medium of a stack. Overlapping volumes sum their coefficients as in Cycles, with a phase anisotropy
 // averaged by scattering in place of Cycles' mixture of phase functions
-export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
+export const stackMediumFn = wgslTagFn/* wgsl */`
 
 	fn stackMedium( stack: vec4u ) -> ${ mediumStruct } {
 
@@ -215,7 +219,7 @@ export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
 			}
 
-			let material = ${ materials }[ ${ transforms }[ stack[ i ] ].materialIndex ];
+			let material = ${ materialsStorage }[ ${ transformsStorage }[ stack[ i ] ].materialIndex ];
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 			let entryAlbedo = ${ singleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy );
