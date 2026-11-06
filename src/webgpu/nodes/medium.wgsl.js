@@ -21,6 +21,11 @@ const MEDIUM_MAX_ANISOTROPY = 0.999;
 export const MEDIUM_STACK_EMPTY = 0xffffffff;
 export const MEDIUM_STACK_SIZE = 4;
 
+// The stack entry of the scene fog, which fills all of space below every volume, and the material the shading
+// model writes it to
+export const MEDIUM_STACK_SCENE_FOG = 0xfffffffe;
+const SCENE_FOG_MATERIAL_INDEX = 0;
+
 // how many surfaces the ray finding the volumes around a camera ray's origin passes
 const MEDIUM_ORIGIN_MAX_HITS = 16;
 
@@ -176,14 +181,27 @@ export const mediumStackExitFunc = ( transforms ) => wgslTagFn/* wgsl */`
 
 `;
 
-// The volumes a camera ray's origin is inside of, found as Cycles' integrator_volume_stack_init does: a ray from
-// the origin meets the boundaries of the volumes around it, and one whose back face comes before any of its front
-// faces contains the origin. Like Cycles, it relies on closed volumes with outward facing normals
+// The stack every camera ray starts with: the scene fog, when the scene has one
+export const sceneMediumStackFn = wgslTagFn/* wgsl */`
+
+	fn sceneMediumStack( sceneFog: bool ) -> vec4u {
+
+		let fogStack = vec4u( ${ MEDIUM_STACK_SCENE_FOG }u, ${ MEDIUM_STACK_EMPTY }u, ${ MEDIUM_STACK_EMPTY }u, ${ MEDIUM_STACK_EMPTY }u );
+		return select( vec4u( ${ MEDIUM_STACK_EMPTY }u ), fogStack, sceneFog );
+
+	}
+
+`;
+
+// The volumes a camera ray's origin is inside of, pushed onto the given stack, found as Cycles'
+// integrator_volume_stack_init does: a ray from the origin meets the boundaries of the volumes around it, and one
+// whose back face comes before any of its front faces contains the origin. Like Cycles, it relies on closed volumes
+// with outward facing normals
 export const originMediumStackFunc = ( raycastFirstHit, raycastOutput, transforms, materials, mediumStackEnterFn ) => wgslTagFn/* wgsl */`
 
-	fn originMediumStack( origin: vec3f ) -> vec4u {
+	fn originMediumStack( origin: vec3f, sceneStack: vec4u ) -> vec4u {
 
-		var stack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+		var stack = sceneStack;
 
 		// the volumes whose front face was met first, so the origin is outside of them
 		var outside = vec4u( ${ MEDIUM_STACK_EMPTY }u );
@@ -244,13 +262,21 @@ export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 		var fog = false;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			if ( stack[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
+			let id = stack[ i ];
+			if ( id == ${ MEDIUM_STACK_EMPTY }u ) {
 
 				break;
 
 			}
 
-			let material = ${ materials }[ ${ transforms }[ stack[ i ] ].materialIndex ];
+			var materialIndex = ${ SCENE_FOG_MATERIAL_INDEX }u;
+			if ( id != ${ MEDIUM_STACK_SCENE_FOG }u ) {
+
+				materialIndex = ${ transforms }[ id ].materialIndex;
+
+			}
+
+			let material = ${ materials }[ materialIndex ];
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 
@@ -310,7 +336,7 @@ export const shadowMediumStackFunc = ( mediumStackEnterFn, mediumStackExitFn ) =
 
 `;
 
-// The summed extinction of a stack's volumes
+// The summed extinction of a stack's volumes, without the scene fog's
 const stackExtinctionFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
 	fn stackExtinction( stack: vec4u ) -> vec3f {
@@ -321,6 +347,12 @@ const stackExtinctionFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 			if ( stack[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
 
 				break;
+
+			}
+
+			if ( stack[ i ] == ${ MEDIUM_STACK_SCENE_FOG }u ) {
+
+				continue;
 
 			}
 
@@ -350,7 +382,8 @@ export const fogShadowDistanceFn = wgslTagFn/* wgsl */`
 // The light a shadow ray starting inside the stack's volumes lets through: what the partially transparent surfaces
 // passed let through, times the transmittance of the fog on the way. The traversal passes fog boundaries in any
 // order, adding their optical depth to "fogDepth" back from the fog shadow distance, so the stack's volumes cover
-// the ray up to it
+// the ray up to it. The scene fog has no boundaries and covers the whole ray, so distant lights don't reach
+// through it
 export const shadowTransmittanceFunc = ( transforms, materials ) => {
 
 	const stackExtinctionFn = stackExtinctionFunc( transforms, materials );
@@ -358,7 +391,14 @@ export const shadowTransmittanceFunc = ( transforms, materials ) => {
 
 		fn shadowTransmittance( stack: vec4u, maxDist: f32, fogDepth: vec3f, occlusion: f32 ) -> vec3f {
 
-			let depth = fogDepth + ${ stackExtinctionFn }( stack ) * ${ fogShadowDistanceFn }( maxDist );
+			var depth = fogDepth + ${ stackExtinctionFn }( stack ) * ${ fogShadowDistanceFn }( maxDist );
+			if ( any( stack == vec4u( ${ MEDIUM_STACK_SCENE_FOG }u ) ) ) {
+
+				let sceneFog = ${ materials }[ ${ SCENE_FOG_MATERIAL_INDEX }u ];
+				depth += ${ materialExtinctionFn }( sceneFog.attenuationColor, sceneFog.attenuationDistance ) * maxDist;
+
+			}
+
 			return ( 1.0 - occlusion ) * exp( - max( depth, vec3f( 0.0 ) ) );
 
 		}

@@ -183,7 +183,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].mediumScattered = 0u;
 					rayDataStorage[ index ].mediumVertex = 0u;
 
-					// CameraMediumKernel adds the volumes around the ray's origin, in scenes with any
+					// CameraMediumKernel adds the scene fog and the volumes around the ray's origin, in scenes with any
 					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( vec4u( ${ MEDIUM_STACK_EMPTY }u ) ) );
 
 					// write the active params & dispatched flag

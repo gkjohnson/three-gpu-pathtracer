@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: A medium stack, so nested and overlapping volumes, like liquid in a glass, absorb and scatter together, including when the camera is inside one.
 - WebGPUPathTracer: "FogVolumeMaterial" support, with light sampled inside the fog, shadows through it, a "scatterAnisotropy" phase setting, and "maxFogBounces", single scattering by default as in Cycles.
 - FogVolumeNodeMaterial: A fog volume material for the WebGPU path tracer that also renders as haze when rasterized.
+- WebGPUPathTracer: A "FogExp2" scene fog renders as a fog volume filling all of space, with its density as the extinction per unit length, like a Cycles world volume. Distant lights don't reach through it.
 
 ### Changed
 - WebGPUPathTracer: Requires three.js r187, which binds every storage buffer as an array.

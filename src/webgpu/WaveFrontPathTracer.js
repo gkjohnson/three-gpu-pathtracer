@@ -577,11 +577,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.targetDimensions.copy( targetDimensions );
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
-				// find the volumes the new camera rays start inside of
-				if ( this.shadingModel.hasVolumes ) {
+				// find the scene fog and volumes the new camera rays start inside of
+				const { hasVolumes, hasSceneFog } = this.shadingModel;
+				if ( hasVolumes || hasSceneFog ) {
 
 					cameraMediumKernel.rayDataStorage = rayDataStorage;
 					cameraMediumKernel.rayCount = rayCount;
+					cameraMediumKernel.hasVolumes = hasVolumes ? 1 : 0;
+					cameraMediumKernel.sceneFog = hasSceneFog ? 1 : 0;
 					this.dispatch( cameraMediumKernel, cameraMediumKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				}

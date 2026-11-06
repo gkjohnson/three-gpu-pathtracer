@@ -1215,8 +1215,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Re-reads the material properties and textures from the scene. Call after changing any
-	 * material.
+	 * Re-reads the material properties and textures from the scene, and its `FogExp2` fog. Call after
+	 * changing any material or the fog.
 	 */
 	updateMaterials() {
 
