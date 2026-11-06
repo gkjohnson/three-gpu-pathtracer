@@ -1,8 +1,7 @@
-import { TimestampQuery, Vector4 } from 'three/webgpu';
+import { TimestampQuery } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/aux.wgsl.js';
-import { MEDIUM_STACK_EMPTY } from './nodes/medium.wgsl.js';
 
 // the async compile state of a compute node. A node with no state has not been requested.
 const COMPILE_STARTED = 0;
@@ -23,8 +22,8 @@ export class PathTracerBackend {
 		this.maxSubsurfaceBounces = 256;
 		this.lowResMode = false;
 
-		// the object indices of the media the camera is inside of, as the medium stack camera rays start with
-		this.cameraMediumStack = new Vector4().setScalar( MEDIUM_STACK_EMPTY );
+		// the shading model the kernels read the materials through
+		this.shadingModel = null;
 
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
@@ -98,6 +97,8 @@ export class PathTracerBackend {
 	}
 
 	setShadingModel( shadingModel ) {
+
+		this.shadingModel = shadingModel;
 
 	}
 

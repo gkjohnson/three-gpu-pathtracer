@@ -1,4 +1,4 @@
-import { Vector2, Vector4 } from 'three';
+import { Vector2 } from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createSampleCountTarget } from '../targets.js';
@@ -9,7 +9,7 @@ import {
 	rayDataStruct, traceQueuedRayStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
-import { mediumStackEnterFunc, mediumStackExitFn, stackMediumFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
+import { mediumStackEnterFunc, mediumStackExitFunc, stackMediumFunc, loadMediumFn, storeMediumFn, MEDIUM_STACK_EMPTY } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -32,9 +32,6 @@ export class MaterialKernel extends ComputeKernel {
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
 
-			// the media the camera is inside of
-			cameraMediumStack: uniform( new Vector4().setScalar( MEDIUM_STACK_EMPTY ), 'uvec4' ),
-
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
@@ -55,6 +52,7 @@ export class MaterialKernel extends ComputeKernel {
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
+		const mediumStackExitFn = mediumStackExitFunc( transformsStorage );
 		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -67,7 +65,6 @@ export class MaterialKernel extends ComputeKernel {
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
 				maxBounces: u32,
-				cameraMediumStack: vec4u,
 
 				globalId: vec3u
 			) -> void {
@@ -179,7 +176,9 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].subsurfaceBounces = 0u;
 					rayDataStorage[ index ].walkPending = 0u;
 					rayDataStorage[ index ].mediumScattered = 0u;
-					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( cameraMediumStack, ${ MEDIUM_STACK_EMPTY }u ) );
+
+					// CameraMediumKernel adds the volumes around the ray's origin, in scenes with any
+					rayDataStorage[ index ].medium = ${ storeMediumFn }( ${ stackMediumFn }( vec4u( ${ MEDIUM_STACK_EMPTY }u ) ) );
 
 					// write the active params & dispatched flag
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
@@ -192,7 +191,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = ${ loadMediumFn }( input.medium );
-					let segmentInMedium = medium.inside;
+					let segmentInMedium = medium.scatters;
 
 					let objectInfo = ${ transformsStorage }[ u32( input.hit.objectIndex ) ];
 					let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
@@ -374,7 +373,7 @@ export class MaterialKernel extends ComputeKernel {
 
 						if ( any( stack != medium.stack ) ) {
 
-							medium = ${ stackMediumFn }( stack, u32( input.hit.objectIndex ) );
+							medium = ${ stackMediumFn }( stack );
 							mediumChanged = true;
 
 						}
@@ -391,7 +390,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// the NEE shadow ray below still resolves the surface's direct light, so only
 					// the bounce segment is skipped for finished paths. Inside a medium, MediumKernel walks it
-					if ( ! isTerminated && medium.inside ) {
+					if ( ! isTerminated && medium.scatters ) {
 
 						rayDataStorage[ index ].walkPending = 1u;
 						rayDataStorage[ index ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.hit.normal );

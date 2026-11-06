@@ -1,6 +1,7 @@
 import { StructTypeNode } from 'three/webgpu';
-import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
+import { offsetRayOriginFunc } from './utils.wgsl.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
 // https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/integrator/subsurface_random_walk.h
@@ -15,17 +16,19 @@ export const MEDIUM_THROUGHPUT_EPSILON = 1e-6;
 // inversion and the Henyey-Greenstein pdf divide by zero at
 const MEDIUM_MAX_ANISOTROPY = 0.999;
 
-// The media a path is inside of, as in Cycles' volume_stack.h: the object indices of up to four volumes,
-// packed at the front with the empty value after them. A volume entered past a full stack is ignored
+// The media a path is inside of, as in Cycles' volume_stack.h: the medium ids of up to four volumes, packed
+// at the front with the empty value after them. A volume entered past a full stack is ignored
 export const MEDIUM_STACK_EMPTY = 0xffffffff;
 export const MEDIUM_STACK_SIZE = 4;
 
-// The media of the stack combined. "inside" marks one that scatters, which is walked, while one that only
-// absorbs attenuates the segments through it
+// how many surfaces the ray finding the volumes around a camera ray's origin passes
+const MEDIUM_ORIGIN_MAX_HITS = 16;
+
+// The media of a stack combined. One that scatters is walked, while one that only absorbs attenuates the
+// segments through it
 export const mediumStruct = new StructTypeNode( {
 	stack: 'vec4u',
-	inside: 'bool',
-	object: 'uint',
+	scatters: 'bool',
 	extinction: 'vec3f',
 	albedo: 'vec3f',
 	anisotropy: 'float',
@@ -36,12 +39,10 @@ export const mediumStateStruct = new StructTypeNode( {
 	stack: 'vec4u',
 
 	extinction: 'vec3f',
-	object: 'uint',
+	scatters: 'uint',
 
 	albedo: 'vec3f',
 	anisotropy: 'float',
-
-	inside: 'uint',
 }, 'MediumState' );
 
 export const storeMediumFn = wgslTagFn/* wgsl */`
@@ -51,10 +52,9 @@ export const storeMediumFn = wgslTagFn/* wgsl */`
 		var state: ${ mediumStateStruct };
 		state.stack = medium.stack;
 		state.extinction = medium.extinction;
-		state.object = medium.object;
+		state.scatters = select( 0u, 1u, medium.scatters );
 		state.albedo = medium.albedo;
 		state.anisotropy = medium.anisotropy;
-		state.inside = select( 0u, 1u, medium.inside );
 		return state;
 
 	}
@@ -67,9 +67,8 @@ export const loadMediumFn = wgslTagFn/* wgsl */`
 
 		var medium: ${ mediumStruct };
 		medium.stack = state.stack;
-		medium.inside = state.inside != 0u;
-		medium.object = state.object;
 		medium.extinction = state.extinction;
+		medium.scatters = state.scatters != 0u;
 		medium.albedo = state.albedo;
 		medium.anisotropy = state.anisotropy;
 		return medium;
@@ -105,12 +104,14 @@ const materialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Refracting in through a front face pushes the object's volume, unless it has none or is already on the stack
+// Refracting in through a front face pushes the hit object's volume, by its medium id, unless it has none or
+// is already on the stack
 export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
 	fn mediumStackEnter( stack: vec4u, object: u32 ) -> vec4u {
 
-		let material = ${ materials }[ ${ transforms }[ object ].materialIndex ];
+		let transform = ${ transforms }[ object ];
+		let material = ${ materials }[ transform.materialIndex ];
 		if ( all( ${ materialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
 
 			return stack;
@@ -120,7 +121,7 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 		var result = stack;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			if ( result[ i ] == object ) {
+			if ( result[ i ] == transform.mediumId ) {
 
 				break;
 
@@ -128,7 +129,7 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 
 			if ( result[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
 
-				result[ i ] = object;
+				result[ i ] = transform.mediumId;
 				break;
 
 			}
@@ -141,20 +142,20 @@ export const mediumStackEnterFunc = ( transforms, materials ) => wgslTagFn/* wgs
 
 `;
 
-// ... and refracting out through a back face removes it, moving the entries after it up
-export const mediumStackExitFn = wgslTagFn/* wgsl */`
+// ... and refracting out through a back face removes it, keeping the rest of the stack packed in order
+export const mediumStackExitFunc = ( transforms ) => wgslTagFn/* wgsl */`
 
 	fn mediumStackExit( stack: vec4u, object: u32 ) -> vec4u {
 
-		var result = stack;
-		var found = false;
+		let id = ${ transforms }[ object ].mediumId;
+		var result = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+		var count = 0u;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
-			found = found || stack[ i ] == object;
-			if ( found ) {
+			if ( stack[ i ] != id ) {
 
-				let next = stack[ min( i + 1u, ${ MEDIUM_STACK_SIZE - 1 }u ) ];
-				result[ i ] = select( ${ MEDIUM_STACK_EMPTY }u, next, i + 1u < ${ MEDIUM_STACK_SIZE }u );
+				result[ count ] = stack[ i ];
+				count ++;
 
 			}
 
@@ -166,11 +167,65 @@ export const mediumStackExitFn = wgslTagFn/* wgsl */`
 
 `;
 
-// The medium of a stack, entered through the given object. Overlapping volumes sum their coefficients as in
-// Cycles, with a phase anisotropy averaged by scattering in place of Cycles' mixture of phase functions
+// The volumes a camera ray's origin is inside of, found as Cycles' integrator_volume_stack_init does: a ray from
+// the origin meets the boundaries of the volumes around it, and one whose back face comes before any of its front
+// faces contains the origin. Like Cycles, it relies on closed volumes with outward facing normals
+export const originMediumStackFunc = ( raycastFirstHit, raycastOutput, transforms, materials, mediumStackEnterFn ) => wgslTagFn/* wgsl */`
+
+	fn originMediumStack( origin: vec3f ) -> vec4u {
+
+		var stack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+
+		// the volumes whose front face was met first, so the origin is outside of them
+		var outside = vec4u( ${ MEDIUM_STACK_EMPTY }u );
+		var outsideCount = 0u;
+
+		var ray: ${ rayStruct };
+		ray.origin = origin;
+		ray.direction = vec3f( 0.0, 0.0, 1.0 );
+		ray.maxDist = 0.0;
+		for ( var i = 0u; i < ${ MEDIUM_ORIGIN_MAX_HITS }u; i ++ ) {
+
+			var hit: ${ raycastOutput };
+			if ( ! ${ raycastFirstHit }( ray, &hit ) ) {
+
+				break;
+
+			}
+
+			let transform = ${ transforms }[ hit.objectIndex ];
+			let material = ${ materials }[ transform.materialIndex ];
+			let isVolume = material.transmission > 0.0 && material.thinWall == 0;
+			if ( isVolume && ! any( outside == vec4u( transform.mediumId ) ) ) {
+
+				if ( hit.side < 0.0 ) {
+
+					stack = ${ mediumStackEnterFn }( stack, hit.objectIndex );
+
+				} else if ( outsideCount < ${ MEDIUM_STACK_SIZE }u ) {
+
+					outside[ outsideCount ] = transform.mediumId;
+					outsideCount ++;
+
+				}
+
+			}
+
+			ray.origin = ${ offsetRayOriginFunc }( ray.origin + ray.direction * hit.dist, ray.direction, hit.normal );
+
+		}
+
+		return stack;
+
+	}
+
+`;
+
+// The medium of a stack. Overlapping volumes sum their coefficients as in Cycles, with a phase anisotropy
+// averaged by scattering in place of Cycles' mixture of phase functions
 export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 
-	fn stackMedium( stack: vec4u, object: u32 ) -> ${ mediumStruct } {
+	fn stackMedium( stack: vec4u ) -> ${ mediumStruct } {
 
 		var extinction = vec3f( 0.0 );
 		var scattering = vec3f( 0.0 );
@@ -202,11 +257,10 @@ export const stackMediumFunc = ( transforms, materials ) => wgslTagFn/* wgsl */`
 		// a channel without extinction never scatters, and keeps the largest albedo for the channel choice
 		var medium: ${ mediumStruct };
 		medium.stack = stack;
-		medium.object = object;
 		medium.extinction = extinction;
 		medium.albedo = select( maxAlbedo, scattering / extinction, extinction > vec3f( 0.0 ) );
 		medium.anisotropy = select( 0.0, anisotropy / anisotropyWeight, anisotropyWeight > 0.0 );
-		medium.inside = any( medium.albedo > vec3f( 0.0 ) ) && any( extinction > vec3f( 0.0 ) );
+		medium.scatters = any( medium.albedo > vec3f( 0.0 ) ) && any( extinction > vec3f( 0.0 ) );
 		return medium;
 
 	}

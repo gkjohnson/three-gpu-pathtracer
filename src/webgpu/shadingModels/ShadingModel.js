@@ -33,7 +33,8 @@ function encodeTextureWrap( wrap ) {
  *
  * A custom material struct must keep the fields the ray traversal and medium stack read: "opacity", "side",
  * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap", "alphaMapTransform",
- * "attenuationColor", "attenuationDistance", "multiscatterColor", "scatterStrength" and "scatterAnisotropy".
+ * "transmission", "thinWall", "attenuationColor", "attenuationDistance", "multiscatterColor", "scatterStrength"
+ * and "scatterAnisotropy".
  *
  * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
  * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",
@@ -55,6 +56,9 @@ export class ShadingModel {
 		this.materialsMap = new Map();
 		this.textures = [];
 		this.texturesMap = new Map();
+
+		// whether any material has a volume, so camera rays look for the ones they start inside of
+		this.hasVolumes = false;
 
 	}
 
@@ -637,6 +641,8 @@ export class ShadingModel {
 
 		materialsStorage.value.array.set( materialData );
 		materialsStorage.value.needsUpdate = true;
+
+		this.hasVolumes = materials.some( m => this.hasMedium( m ) );
 
 		function add( mat ) {
 

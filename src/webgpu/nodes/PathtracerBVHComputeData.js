@@ -1,35 +1,19 @@
-import { DoubleSide, BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix4, Ray } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL } from 'three-mesh-bvh';
-import { MEDIUM_STACK_EMPTY, MEDIUM_STACK_SIZE } from './medium.wgsl.js';
 
 const _colorVec = new Vector4();
-const _matrix = /* @__PURE__ */ new Matrix4();
-const _ray = /* @__PURE__ */ new Ray();
-
-// The material of a transform slot's bvh group
-function getGroupMaterial( object, root ) {
-
-	let material = object.material;
-	if ( Array.isArray( material ) ) {
-
-		const { materialIndex } = object.geometry.groups[ root ];
-		material = material[ materialIndex ];
-
-	}
-
-	return material;
-
-}
-
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
 	visible: 'uint',
 	materialIndex: 'uint',
 	visibleToShadowRays: 'uint',
-	_alignment0: 'uint',
+
+	// the slot the medium stack holds for the volume this slot bounds: the first of the object's bvh groups
+	// with the same material, so a path enters and leaves the volume through any of them
+	mediumId: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
@@ -69,8 +53,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.structs.transform = transformStruct;
 		this.bvhMap = new Map();
 
-		// the transform slots whose material has a volume, for "getMediumStack"
-		this._mediumSlots = null;
+		// each volume's medium id
+		this._mediumIds = new Map();
 
 	}
 
@@ -532,15 +516,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const { storage, bvh } = this;
 		const transformsStorage = storage.transforms.proxyNode;
+		this._mediumIds.clear();
 		this._getTransformMap( bvh ).forEach( info => {
 
 			this.writeMaterialData( info, info.slot, transformsStorage.value.array.buffer );
 
 		} );
 		transformsStorage.value.needsUpdate = true;
-
-		// the materials may have changed which slots have a volume
-		this._mediumSlots = null;
 
 	}
 
@@ -571,6 +553,16 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// save the material index
 		transformBufferU32[ writeOffset * transformStruct.getLength() + 33 ] = index;
+
+		// slots are written in order, so the first one seen for a volume is its medium id
+		const mediumKey = `${ object.uuid }_${ instanceId }_${ index }`;
+		if ( ! this._mediumIds.has( mediumKey ) ) {
+
+			this._mediumIds.set( mediumKey, writeOffset );
+
+		}
+
+		transformBufferU32[ writeOffset * transformStruct.getLength() + 35 ] = this._mediumIds.get( mediumKey );
 
 		// write color
 		// TODO: note that both BatchedMesh and InstancedMesh "getColorAt" functions throw
@@ -603,106 +595,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// whether shadow rays see the object, in the slot after the material index
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 		transformBufferU32[ writeOffset * this.structs.transform.getLength() + 34 ] = info.object.visibleToShadowRays === false ? 0 : 1;
-
-	}
-
-	// Writes the object indices of the volumes containing the world position to "target", the medium stack a
-	// camera ray there starts with. As in Cycles a closed mesh contains the point when the nearest of its faces
-	// along a ray is a back face. Skinned and batched meshes are not checked
-	getMediumStack( position, target ) {
-
-		const { bvh, storage, structs, shadingModel } = this;
-		const transformsU32 = new Uint32Array( storage.transforms.proxyNode.value.array.buffer );
-		const transformLength = structs.transform.getLength();
-
-		if ( this._mediumSlots === null ) {
-
-			this._mediumSlots = [];
-			this._getTransformMap( bvh ).forEach( info => {
-
-				const { object, root } = info;
-				if ( ! object.isSkinnedMesh && ! object.isBatchedMesh && shadingModel.hasMedium( getGroupMaterial( object, root ) ) ) {
-
-					this._mediumSlots.push( info );
-
-				}
-
-			} );
-
-		}
-
-		target.setScalar( MEDIUM_STACK_EMPTY );
-
-		let count = 0;
-		this._mediumSlots.forEach( info => {
-
-			const { object, instanceId, root, slot } = info;
-			const visible = transformsU32[ slot * transformLength + 32 ] !== 0;
-			if ( count >= MEDIUM_STACK_SIZE || ! visible ) {
-
-				return;
-
-			}
-
-			// the position in the object's local space
-			if ( object.isInstancedMesh ) {
-
-				object.getMatrixAt( instanceId, _matrix );
-				_matrix.premultiply( object.matrixWorld );
-
-			} else {
-
-				_matrix.copy( object.matrixWorld );
-
-			}
-
-			const { geometry } = object;
-			_ray.origin.copy( position ).applyMatrix4( _matrix.invert() );
-			_ray.direction.set( 0, 0, 1 );
-
-			if ( geometry.boundingBox === null ) {
-
-				geometry.computeBoundingBox();
-
-			}
-
-			if ( ! geometry.boundingBox.containsPoint( _ray.origin ) ) {
-
-				return;
-
-			}
-
-			// the nearest face of the slot's own group
-			const group = geometry.groups.length > 0 ? geometry.groups[ root ] : null;
-			let nearest = null;
-			const hits = geometry.boundsTree.raycast( _ray, DoubleSide );
-			for ( let i = 0, l = hits.length; i < l; i ++ ) {
-
-				const hit = hits[ i ];
-				if ( group && ( hit.faceIndex * 3 < group.start || hit.faceIndex * 3 >= group.start + group.count ) ) {
-
-					continue;
-
-				}
-
-				if ( nearest === null || hit.distance < nearest.distance ) {
-
-					nearest = hit;
-
-				}
-
-			}
-
-			if ( nearest !== null && nearest.face.normal.dot( _ray.direction ) > 0 ) {
-
-				target.setComponent( count, slot );
-				count ++;
-
-			}
-
-		} );
-
-		return target;
 
 	}
 

@@ -85,7 +85,8 @@ const rayDataMembers = {
 	// scatter events taken inside media, counted separately from the bounce count
 	subsurfaceBounces: 'uint',
 
-	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
+	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends.
+	// WALK_PENDING_CAMERA marks a camera ray's first pass
 	walkPending: 'uint',
 
 	// whether the staged segment starts at a medium scatter event, where no light is sampled
@@ -121,6 +122,10 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	_alignment1: 'uint',
 
 }, 'TraceQueuedRay' );
+
+// The "walkPending" value of a camera ray found inside a scattering medium after it was queued for tracing.
+// Its first walk pass writes its hit into that ray's unused result entry rather than one from the back
+export const WALK_PENDING_CAMERA = 2;
 
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by
 // LogicKernel the following frame. objectIndex < 0 encodes a miss.
@@ -160,10 +165,12 @@ export const RAY_QUEUE_LENGTH = 0;
 export const SHADOW_RAY_QUEUE_LENGTH = 1;
 export const QUEUE_COUNTER_COUNT = 2;
 
-// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
-// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
+// The path slots walking through a medium this pass, for MediumKernel. Its length, and the count of walk hits
+// taken from the back of the ray results, lead the same u32 array, ahead of the elements, as MediumKernel is
+// at its storage buffer limit.
 export const MEDIUM_QUEUE_LENGTH = 0;
-export const MEDIUM_QUEUE_HEADER = 1;
+export const MEDIUM_QUEUE_HIT_COUNT = 1;
+export const MEDIUM_QUEUE_HEADER = 2;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
 // the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its
