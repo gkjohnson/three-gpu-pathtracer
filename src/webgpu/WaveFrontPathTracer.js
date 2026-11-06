@@ -578,6 +578,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// spawn camera rays for the freed slots, then find the volumes they start inside of and queue them
+				// TODO: merge these two kernels, which needs one more storage buffer than the limit allows until the
+				// queue counters can be dropped
 				cameraRayKernel.rayDataStorage = rayDataStorage;
 				cameraRayKernel.pixelQueue = this.pixelQueue;
 				cameraRayKernel.sampleCountTarget = this.sampleCountTarget;

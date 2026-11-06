@@ -7,8 +7,6 @@ import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH } from './structs
 
 // Sets the medium of the camera rays CameraRayKernel spawned from the volumes around their origin, then queues
 // each ray to be traced, or walked when it starts in a scattering medium.
-// TODO: merge this into CameraRayKernel, which needs one more storage buffer than the limit allows until the
-// queue counters can be dropped
 export class CameraMediumKernel extends ComputeKernel {
 
 	constructor( ) {
