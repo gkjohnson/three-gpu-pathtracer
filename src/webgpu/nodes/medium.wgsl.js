@@ -178,7 +178,7 @@ export const originMediumStackFunc = ( raycastVolumes, volumeHits, mediumStackEn
 		var hits: ${ volumeHits };
 		${ raycastVolumes }( ray, &hits );
 
-		// a medium id is the slot of the volume's first bvh group, which enters the volume as any of its slots
+		// a medium id is one of its volume's object slots, so it's entered like a hit object
 		var stack = vec4u( ${ MEDIUM_STACK_EMPTY }u );
 		for ( var i = 0u; i < hits.count; i ++ ) {
 
