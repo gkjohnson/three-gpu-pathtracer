@@ -58,9 +58,6 @@ export class ShadingModel {
 		this.textures = [];
 		this.texturesMap = new Map();
 
-		// whether any material has a volume, so camera rays look for the ones they start inside of
-		this.hasVolumes = false;
-
 		// The scene's FogExp2, written as the first material, a fog volume filling all of space. Its density is
 		// the fog's extinction per unit length, where three.js fades by the square of density times distance
 		this.hasSceneFog = false;
@@ -547,15 +544,6 @@ export class ShadingModel {
 
 	}
 
-	/**
-	 * Must return whether a path refracting into the material or crossing a fog volume's boundary enters a volume
-	 */
-	hasMedium( material ) {
-
-		return material.transmission > 0 || Boolean( material.isFogVolumeMaterial );
-
-	}
-
 	updateMaterials( root ) {
 
 		const { materials, materialsMap, textures, texturesMap, structs } = this;
@@ -588,8 +576,6 @@ export class ShadingModel {
 			return a.uuid < b.uuid ? 1 : - 1;
 
 		} );
-
-		this.hasVolumes = materials.some( m => this.hasMedium( m ) );
 
 		const { fog } = root;
 		this.hasSceneFog = Boolean( fog && fog.isFogExp2 && fog.density > 0 );

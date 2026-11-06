@@ -43,9 +43,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			clampDirect: uniform( 0 ),
 			clampIndirect: uniform( 10 ),
 
-			// whether the scene has volumes, which camera rays then look for the ones they start inside of, and
-			// scene fog, which every path starts in
-			hasVolumes: uniform( 0, 'uint' ),
+			// whether the scene has fog, which every path starts in
 			sceneFog: uniform( 0, 'uint' ),
 
 			backgroundInfo: { value: null },
@@ -66,6 +64,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
 		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
+		const volumeHits = contextProxy( 'bvhData.fns.raycastVolumes.outputType' );
+		const raycastVolumesFn = contextProxyFn( 'bvhData.fns.raycastVolumes' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
@@ -77,7 +77,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
 		const mediumStackExitFn = mediumStackExitFunc( transformsStorage );
 		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
-		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, transformsStorage, materialsStorage, mediumStackEnterFn );
+		const originMediumStackFn = originMediumStackFunc( raycastVolumesFn, volumeHits, mediumStackEnterFn );
 		const shadowMediumStackFn = shadowMediumStackFunc( mediumStackEnterFn, mediumStackExitFn );
 		const shadowTransmittanceFn = shadowTransmittanceFunc( transformsStorage, materialsStorage );
 
@@ -122,7 +122,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				filterGlossy: f32,
 				clampDirect: f32,
 				clampIndirect: f32,
-				hasVolumes: u32,
 				sceneFog: u32,
 
 				transmissiveBackground: u32,
@@ -187,15 +186,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
 
-				// the media the path is inside of, starting from those around the ray's origin
-				var originStack = ${ sceneMediumStackFn }( sceneFog != 0u );
-				if ( hasVolumes != 0u ) {
-
-					originStack = ${ originMediumStackFn }( ray.origin, originStack );
-
-				}
-
-				var medium = ${ stackMediumFn }( originStack );
+				// the media the path is inside of, starting from the scene fog and the volumes around the ray's origin
+				var medium = ${ stackMediumFn }( ${ originMediumStackFn }( ray.origin, ${ sceneMediumStackFn }( sceneFog != 0u ) ) );
 				var subsurfaceBounces = 0u;
 				var fogBounces = 0u;
 

@@ -6,16 +6,14 @@ import { mediumStackEnterFunc, stackMediumFunc, sceneMediumStackFn, originMedium
 import { rayDataStruct, WALK_PENDING_CAMERA } from './structs.js';
 
 // Starts each new camera ray's medium with the scene fog and the volumes it starts inside of, found by tracing from
-// the ray's own origin. Runs after MaterialKernel spawns the camera rays and before they are traced, only for scenes
-// with fog or volumes. A camera ray starting in a scattering medium is walked by MediumKernel instead, leaving its
-// queued trace unused.
+// the ray's own origin. Runs after MaterialKernel spawns the camera rays and before they are traced. A camera ray
+// starting in a scattering medium is walked by MediumKernel instead, leaving its queued trace unused.
 export class CameraMediumKernel extends ComputeKernel {
 
 	constructor( ) {
 
 		const params = {
 			rayCount: uniform( 0, 'uint' ),
-			hasVolumes: uniform( 0, 'uint' ),
 			sceneFog: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
@@ -23,17 +21,17 @@ export class CameraMediumKernel extends ComputeKernel {
 			globalId: globalId,
 		};
 
-		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
-		const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
+		const volumeHits = contextProxy( 'bvhData.fns.raycastVolumes.outputType' );
+		const raycastVolumesFn = contextProxy( 'bvhData.fns.raycastVolumes' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const mediumStackEnterFn = mediumStackEnterFunc( transformsStorage, materialsStorage );
 		const stackMediumFn = stackMediumFunc( transformsStorage, materialsStorage );
-		const originMediumStackFn = originMediumStackFunc( raycastFirstHitFn, raycastOutput, transformsStorage, materialsStorage, mediumStackEnterFn );
+		const originMediumStackFn = originMediumStackFunc( raycastVolumesFn, volumeHits, mediumStackEnterFn );
 
 		const fn = wgslTagFn/* wgsl */`
 
-			fn compute( rayCount: u32, hasVolumes: u32, sceneFog: u32, globalId: vec3u ) -> void {
+			fn compute( rayCount: u32, sceneFog: u32, globalId: vec3u ) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 
@@ -53,14 +51,7 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
-				var stack = ${ sceneMediumStackFn }( sceneFog != 0u );
-				if ( hasVolumes != 0u ) {
-
-					stack = ${ originMediumStackFn }( input.origin, stack );
-
-				}
-
-				let medium = ${ stackMediumFn }( stack );
+				let medium = ${ stackMediumFn }( ${ originMediumStackFn }( input.origin, ${ sceneMediumStackFn }( sceneFog != 0u ) ) );
 				rayDataStorage[ index ].medium = ${ storeMediumFn }( medium );
 
 				// the walk hands its hit back in the queued ray's result entry, which its trace leaves unused. Clearing

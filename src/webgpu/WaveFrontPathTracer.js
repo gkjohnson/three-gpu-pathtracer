@@ -578,16 +578,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// find the scene fog and volumes the new camera rays start inside of
-				const { hasVolumes, hasSceneFog } = this.shadingModel;
-				if ( hasVolumes || hasSceneFog ) {
-
-					cameraMediumKernel.rayDataStorage = rayDataStorage;
-					cameraMediumKernel.rayCount = rayCount;
-					cameraMediumKernel.hasVolumes = hasVolumes ? 1 : 0;
-					cameraMediumKernel.sceneFog = hasSceneFog ? 1 : 0;
-					this.dispatch( cameraMediumKernel, cameraMediumKernel.getDispatchSize( rayCount, 1, 1 ) );
-
-				}
+				cameraMediumKernel.rayDataStorage = rayDataStorage;
+				cameraMediumKernel.rayCount = rayCount;
+				cameraMediumKernel.sceneFog = this.shadingModel.hasSceneFog ? 1 : 0;
+				this.dispatch( cameraMediumKernel, cameraMediumKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// Step 4: convert the queue lengths into indirect dispatch sizes and trace
 				rayDispatchConverter.queueCounters = queueCounters;
