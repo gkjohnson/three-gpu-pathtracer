@@ -28,6 +28,15 @@ const intersectionResultStruct = new StructTypeNode( {
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
+// the volumes a ray hits, by material index, with each one's nearest hit distance and side
+const VOLUME_HITS_SIZE = 32;
+const volumeHitsStruct = new StructTypeNode( {
+	ids: `array<u32, ${ VOLUME_HITS_SIZE }>`,
+	dist: `array<f32, ${ VOLUME_HITS_SIZE }>`,
+	side: `array<f32, ${ VOLUME_HITS_SIZE }>`,
+	count: 'uint',
+}, 'VolumeHits' );
+
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
 
@@ -236,6 +245,45 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			}
 		`;
 
+		// the world distance at which the ray enters the bounds, or - 1 when it misses them
+		const rayBoundsDistance = wgslTagFn/* wgsl */`
+			fn rayBoundsDistance( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct } ) -> f32 {
+
+				let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
+				let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
+
+				// avoid 0 * infinity for rays parallel to a slab and on its boundary, as in three-mesh-bvh
+				let parallel = ray.direction == vec3f( 0.0 );
+				if ( any( parallel & ( ( ray.origin < boundsMin ) | ( ray.origin > boundsMax ) ) ) ) {
+
+					return - 1.0;
+
+				}
+
+				let invDir = 1.0 / select( ray.direction, vec3f( 1.0 ), parallel );
+				let tMinPlane = ( boundsMin - ray.origin ) * invDir;
+				let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
+
+				// parallel axes never limit the slab interval
+				const FLT_MAX = 3.402823e38;
+				let tMinHit = select( min( tMinPlane, tMaxPlane ), vec3f( - FLT_MAX ), parallel );
+				let tMaxHit = select( max( tMinPlane, tMaxPlane ), vec3f( FLT_MAX ), parallel );
+
+				let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
+				let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
+
+				let dist = max( t0, 0.0 );
+				if ( t1 < dist ) {
+
+					return - 1.0;
+
+				}
+
+				return dist * ${ scratchRayScalar };
+
+			}
+		`;
+
 		// the traversal shared by the first hit and shadow rays, bounded by the ray's "maxDist" - 0 means unbounded
 		const raycastOptions = {
 			shapeStruct: rayStruct,
@@ -258,39 +306,16 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					}
 
-					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
-					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
-
-					// avoid 0 * infinity for rays parallel to a slab and on its boundary, as in three-mesh-bvh
-					let parallel = ray.direction == vec3f( 0.0 );
-					if ( any( parallel & ( ( ray.origin < boundsMin ) | ( ray.origin > boundsMax ) ) ) ) {
+					let dist = ${ rayBoundsDistance }( ray, bounds );
+					if ( dist < 0.0 ) {
 
 						return 0u;
 
-					}
-
-					let invDir = 1.0 / select( ray.direction, vec3f( 1.0 ), parallel );
-					let tMinPlane = ( boundsMin - ray.origin ) * invDir;
-					let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
-
-					// parallel axes never limit the slab interval
-					const FLT_MAX = 3.402823e38;
-					let tMinHit = select( min( tMinPlane, tMaxPlane ), vec3f( - FLT_MAX ), parallel );
-					let tMaxHit = select( max( tMinPlane, tMaxPlane ), vec3f( FLT_MAX ), parallel );
-
-					let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
-					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
-
-					let dist = max( t0, 0.0 );
-					if ( t1 < dist ) {
+					} else if ( ray.maxDist > 0.0 && dist >= ray.maxDist ) {
 
 						return 0u;
 
-					} else if ( ray.maxDist > 0.0 && dist * ${ scratchRayScalar } >= ray.maxDist ) {
-
-						return 0u;
-
-					} else if ( result.didHit && dist * ${ scratchRayScalar } >= result.dist ) {
+					} else if ( result.didHit && dist >= result.dist ) {
 
 						return 0u;
 
@@ -475,6 +500,123 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					}
 
 					return ${ NOT_INTERSECTED }u;
+
+				}
+			`,
+		} );
+
+		// The nearest hit of every volume along the ray, skipping the objects that aren't volumes
+		// TODO: accumulating the volume hits through the shapecast hooks this way is a bit brittle
+		// TODO: three-mesh-bvh has no clear way to skip an object during traversal, so a flag set when the ray is
+		// transformed is checked in both the bounds and range tests. A dedicated hook would be good
+		const skipObject = uint( 0 ).toVar( 'bvh_skipObject' );
+
+		fns.collectVolumeHits = this.getShapecastFn( {
+			name: 'collectVolumeHits',
+			shapeStruct: rayStruct,
+			resultStruct: volumeHitsStruct,
+
+			boundsOrderFn: raycastOptions.boundsOrderFn,
+			intersectsBoundsFn: wgslTagFn/* wgsl */`
+				fn volumeRayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
+
+					if ( ${ skipObject } != 0u ) {
+
+						return 0u;
+
+					}
+
+					return select( 0u, 1u, ${ rayBoundsDistance }( ray, bounds ) >= 0.0 );
+
+				}
+			`,
+			intersectRangeFn: wgslTagFn/* wgsl */`
+				fn intersectVolumeRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
+
+					if ( ${ skipObject } != 0u ) {
+
+						return ${ NOT_INTERSECTED }u;
+
+					}
+
+					let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
+					let material = ${ materialsStorage }[ object.materialIndex ];
+
+					// the material's entry in the hits, or the next free one
+					var entry = result.count;
+					for ( var i = 0u; i < result.count; i ++ ) {
+
+						if ( result.ids[ i ] == object.materialIndex ) {
+
+							entry = i;
+							break;
+
+						}
+
+					}
+
+					if ( entry == ${ VOLUME_HITS_SIZE }u ) {
+
+						return ${ NOT_INTERSECTED }u;
+
+					}
+
+					var didHit = false;
+					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
+
+						let i0 = ${ storage.index }[ ti * 3u ];
+						let i1 = ${ storage.index }[ ti * 3u + 1u ];
+						let i2 = ${ storage.index }[ ti * 3u + 2u ];
+
+						let a = ${ storage.attributes }[ i0 ].position.xyz;
+						let b = ${ storage.attributes }[ i1 ].position.xyz;
+						let c = ${ storage.attributes }[ i2 ].position.xyz;
+
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
+						triResult.dist *= ${ scratchRayScalar };
+						if ( ! triResult.didHit || ( entry < result.count && triResult.dist >= result.dist[ entry ] ) ) {
+
+							continue;
+
+						}
+
+						// fully transparent and alpha tested surfaces are passed, as by the first hit traversal
+						let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+						if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
+
+							continue;
+
+						}
+
+						result.ids[ entry ] = object.materialIndex;
+						result.dist[ entry ] = triResult.dist;
+						result.side[ entry ] = triResult.side;
+						result.count = max( result.count, entry + 1u );
+
+						didHit = true;
+
+					}
+
+					return select( ${ NOT_INTERSECTED }u, ${ INTERSECTED }u, didHit );
+
+				}
+			`,
+			transformShapeFn: wgslTagFn/* wgsl */`
+				fn transformVolumeRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
+
+					${ raycastOptions.transformShapeFn }( ray, objectIndex );
+
+					let material = ${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
+					let isVolume = material.transmission > 0.0 && material.thinWall == 0;
+					${ skipObject } = select( 1u, 0u, isVolume );
+
+				}
+			`,
+			resetShapeFn: wgslTagFn/* wgsl */`
+				fn resetVolumeRay( objectIndex: u32 ) -> void {
+
+					${ raycastOptions.resetShapeFn }( objectIndex );
+					${ skipObject } = 0u;
 
 				}
 			`,

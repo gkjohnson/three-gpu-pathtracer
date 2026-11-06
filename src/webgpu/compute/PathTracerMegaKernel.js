@@ -5,12 +5,12 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn } from '../nodes/sampling.wgsl.js';
-import { mediumStruct, enterMediumFn, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
+import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getMediumStackAtPointFn, getMediumChannelPdfFn, sampleMediumDistanceFn, getMediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
-import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
+import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -171,8 +171,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
 
-				// the scattering volume the path is in. Media don't nest
-				var medium: ${ mediumStruct };
+				// get the set of mediums that the camera ray starts within
+				var medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( ray.origin ) );
 				var subsurfaceBounces = 0u;
 
 				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
@@ -209,9 +209,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var scatterDist = 0.0;
 					var traceRay = ray;
 					traceRay.origin = traceOrigin;
-					if ( medium.inside ) {
+					if ( medium.scatters != 0u ) {
 
-						channelPdf = ${ mediumChannelPdfFn }( throughputColor, medium.albedo );
+						channelPdf = ${ getMediumChannelPdfFn }( throughputColor, medium.albedo );
 						scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
 						traceRay.maxDist = select( scatterDist, min( ray.maxDist, scatterDist ), ray.maxDist > 0.0 );
 
@@ -221,13 +221,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let didHit = ${ raycastFirstHitFn }( traceRay, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
-					let segmentInMedium = medium.inside;
-					if ( medium.inside ) {
+					let segmentInMedium = medium.scatters != 0u;
+					if ( segmentInMedium ) {
 
 						let scattered = scatterDist < surfaceDist;
 						let segmentDist = select( surfaceDist, scatterDist, scattered );
 						let transmittance = exp( - medium.extinction * segmentDist );
-						let distancePdf = dot( channelPdf, ${ mediumDistancePdfFn }( medium, segmentDist, scattered ) );
+						let distancePdf = dot( channelPdf, ${ getMediumDistancePdfFn }( medium, segmentDist, scattered ) );
 						if ( distancePdf <= 0.0 ) {
 
 							break;
@@ -342,6 +342,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
+						// a medium that only absorbs attenuates the segment to the hit
+						if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
+
+							throughputColor *= exp( - medium.extinction * hit.dist );
+
+						}
+
 						// Stochastically pass through partially transparent surfaces by restarting
 						// the traversal at the hit point, advancing the rng but not the bounce count.
 						if ( ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity ) {
@@ -373,14 +380,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
 
 							}
-
-						}
-
-						// attenuate the light transmitted through the volume when exiting a backface. A scattering
-						// medium has already applied its transmittance above
-						if ( hit.side < 0.0 && surface.transmission > 0.0 && ! segmentInMedium ) {
-
-							throughputColor *= ${ transmissionAttenuationFunc }( hit.dist,surface.attenuationColor, surface.attenuationDistance );
 
 						}
 
@@ -493,24 +492,21 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						bsdfPdf = scatterRec.pdf;
 						mediumScattered = false;
 
-						// As in "KHR_materials_scatter", the medium's surface bsdf is its boundary: the walk ends when
-						// light refracts out through it, and continues inside when it reflects back
-						if ( segmentInMedium && u32( hit.objectIndex ) == medium.object && hit.side < 0.0 && scatterRec.isTransmissive ) {
+						// refracting through a volume's surface enters or exits it
+						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
-							medium.inside = false;
+							var stack = medium.stack;
+							if ( hit.side > 0.0 ) {
 
-						}
+								${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
 
-						// refracting into a front face of a scattering material starts a random walk inside it
-						if ( scatterRec.isTransmissive && ! surface.thinWall && hit.side > 0.0 ) {
+							} else {
 
-							let entered = ${ enterMediumFn }( surface, u32( hit.objectIndex ) );
-
-							if ( entered.inside ) {
-
-								medium = entered;
+								${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
 
 							}
+
+							medium = ${ getCombinedMediumFn }( stack );
 
 						}
 

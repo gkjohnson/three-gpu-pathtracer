@@ -413,13 +413,7 @@ export const getSurfaceRecordFunc = ( {
 		surf.ior = material.ior;
 		surf.transmission = transmission;
 		surf.thinWall = material.thinWall == 1;
-		surf.attenuationColor = material.attenuationColor;
-		surf.attenuationDistance = material.attenuationDistance;
 		surf.dispersion = material.dispersion;
-
-		surf.multiscatterColor = material.multiscatterColor;
-		surf.scatterStrength = material.scatterStrength;
-		surf.scatterAnisotropy = material.scatterAnisotropy;
 
 		surf.clearcoatNormal = clearcoatNormal;
 		surf.clearcoat = clearcoat;
@@ -587,17 +581,6 @@ export const thinWallTransmissionRoughnessFunc = wgslFn( /* wgsl */ `
 
 		let t = 3.4 * ( eta - 1.0 ) * ( eta - 0.5 ) * ( eta - 0.5 ) / ( eta * eta * eta );
 		return saturate( alpha * sqrt( max( t, 0.0 ) ) );
-
-	}
-
-` );
-
-// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md#attenuation
-export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `
-
-	fn transmissionAttenuation( dist: f32, attColor: vec3f, attDist: f32 ) -> vec3f {
-
-		return pow( attColor, vec3f( dist / attDist ) );
 
 	}
 

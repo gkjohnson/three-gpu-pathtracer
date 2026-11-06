@@ -1,32 +1,7 @@
 import { StructTypeNode } from 'three/webgpu';
-import { mediumStateStruct } from '../../nodes/medium.wgsl.js';
+import { mediumStruct } from '../../nodes/medium.wgsl.js';
 import { hitRecordStruct } from '../../nodes/structs.wgsl.js';
-
-// StructTypeNode that force-emits dependency structs. TSL can't discover a struct referenced only via
-// a type string, so we build each dependency first, which registers its definition ahead of this struct.
-// TODO: remove this once TSL resolves struct dependencies from string member types itself.
-class DependentStructTypeNode extends StructTypeNode {
-
-	constructor( members, name, dependencies = [] ) {
-
-		super( members, name );
-		this.dependencies = dependencies;
-
-	}
-
-	setup( builder ) {
-
-		for ( const dep of this.dependencies ) {
-
-			dep.build( builder );
-
-		}
-
-		super.setup( builder );
-
-	}
-
-}
+import { DependentStructTypeNode } from '../../nodes/DependentStructTypeNode.js';
 
 // Persistent per-path-slot state. One slot per in-flight path, holding everything needed to resolve
 // the previous frame's trace results and stage the next bounce.
@@ -98,11 +73,11 @@ const rayDataMembers = {
 export const rayDataStruct = new DependentStructTypeNode( {
 	hit: hitRecordStruct.name,
 	...rayDataMembers,
-	medium: mediumStateStruct.name,
-}, 'RayData', [ hitRecordStruct, mediumStateStruct ] );
+	medium: mediumStruct.name,
+}, 'RayData', [ hitRecordStruct, mediumStruct ] );
 
 const rayDataLength = new StructTypeNode( rayDataMembers ).getLength();
-rayDataStruct.getLength = () => hitRecordStruct.getLength() + rayDataLength + mediumStateStruct.getLength();
+rayDataStruct.getLength = () => hitRecordStruct.getLength() + rayDataLength + mediumStruct.getLength();
 
 // A ray queued for BVH traversal by the trace kernels. A "maxDist" of zero traces unbounded.
 export const traceQueuedRayStruct = new StructTypeNode( {
