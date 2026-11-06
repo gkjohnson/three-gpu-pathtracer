@@ -92,7 +92,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	setShadingModel( shadingModel ) {
 
-		super.setShadingModel( shadingModel );
 		this.kernel.context.shadingModel = shadingModel;
 		this.rebuild();
 
@@ -216,7 +215,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			// skip the tile loop entirely once every pixel is finished
 			kernel.maxSamples = this.maxSamples;
-			kernel.sceneFog = this.shadingModel.hasSceneFog ? 1 : 0;
 			kernel.auxTarget = this.auxTarget ?? this._auxPlaceholder;
 			kernel.accumulateAux = this.auxTarget ? 1 : 0;
 			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {

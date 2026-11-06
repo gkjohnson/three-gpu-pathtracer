@@ -2,10 +2,10 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { getCombinedMediumFn, getSceneMediumStackFn, getMediumStackAtPointFn } from '../../nodes/medium.wgsl.js';
+import { getCombinedMediumFn, getMediumStackAtPointFn } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH } from './structs.js';
 
-// Sets the medium of the camera rays CameraRayKernel spawned from the scene fog and the volumes around their origin, then queues
+// Sets the medium of the camera rays CameraRayKernel spawned from the volumes around their origin, then queues
 // each ray to be traced, or walked when it starts in a scattering medium.
 export class CameraMediumKernel extends ComputeKernel {
 
@@ -13,7 +13,6 @@ export class CameraMediumKernel extends ComputeKernel {
 
 		const params = {
 			rayCount: uniform( 0, 'uint' ),
-			sceneFog: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
@@ -24,7 +23,7 @@ export class CameraMediumKernel extends ComputeKernel {
 
 		const fn = wgslTagFn/* wgsl */`
 
-			fn compute( rayCount: u32, sceneFog: u32, globalId: vec3u ) -> void {
+			fn compute( rayCount: u32, globalId: vec3u ) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 				let rayQueue = &${ params.rayQueue };
@@ -46,7 +45,7 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
-				let medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( input.origin, ${ getSceneMediumStackFn }( sceneFog != 0u ) ) );
+				let medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( input.origin ) );
 				rayDataStorage[ index ].medium = medium;
 
 				if ( medium.scatters != 0u ) {

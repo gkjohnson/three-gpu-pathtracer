@@ -176,8 +176,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setShadingModel( shadingModel ) {
 
-		super.setShadingModel( shadingModel );
-
 		// the ray traversal reads the shading model's materials
 		this.materialKernel.context.shadingModel = shadingModel;
 		this.traceRayKernel.context.shadingModel = shadingModel;
@@ -595,7 +593,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				cameraMediumKernel.rayQueue = rayQueue;
 				cameraMediumKernel.queueCounters = queueCounters;
 				cameraMediumKernel.rayCount = rayCount;
-				cameraMediumKernel.sceneFog = this.shadingModel.hasSceneFog ? 1 : 0;
 				this.dispatch( cameraMediumKernel, cameraMediumKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// Step 4: convert the queue lengths into indirect dispatch sizes and trace

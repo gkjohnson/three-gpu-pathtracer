@@ -23,9 +23,8 @@ const MEDIUM_MAX_ANISOTROPY = 0.999;
 const MEDIUM_STACK_SIZE = 4;
 const MEDIUM_STACK_EMPTY = 0xffffffff;
 
-// The stack entry of the scene fog, which fills all of space below every volume, and the material the shading
-// model writes it to
-const MEDIUM_STACK_SCENE_FOG = 0xfffffffe;
+// the material the shading model writes the scene fog to, a volume filling all of space. Its extinction is zero
+// without scene fog, so it's never added to a stack
 const SCENE_FOG_MATERIAL_INDEX = 0;
 export const mediumStackStruct = new StructTypeNode( {
 	ids: `array<u32, ${ MEDIUM_STACK_SIZE }>`,
@@ -148,47 +147,12 @@ export const removeFromMediumStackFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Returns the stack every camera ray starts with: the scene fog, when the scene has one
-export const getSceneMediumStackFn = wgslTagFn/* wgsl */`
-
-	fn getSceneMediumStack( sceneFog: bool ) -> ${ mediumStackStruct } {
-
-		var stack: ${ mediumStackStruct };
-		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
-
-			stack.ids[ i ] = ${ MEDIUM_STACK_EMPTY }u;
-
-		}
-
-		if ( sceneFog ) {
-
-			stack.ids[ 0 ] = ${ MEDIUM_STACK_SCENE_FOG }u;
-
-		}
-
-		return stack;
-
-	}
-
-`;
-
-// returns the material index of a stack entry, the scene fog's being the material the shading model writes it to
-const getStackMaterialIndexFn = wgslTagFn/* wgsl */`
-
-	fn getStackMaterialIndex( id: u32 ) -> u32 {
-
-		return select( id, ${ SCENE_FOG_MATERIAL_INDEX }u, id == ${ MEDIUM_STACK_SCENE_FOG }u );
-
-	}
-
-`;
-
-// Returns the given stack with the volumes containing the point added, as in Cycles' integrator_volume_stack_init:
-// a volume whose nearest hit along a ray from the point is a back face contains it. Assumes closed volumes with
-// outward facing normals
+// Returns the stack of volumes containing the point, as in Cycles' integrator_volume_stack_init: a volume whose
+// nearest hit along a ray from the point is a back face contains it. Assumes closed volumes with outward facing
+// normals. The scene fog contains every point
 export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
-	fn getMediumStackAtPoint( point: vec3f, sceneStack: ${ mediumStackStruct } ) -> ${ mediumStackStruct } {
+	fn getMediumStackAtPoint( point: vec3f ) -> ${ mediumStackStruct } {
 
 		var ray: ${ rayStruct };
 		ray.origin = point;
@@ -198,7 +162,14 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 		var hits: ${ contextProxy( 'bvhData.fns.collectVolumeHits.outputType' ) };
 		${ contextProxy( 'bvhData.fns.collectVolumeHits' ) }( ray, &hits );
 
-		var stack = sceneStack;
+		var stack: ${ mediumStackStruct };
+		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
+
+			stack.ids[ i ] = ${ MEDIUM_STACK_EMPTY }u;
+
+		}
+
+		${ addToMediumStackFn }( &stack, ${ SCENE_FOG_MATERIAL_INDEX }u );
 		for ( var i = 0u; i < hits.count; i ++ ) {
 
 			if ( hits.side[ i ] < 0.0 ) {
@@ -236,7 +207,7 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 
 			}
 
-			let material = ${ materialsStorage }[ ${ getStackMaterialIndexFn }( ids[ i ] ) ];
+			let material = ${ materialsStorage }[ ids[ i ] ];
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 
@@ -328,8 +299,8 @@ export const getShadowMediumDepthFn = wgslTagFn/* wgsl */`
 
 			}
 
-			let material = ${ materialsStorage }[ ${ getStackMaterialIndexFn }( ids[ i ] ) ];
-			let dist = select( ${ getFogShadowDistanceFn }( maxDist ), maxDist, ids[ i ] == ${ MEDIUM_STACK_SCENE_FOG }u );
+			let material = ${ materialsStorage }[ ids[ i ] ];
+			let dist = select( ${ getFogShadowDistanceFn }( maxDist ), maxDist, ids[ i ] == ${ SCENE_FOG_MATERIAL_INDEX }u );
 			depth += ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) * dist;
 
 		}

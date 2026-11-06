@@ -58,9 +58,9 @@ export class ShadingModel {
 		this.textures = [];
 		this.texturesMap = new Map();
 
-		// The scene's FogExp2, written as the first material, a fog volume filling all of space. Its density is
-		// the fog's extinction per unit length, where three.js fades by the square of density times distance
-		this.hasSceneFog = false;
+		// The scene's FogExp2, always written as the first material, a fog volume filling all of space. Its density
+		// is the fog's extinction per unit length, where three.js fades by the square of density times distance, and
+		// zero without one
 		this.sceneFogMaterial = new FogVolumeNodeMaterial();
 
 	}
@@ -580,15 +580,15 @@ export class ShadingModel {
 		} );
 
 		const { fog } = root;
-		this.hasSceneFog = Boolean( fog && fog.isFogExp2 && fog.density > 0 );
-		if ( this.hasSceneFog ) {
+		const isFogExp2 = Boolean( fog && fog.isFogExp2 );
+		this.sceneFogMaterial.density = isFogExp2 ? fog.density : 0;
+		if ( isFogExp2 ) {
 
 			this.sceneFogMaterial.color.copy( fog.color );
-			this.sceneFogMaterial.density = fog.density;
-			materials.unshift( this.sceneFogMaterial );
 
 		}
 
+		materials.unshift( this.sceneFogMaterial );
 		materials.forEach( ( m, i ) => {
 
 			materialsMap.set( m, i );
