@@ -9,7 +9,7 @@ import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getMe
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
-import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
+import { LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
@@ -73,56 +73,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
-		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
 		const getEnvWeight = proxy( 'envInfo.value.getWeight', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
-		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
 		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
 		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
-		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
+		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
-
-		// Picks one light or the environment by its estimated contribution at the position, and samples a direction
-		// to it. The record's pdf includes the selection's, and is zero when nothing is picked
-		const sampleLightFn = wgslTagFn/* wgsl */`
-			fn sampleLight( position: vec3f, envWeight: f32, envActive: bool ) -> ${ lightRecordStruct } {
-
-				var lightRec: ${ lightRecordStruct };
-				let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-				var selectionPdf = 0.0;
-				let lightIndex = ${ selectLightFn }( position, envWeight, ruv.x, &selectionPdf );
-				if ( selectionPdf <= 0.0 ) {
-
-					return lightRec;
-
-				}
-
-				if ( envActive && lightIndex == ${ lightsCountNode } ) {
-
-					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-					let envSample = ${ sampleEnvDir }( ruv.yz );
-					lightRec.direction = envSample.direction;
-					lightRec.emission = envSample.color;
-					lightRec.pdf = envSample.pdf;
-					lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-					lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
-
-				} else {
-
-					lightRec = ${ randomLightSampleFn }( lightIndex, position, ruv.yz );
-
-				}
-
-				lightRec.pdf *= selectionPdf;
-				return lightRec;
-
-			}
-		`;
 
 		const shader = wgslTagFn/* wgsl */`
 
@@ -366,7 +327,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// next event estimation at the scatter event. The phase function is its own pdf
 						if ( misEnabled != 0u ) {
 
-							let lightRec = ${ sampleLightFn }( ray.origin, envWeight, envActive );
+							let lightRec = ${ sampleLightFn }( ray.origin, envWeight, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 							if ( lightRec.pdf > 0.0 ) {
 
 								var shadowRay: ${ rayStruct };
@@ -531,7 +492,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// contribution
 						if ( misEnabled != 0u ) {
 
-							let lightRec = ${ sampleLightFn }( vertexData.position.xyz, envWeight, envActive );
+							let lightRec = ${ sampleLightFn }( vertexData.position.xyz, envWeight, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 							if ( lightRec.pdf > 0.0 ) {
 
 								let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
