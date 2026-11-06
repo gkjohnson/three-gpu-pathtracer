@@ -17,8 +17,8 @@ const MEDIUM_MAX_ANISOTROPY = 0.999;
 
 // The media a path is inside of, as in Cycles' volume_stack.h: the medium ids of up to four volumes, packed
 // at the front with the empty value after them. A volume entered past a full stack is ignored
-export const MEDIUM_STACK_EMPTY = 0xffffffff;
-export const MEDIUM_STACK_SIZE = 4;
+const MEDIUM_STACK_EMPTY = 0xffffffff;
+const MEDIUM_STACK_SIZE = 4;
 
 // The media of a stack combined. One that scatters is walked, while one that only absorbs attenuates the
 // segments through it
