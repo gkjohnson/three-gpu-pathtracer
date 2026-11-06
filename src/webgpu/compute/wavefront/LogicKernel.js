@@ -14,7 +14,7 @@ import {
 } from '../../nodes/random.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, MEDIUM_SCATTER_HIT } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, FOG_SCATTER_HIT } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -187,8 +187,8 @@ export class LogicKernel extends ComputeKernel {
 
 					// a walk ending at a scatter event in fog is staged like a surface hit
 					let hitResult = ${ params.rayIntersectionsStorage }[ u32( input.rayIntersectionIndex ) ];
-					let isMediumScatter = hitResult.objectIndex == ${ MEDIUM_SCATTER_HIT };
-					let didHit = hitResult.objectIndex >= 0 || isMediumScatter;
+					let isFogScatter = hitResult.objectIndex == ${ FOG_SCATTER_HIT };
+					let didHit = hitResult.objectIndex >= 0 || isFogScatter;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
 					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none,
@@ -236,10 +236,13 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.normal = hitResult.normal;
 						rayDataStorage[ index ].hit.side = hitResult.side;
 						rayDataStorage[ index ].hit.indices = hitResult.indices;
-						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
-						rayDataStorage[ index ].mediumVertex = select( 0u, 1u, isMediumScatter );
-						if ( isMediumScatter ) {
+						rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
+
+						// a fog scatter has no object. Any non-negative index keeps the slot from being respawned, and
+						// MaterialKernel handles the scatter before reading the object
+						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
+						if ( isFogScatter ) {
 
 							rayDataStorage[ index ].origin = hitResult.position;
 

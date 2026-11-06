@@ -57,8 +57,7 @@ const rayDataMembers = {
 	auxAlbedo: 'uint',
 	auxNormal: 'uint',
 
-	// scatter events taken in subsurface walks and fog scatters continued after, each counted separately
-	// from the bounce count
+	// scatter events taken in subsurface walks, and in fog, each counted separately from the bounce count
 	subsurfaceBounces: 'uint',
 	fogBounces: 'uint',
 
@@ -68,8 +67,8 @@ const rayDataMembers = {
 	// whether the staged segment starts at a medium scatter event, where no light is sampled
 	mediumScattered: 'uint',
 
-	// whether the staged hit is a scatter event in fog at "origin", a path vertex
-	mediumVertex: 'uint',
+	// whether the staged hit is a scatter event in fog at "origin" rather than a surface
+	fogScatter: 'uint',
 
 };
 
@@ -106,7 +105,7 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 }, 'TraceQueuedRay' );
 
 // the object index MediumKernel writes for a walk ending at a scatter event in fog
-export const MEDIUM_SCATTER_HIT = - 2;
+export const FOG_SCATTER_HIT = - 2;
 
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by
 // LogicKernel the following frame. objectIndex < 0 encodes a miss, or a scatter event in fog.
