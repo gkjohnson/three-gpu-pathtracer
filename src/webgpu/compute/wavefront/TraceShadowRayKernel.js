@@ -50,7 +50,7 @@ export class TraceShadowRayKernel extends ComputeKernel {
 				let occluded = ${ raycastShadowFn }( ray, &hitResult );
 				shadowRayIntersectionsStorage[ index ].objectIndex = select( - 1, i32( hitResult.objectIndex ), occluded );
 				shadowRayIntersectionsStorage[ index ].skippedOcclusion = hitResult.skippedOcclusion;
-				shadowRayIntersectionsStorage[ index ].transmittance = ${ getShadowTransmittanceFn }( queuedRay.mediumExtinction, ray.maxDist, hitResult.fogDepth, hitResult.occlusion );
+				shadowRayIntersectionsStorage[ index ].transmittance = ${ getShadowTransmittanceFn }( queuedRay.mediumDepth + hitResult.fogDepth, hitResult.occlusion );
 
 			}
 		`;

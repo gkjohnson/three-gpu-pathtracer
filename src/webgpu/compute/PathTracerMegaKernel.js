@@ -5,7 +5,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
-import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getMediumStackAtPointFn, getShadowMediumStackFn, getShadowTransmittanceFn, getMediumChannelPdfFn, sampleMediumDistanceFn, getMediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
+import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getMediumStackAtPointFn, getShadowMediumStackFn, getShadowMediumDepthFn, getShadowTransmittanceFn, getMediumChannelPdfFn, sampleMediumDistanceFn, getMediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
@@ -362,7 +362,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 									if ( ! occluded ) {
 
 										let lightPdf = lightRec.pdf * selectionPdf;
-										let lightTransmittance = ${ getShadowTransmittanceFn }( medium.extinction, shadowRay.maxDist, shadowHit.fogDepth, shadowHit.occlusion );
+										let mediumDepth = ${ getShadowMediumDepthFn }( medium.stack, shadowRay.maxDist );
+										let lightTransmittance = ${ getShadowTransmittanceFn }( mediumDepth + shadowHit.fogDepth, shadowHit.occlusion );
 										let phasePdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
 										let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && bounce + 1u < maxBounces;
 										let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightPdf, phasePdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
@@ -556,8 +557,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 											let lightPdf = lightRec.pdf * selectionPdf;
 											let shadowStack = ${ getShadowMediumStackFn }( medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall, ray.direction, lightRec.direction, hit.normal );
-											let shadowExtinction = ${ getCombinedMediumFn }( shadowStack ).extinction;
-											let lightTransmittance = ${ getShadowTransmittanceFn }( shadowExtinction, shadowRay.maxDist, shadowHit.fogDepth, shadowHit.occlusion );
+											let mediumDepth = ${ getShadowMediumDepthFn }( shadowStack, shadowRay.maxDist );
+											let lightTransmittance = ${ getShadowTransmittanceFn }( mediumDepth + shadowHit.fogDepth, shadowHit.occlusion );
 
 											// env + area lights are also found by bsdf rays, so MIS-weight them. Punctual lights, and lights
 											// past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray skipped can't

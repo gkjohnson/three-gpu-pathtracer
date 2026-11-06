@@ -4,7 +4,7 @@ import { uniform, storage, globalId } from 'three/tsl';
 import { contextProxy, contextProxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
-import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getShadowMediumStackFn } from '../../nodes/medium.wgsl.js';
+import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getShadowMediumStackFn, getShadowMediumDepthFn } from '../../nodes/medium.wgsl.js';
 import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sampling.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -137,7 +137,7 @@ export class MaterialKernel extends ComputeKernel {
 							shadowRayQueue[ shadowIndex ].rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
 							shadowRayQueue[ shadowIndex ].sampleIndex = input.sampleIndex;
 							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
-							shadowRayQueue[ shadowIndex ].mediumExtinction = medium.extinction;
+							shadowRayQueue[ shadowIndex ].mediumDepth = ${ getShadowMediumDepthFn }( medium.stack, shadowRayQueue[ shadowIndex ].maxDist );
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {
@@ -401,7 +401,7 @@ export class MaterialKernel extends ComputeKernel {
 								surfaceStack, objectInfo.materialIndex, input.hit.side, surface.thinWall,
 								input.direction, input.lightDirection, input.hit.normal,
 							);
-							shadowRayQueue[ shadowIndex ].mediumExtinction = ${ getCombinedMediumFn }( shadowStack ).extinction;
+							shadowRayQueue[ shadowIndex ].mediumDepth = ${ getShadowMediumDepthFn }( shadowStack, shadowRayQueue[ shadowIndex ].maxDist );
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {

@@ -276,15 +276,24 @@ export const getFogShadowDistanceFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Returns the light a shadow ray starting inside media of the given extinction lets through: what the partially
-// transparent surfaces passed let through, times the transmittance of the fog on the way. The traversal passes fog
-// boundaries in any order, adding their optical depth to "fogDepth" back from the fog shadow distance, so the starting
-// media cover the ray up to it
+// Returns the optical depth of the media a shadow ray starts in, up to the fog shadow distance. The traversal passes
+// fog boundaries in any order, adding their depth back from the same distance, so together they cover the ray
+export const getShadowMediumDepthFn = wgslTagFn/* wgsl */`
+
+	fn getShadowMediumDepth( stack: ${ mediumStackStruct }, maxDist: f32 ) -> vec3f {
+
+		return ${ getCombinedMediumFn }( stack ).extinction * ${ getFogShadowDistanceFn }( maxDist );
+
+	}
+
+`;
+
+// Returns the light a shadow ray lets through: what the partially transparent surfaces passed let through, times
+// the transmittance of the media of the given optical depth on the way
 export const getShadowTransmittanceFn = wgslTagFn/* wgsl */`
 
-	fn getShadowTransmittance( extinction: vec3f, maxDist: f32, fogDepth: vec3f, occlusion: f32 ) -> vec3f {
+	fn getShadowTransmittance( depth: vec3f, occlusion: f32 ) -> vec3f {
 
-		let depth = fogDepth + extinction * ${ getFogShadowDistanceFn }( maxDist );
 		return ( 1.0 - occlusion ) * exp( - max( depth, vec3f( 0.0 ) ) );
 
 	}

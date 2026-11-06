@@ -100,8 +100,8 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	_alignment0: 'uint',
 	_alignment1: 'uint',
 
-	// shadow rays only: the summed extinction of the media the ray starts in
-	mediumExtinction: 'vec3f',
+	// shadow rays only: the optical depth of the media the ray starts in
+	mediumDepth: 'vec3f',
 
 }, 'TraceQueuedRay' );
 
