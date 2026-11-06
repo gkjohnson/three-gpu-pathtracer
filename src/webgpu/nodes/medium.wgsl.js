@@ -101,10 +101,10 @@ const materialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// entering a volume pushes its medium id, unless it has no extinction or is already on the stack
-export const mediumStackEnterFn = wgslTagFn/* wgsl */`
+// returns the stack with the object's volume added, unless it has no extinction or is already on the stack
+export const addVolumeToStackFn = wgslTagFn/* wgsl */`
 
-	fn mediumStackEnter( stack: vec4u, object: u32 ) -> vec4u {
+	fn addVolumeToStack( stack: vec4u, object: u32 ) -> vec4u {
 
 		let transform = ${ transformsStorage }[ object ];
 		let material = ${ materialsStorage }[ transform.materialIndex ];
@@ -138,10 +138,10 @@ export const mediumStackEnterFn = wgslTagFn/* wgsl */`
 
 `;
 
-// exiting a volume removes its medium id
-export const mediumStackExitFn = wgslTagFn/* wgsl */`
+// returns the stack with the object's volume removed
+export const removeVolumeFromStackFn = wgslTagFn/* wgsl */`
 
-	fn mediumStackExit( stack: vec4u, object: u32 ) -> vec4u {
+	fn removeVolumeFromStack( stack: vec4u, object: u32 ) -> vec4u {
 
 		let id = ${ transformsStorage }[ object ].mediumId;
 		var result = vec4u( ${ MEDIUM_STACK_EMPTY }u );
@@ -163,14 +163,15 @@ export const mediumStackExitFn = wgslTagFn/* wgsl */`
 
 `;
 
-// The volumes containing a point, as in Cycles' integrator_volume_stack_init: a volume whose nearest hit along a
-// ray from the point is a back face contains it. Assumes closed volumes with outward facing normals
-export const originMediumStackFn = wgslTagFn/* wgsl */`
+// Returns the stack of volumes containing the point, as in Cycles' integrator_volume_stack_init: a volume whose
+// nearest hit along a ray from the point is a back face contains it. Assumes closed volumes with outward facing
+// normals
+export const getVolumeStackAtPointFn = wgslTagFn/* wgsl */`
 
-	fn originMediumStack( origin: vec3f ) -> vec4u {
+	fn getVolumeStackAtPoint( point: vec3f ) -> vec4u {
 
 		var ray: ${ rayStruct };
-		ray.origin = origin;
+		ray.origin = point;
 		ray.direction = vec3f( 0.0, 0.0, 1.0 );
 		ray.maxDist = 0.0;
 
@@ -182,7 +183,7 @@ export const originMediumStackFn = wgslTagFn/* wgsl */`
 
 			if ( hits.side[ i ] < 0.0 ) {
 
-				stack = ${ mediumStackEnterFn }( stack, hits.ids[ i ] );
+				stack = ${ addVolumeToStackFn }( stack, hits.ids[ i ] );
 
 			}
 

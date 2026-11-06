@@ -9,7 +9,7 @@ import {
 	rayDataStruct, traceQueuedRayStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
-import { mediumStackEnterFn, mediumStackExitFn, stackMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
+import { addVolumeToStackFn, removeVolumeFromStackFn, stackMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -353,11 +353,11 @@ export class MaterialKernel extends ComputeKernel {
 						var stack: vec4u;
 						if ( input.hit.side > 0.0 ) {
 
-							stack = ${ mediumStackEnterFn }( medium.stack, u32( input.hit.objectIndex ) );
+							stack = ${ addVolumeToStackFn }( medium.stack, u32( input.hit.objectIndex ) );
 
 						} else {
 
-							stack = ${ mediumStackExitFn }( medium.stack, u32( input.hit.objectIndex ) );
+							stack = ${ removeVolumeFromStackFn }( medium.stack, u32( input.hit.objectIndex ) );
 
 						}
 

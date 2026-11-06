@@ -5,7 +5,7 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn } from '../nodes/sampling.wgsl.js';
-import { mediumStackEnterFn, mediumStackExitFn, stackMediumFn, originMediumStackFn, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
+import { addVolumeToStackFn, removeVolumeFromStackFn, stackMediumFn, getVolumeStackAtPointFn, mediumChannelPdfFn, sampleMediumDistanceFn, mediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
@@ -171,7 +171,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var minPdf = 1.0;
 				var transparentBounce = 0u;
 
-				var medium = ${ stackMediumFn }( ${ originMediumStackFn }( ray.origin ) );
+				var medium = ${ stackMediumFn }( ${ getVolumeStackAtPointFn }( ray.origin ) );
 				var subsurfaceBounces = 0u;
 
 				// no light is sampled at a scatter event, so whatever the next segment reaches takes full weight
@@ -497,11 +497,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							var stack: vec4u;
 							if ( hit.side > 0.0 ) {
 
-								stack = ${ mediumStackEnterFn }( medium.stack, u32( hit.objectIndex ) );
+								stack = ${ addVolumeToStackFn }( medium.stack, u32( hit.objectIndex ) );
 
 							} else {
 
-								stack = ${ mediumStackExitFn }( medium.stack, u32( hit.objectIndex ) );
+								stack = ${ removeVolumeFromStackFn }( medium.stack, u32( hit.objectIndex ) );
 
 							}
 
