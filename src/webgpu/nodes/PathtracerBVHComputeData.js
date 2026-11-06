@@ -506,6 +506,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		} );
 
 		// The nearest hit of every volume along the ray, skipping the objects that aren't volumes
+		// TODO: accumulating the volume hits through the shapecast hooks this way is a bit brittle
+		// TODO: three-mesh-bvh has no clear way to skip an object during traversal, so a flag set when the ray is
+		// transformed is checked in both the bounds and range tests. A dedicated hook would be good
 		const skipObject = uint( 0 ).toVar( 'bvh_skipObject' );
 
 		fns.raycastVolumes = this.getShapecastFn( {
