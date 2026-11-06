@@ -37,11 +37,6 @@ const volumeHitsStruct = new StructTypeNode( {
 	count: 'uint',
 }, 'VolumeHits' );
 
-// the volume hits entry of the object being traversed
-const VOLUME_ENTRY_NONE = 0xffffffff;
-const VOLUME_ENTRY_UNRESOLVED = 0xfffffffe;
-const VOLUME_ENTRY_SKIPPED = 0xfffffffd;
-
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
 
@@ -510,78 +505,32 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			`,
 		} );
 
-		// The nearest hit of every volume along the ray. Non-volumes are skipped, and each volume is only traversed
-		// up to its nearest hit so far
-		const volumeEntry = uint( VOLUME_ENTRY_NONE ).toVar( 'bvh_volumeEntry' );
-
-		// the volume's entry in the hits, or the next free one. Looked up at the object's first test, since the
-		// transform can't see the hits
-		const resolveVolumeEntry = wgslTagFn/* wgsl */`
-			fn resolveVolumeEntry( result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
-
-				if ( ${ volumeEntry } != ${ VOLUME_ENTRY_UNRESOLVED }u ) {
-
-					return ${ volumeEntry };
-
-				}
-
-				let materialIndex = ${ storage.transforms }[ ${ currentObjectIndex } ].materialIndex;
-				${ volumeEntry } = select( ${ VOLUME_ENTRY_SKIPPED }u, result.count, result.count < ${ VOLUME_HITS_SIZE }u );
-				for ( var i = 0u; i < result.count; i ++ ) {
-
-					if ( result.ids[ i ] == materialIndex ) {
-
-						${ volumeEntry } = i;
-						break;
-
-					}
-
-				}
-
-				return ${ volumeEntry };
-
-			}
-		`;
+		// The nearest hit of every volume along the ray, skipping the objects that aren't volumes
+		const skipObject = uint( 0 ).toVar( 'bvh_skipObject' );
 
 		fns.raycastVolumes = this.getShapecastFn( {
 			name: 'raycastVolumes',
 			shapeStruct: rayStruct,
 			resultStruct: volumeHitsStruct,
 
-			prefixFn: wgslTagFn/* wgsl */`
-				fn resetVolumeEntry() -> void {
-
-					${ volumeEntry } = ${ VOLUME_ENTRY_NONE }u;
-
-				}
-			`,
 			boundsOrderFn: raycastOptions.boundsOrderFn,
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
 				fn volumeRayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
 
-					let entry = ${ resolveVolumeEntry }( result );
-					if ( entry == ${ VOLUME_ENTRY_SKIPPED }u ) {
+					if ( ${ skipObject } != 0u ) {
 
 						return 0u;
 
 					}
 
-					let dist = ${ rayBoundsDistance }( ray, bounds );
-					if ( dist < 0.0 || ( entry < result.count && dist >= result.dist[ entry ] ) ) {
-
-						return 0u;
-
-					}
-
-					return 1u;
+					return select( 0u, 1u, ${ rayBoundsDistance }( ray, bounds ) >= 0.0 );
 
 				}
 			`,
 			intersectRangeFn: wgslTagFn/* wgsl */`
 				fn intersectVolumeRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
 
-					let entry = ${ resolveVolumeEntry }( result );
-					if ( entry == ${ VOLUME_ENTRY_SKIPPED }u ) {
+					if ( ${ skipObject } != 0u ) {
 
 						return ${ NOT_INTERSECTED }u;
 
@@ -589,6 +538,25 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
 					let material = ${ materialsStorage }[ object.materialIndex ];
+
+					// the material's entry in the hits, or the next free one
+					var entry = result.count;
+					for ( var i = 0u; i < result.count; i ++ ) {
+
+						if ( result.ids[ i ] == object.materialIndex ) {
+
+							entry = i;
+							break;
+
+						}
+
+					}
+
+					if ( entry == ${ VOLUME_HITS_SIZE }u ) {
+
+						return ${ NOT_INTERSECTED }u;
+
+					}
 
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
@@ -637,7 +605,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					let material = ${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
 					let isVolume = material.transmission > 0.0 && material.thinWall == 0;
-					${ volumeEntry } = select( ${ VOLUME_ENTRY_SKIPPED }u, ${ VOLUME_ENTRY_UNRESOLVED }u, isVolume );
+					${ skipObject } = select( 1u, 0u, isVolume );
 
 				}
 			`,
@@ -645,7 +613,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 				fn resetVolumeRay( objectIndex: u32 ) -> void {
 
 					${ raycastOptions.resetShapeFn }( objectIndex );
-					${ volumeEntry } = ${ VOLUME_ENTRY_NONE }u;
+					${ skipObject } = 0u;
 
 				}
 			`,
