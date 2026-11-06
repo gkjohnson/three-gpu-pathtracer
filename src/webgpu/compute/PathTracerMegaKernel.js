@@ -90,6 +90,43 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
+		// Picks one light or the environment by its estimated contribution at the position, and samples a direction
+		// to it. The record's pdf includes the selection's, and is zero when nothing is picked
+		const sampleLightFn = wgslTagFn/* wgsl */`
+			fn sampleLight( position: vec3f, envWeight: f32, envActive: bool ) -> ${ lightRecordStruct } {
+
+				var lightRec: ${ lightRecordStruct };
+				let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
+				var selectionPdf = 0.0;
+				let lightIndex = ${ selectLightFn }( position, envWeight, ruv.x, &selectionPdf );
+				if ( selectionPdf <= 0.0 ) {
+
+					return lightRec;
+
+				}
+
+				if ( envActive && lightIndex == ${ lightsCountNode } ) {
+
+					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+					let envSample = ${ sampleEnvDir }( ruv.yz );
+					lightRec.direction = envSample.direction;
+					lightRec.emission = envSample.color;
+					lightRec.pdf = envSample.pdf;
+					lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+					lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+
+				} else {
+
+					lightRec = ${ randomLightSampleFn }( lightIndex, position, ruv.yz );
+
+				}
+
+				lightRec.pdf *= selectionPdf;
+				return lightRec;
+
+			}
+		`;
+
 		const shader = wgslTagFn/* wgsl */`
 
 			fn compute(
@@ -248,7 +285,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							// reaching the surface, weighted by the probability of no scatter event before it
 							throughputColor *= transmittance / distancePdf;
 
-						} else if ( medium.fog != 0u ) {
+						} else if ( medium.samplesLight != 0u ) {
 
 							// a scatter event in fog is a path vertex, resolved once the lights before it are found
 							throughputColor *= medium.albedo * medium.extinction * transmittance / distancePdf;
@@ -333,49 +370,26 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// next event estimation at the scatter event. The phase function is its own pdf
 						if ( misEnabled != 0u ) {
 
-							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( ray.origin, envWeight, ruv.x, &selectionPdf );
-							if ( selectionPdf > 0.0 ) {
+							let lightRec = ${ sampleLightFn }( ray.origin, envWeight, envActive );
+							if ( lightRec.pdf > 0.0 ) {
 
-								var lightRec: ${ lightRecordStruct };
-								if ( envActive && lightIndex == lightsCount ) {
+								var shadowRay: ${ rayStruct };
+								shadowRay.origin = ray.origin;
+								shadowRay.direction = lightRec.direction;
+								shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
 
-									let envSample = ${ sampleEnvDir }( ruv.yz );
-									lightRec.direction = envSample.direction;
-									lightRec.emission = envSample.color;
-									lightRec.pdf = envSample.pdf;
-									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+								var shadowHit: ${ raycastOutput };
+								let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
+								if ( ! occluded ) {
 
-								} else {
-
-									lightRec = ${ randomLightSampleFn }( lightIndex, ray.origin, ruv.yz );
-
-								}
-
-								if ( lightRec.pdf > 0.0 ) {
-
-									var shadowRay: ${ rayStruct };
-									shadowRay.origin = ray.origin;
-									shadowRay.direction = lightRec.direction;
-									shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
-
-									var shadowHit: ${ raycastOutput };
-									let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
-									if ( ! occluded ) {
-
-										let lightPdf = lightRec.pdf * selectionPdf;
-										let mediumDepth = ${ getShadowMediumDepthFn }( medium.stack, shadowRay.maxDist );
-										let lightTransmittance = ${ getShadowTransmittanceFn }( mediumDepth + shadowHit.fogDepth, shadowHit.occlusion );
-										let phasePdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
-										let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && bounce + 1u < maxBounces;
-										let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightPdf, phasePdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
-										let directLight = throughputColor * lightRec.emission * lightTransmittance * phasePdf * misWeight / lightPdf;
-										let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
-										resultColor += vec4f( contribution, 0.0 );
-
-									}
+									let mediumDepth = ${ getShadowMediumDepthFn }( medium.stack, shadowRay.maxDist );
+									let lightTransmittance = ${ getShadowTransmittanceFn }( mediumDepth + shadowHit.fogDepth, shadowHit.occlusion );
+									let phasePdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
+									let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && bounce + 1u < maxBounces;
+									let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightRec.pdf, phasePdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
+									let directLight = throughputColor * lightRec.emission * lightTransmittance * phasePdf * misWeight / lightRec.pdf;
+									let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
+									resultColor += vec4f( contribution, 0.0 );
 
 								}
 
@@ -521,59 +535,35 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// contribution
 						if ( misEnabled != 0u ) {
 
-							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, ruv.x, &selectionPdf );
-							if ( selectionPdf > 0.0 ) {
+							let lightRec = ${ sampleLightFn }( vertexData.position.xyz, envWeight, envActive );
+							if ( lightRec.pdf > 0.0 ) {
 
-								var lightRec: ${ lightRecordStruct };
-								if ( envActive && lightIndex == lightsCount ) {
+								let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
+								if ( evalRec.pdf > 0.0 ) {
 
-									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-									let envSample = ${ sampleEnvDir }( ruv.yz );
-									lightRec.direction = envSample.direction;
-									lightRec.emission = envSample.color;
-									lightRec.pdf = envSample.pdf;
-									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+									var shadowRay: ${ rayStruct };
+									shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
+									shadowRay.direction = lightRec.direction;
+									shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
 
-								} else {
+									// opaque occlusion up to the light distance, attenuated by the partially
+									// transparent surfaces and the volumes passed
+									var shadowHit: ${ raycastOutput };
+									let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
+									if ( ! occluded ) {
 
-									lightRec = ${ randomLightSampleFn }( lightIndex, vertexData.position.xyz, ruv.yz );
+										let shadowStack = ${ getShadowMediumStackFn }( medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall, ray.direction, lightRec.direction, hit.normal );
+										let mediumDepth = ${ getShadowMediumDepthFn }( shadowStack, shadowRay.maxDist );
+										let lightTransmittance = ${ getShadowTransmittanceFn }( mediumDepth + shadowHit.fogDepth, shadowHit.occlusion );
 
-								}
-
-								if ( lightRec.pdf > 0.0 ) {
-
-									let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
-									if ( evalRec.pdf > 0.0 ) {
-
-										var shadowRay: ${ rayStruct };
-										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
-										shadowRay.direction = lightRec.direction;
-										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
-
-										// opaque occlusion up to the light distance, attenuated by the partially
-										// transparent surfaces and the volumes passed
-										var shadowHit: ${ raycastOutput };
-										let occluded = ${ raycastShadowFn }( shadowRay, &shadowHit );
-										if ( ! occluded ) {
-
-											let lightPdf = lightRec.pdf * selectionPdf;
-											let shadowStack = ${ getShadowMediumStackFn }( medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall, ray.direction, lightRec.direction, hit.normal );
-											let mediumDepth = ${ getShadowMediumDepthFn }( shadowStack, shadowRay.maxDist );
-											let lightTransmittance = ${ getShadowTransmittanceFn }( mediumDepth + shadowHit.fogDepth, shadowHit.occlusion );
-
-											// env + area lights are also found by bsdf rays, so MIS-weight them. Punctual lights, and lights
-											// past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray skipped can't
-											// find the light, so their share of the weight moves to the light sample
-											let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && bounce + 1u < maxBounces;
-											let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightPdf, evalRec.pdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
-											let directLight = throughputColor * lightRec.emission * lightTransmittance * evalRec.color * misWeight / lightPdf;
-											let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
-											resultColor += vec4f( contribution, 0.0 );
-
-										}
+										// env + area lights are also found by bsdf rays, so MIS-weight them. Punctual lights, and lights
+										// past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray skipped can't
+										// find the light, so their share of the weight moves to the light sample
+										let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && bounce + 1u < maxBounces;
+										let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightRec.pdf, evalRec.pdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
+										let directLight = throughputColor * lightRec.emission * lightTransmittance * evalRec.color * misWeight / lightRec.pdf;
+										let contribution = ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
+										resultColor += vec4f( contribution, 0.0 );
 
 									}
 

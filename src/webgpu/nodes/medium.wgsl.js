@@ -31,11 +31,12 @@ export const mediumStackStruct = new StructTypeNode( {
 	ids: `array<u32, ${ MEDIUM_STACK_SIZE }>`,
 }, 'MediumStack' );
 
-// the shadow ray length past which the light is distant, as the far distance shortened by the light epsilon
+// shadow rays at least this long go to distant lights, whose distance is the far distance
 const MEDIUM_DISTANT_SHADOW_DISTANCE = 0.5 * LIGHT_FAR_DISTANCE;
 
-// The combined media of a stack. "scatters" and "fog" are uints so the struct can be held in a storage buffer.
-// A walk through fog samples light at each scatter event, as Cycles does in volumes, where a subsurface walk doesn't
+// The combined media of a stack. "scatters" and "samplesLight" are uints so the struct can be held in a storage
+// buffer. A medium with fog samples light at each scatter event, as Cycles does in volumes, where a subsurface
+// walk doesn't
 const mediumMembers = {
 	extinction: 'vec3f',
 	scatters: 'uint',
@@ -43,7 +44,7 @@ const mediumMembers = {
 	albedo: 'vec3f',
 	anisotropy: 'float',
 
-	fog: 'uint',
+	samplesLight: 'uint',
 };
 
 export const mediumStruct = new DependentStructTypeNode( {
@@ -225,7 +226,7 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 		var maxAlbedo = vec3f( 0.0 );
 		var anisotropy = 0.0;
 		var anisotropyWeight = 0.0;
-		var fog = false;
+		var samplesLight = false;
 		var ids = stack.ids;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
@@ -249,14 +250,14 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 			maxAlbedo = max( maxAlbedo, entryAlbedo );
 			anisotropy += entryAnisotropy * weight;
 			anisotropyWeight += weight;
-			fog = fog || isFog;
+			samplesLight = samplesLight || isFog;
 
 		}
 
 		// channels without extinction keep the largest albedo for the channel choice
 		var medium: ${ mediumStruct };
 		medium.stack = stack;
-		medium.fog = select( 0u, 1u, fog );
+		medium.samplesLight = select( 0u, 1u, samplesLight );
 		medium.extinction = extinction;
 		medium.albedo = select( maxAlbedo, scattering / extinction, extinction > vec3f( 0.0 ) );
 		medium.anisotropy = select( 0.0, anisotropy / anisotropyWeight, anisotropyWeight > 0.0 );

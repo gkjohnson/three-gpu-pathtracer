@@ -82,7 +82,7 @@ export class MaterialKernel extends ComputeKernel {
 
 					// A scatter event in fog, staged at "origin" by LogicKernel, is a path vertex like a surface,
 					// counted as a bounce, that continues through the phase function
-					if ( input.mediumVertex != 0u ) {
+					if ( input.fogScatter != 0u ) {
 
 						let newBounce = input.hit.bounce + 1u;
 						let newDirection = ${ sampleHenyeyGreensteinFn }( input.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
@@ -112,7 +112,7 @@ export class MaterialKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.bounce = newBounce;
 						rayDataStorage[ index ].fogBounces = input.fogBounces + 1u;
 						rayDataStorage[ index ].mediumScattered = 0u;
-						rayDataStorage[ index ].mediumVertex = 0u;
+						rayDataStorage[ index ].fogScatter = 0u;
 
 						// the next segment is walked through the fog by MediumKernel
 						if ( ! isTerminated ) {
