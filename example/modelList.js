@@ -1,5 +1,6 @@
-import { Box3, Color, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
+import { Box3, Color, CylinderGeometry, DirectionalLight, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
 import { ShapedAreaLight } from 'three-gpu-pathtracer';
+import { FogVolumeNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -879,6 +880,44 @@ export const MODEL_LIST = {
 			model.add( camera );
 
 		}
+	},
+
+	'Stalenhag Winter': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/colourdrafts/scene.glb',
+		credit: 'Model by "ganzhugav" on Sketchfab',
+		postProcess( model ) {
+
+			// a cylinder of fog around the whole diorama
+			const box = new Box3().setFromObject( model );
+			const fog = new Mesh( new CylinderGeometry( 0.5, 0.5, 1, 20 ), new FogVolumeNodeMaterial( {
+				color: 0x666666,
+				density: 1.5,
+			} ) );
+
+			fog.scale.subVectors( box.max, box.min );
+			fog.scale.x += 0.1;
+			fog.scale.y += 0.01;
+			fog.scale.z += 0.1;
+			fog.scale.x = fog.scale.z = Math.max( fog.scale.x, fog.scale.z );
+
+			box.getCenter( fog.position );
+			fog.position.y += 0.02;
+
+			const sun = new DirectionalLight( 0xfff1dd, 80 );
+			sun.position.set( 1, 0.4, - 1 );
+			sun.target.position.set( - 1, - 0.4, 1 );
+			sun.add( sun.target );
+
+			const camera = new PerspectiveCamera( 45, 1, 0.025, 500 );
+			camera.position.set( - 0.078, 0.11, 0.11 );
+			camera.rotation.set( 0.04, - 0.51, 0.02 );
+
+			model.add( fog, sun, camera );
+
+		},
+		background: 'black',
+		envMap: 'none',
+		stage: 'none',
 	},
 
 	'Crab Sculpture': {

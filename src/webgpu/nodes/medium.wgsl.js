@@ -26,13 +26,20 @@ export const mediumStackStruct = new StructTypeNode( {
 	ids: `array<u32, ${ MEDIUM_STACK_SIZE }>`,
 }, 'MediumStack' );
 
-// The combined media of a stack. "scatters" is a uint so the struct can be held in a storage buffer
+// shadow rays at least this long go to distant lights, whose distance is the far distance
+const MEDIUM_DISTANT_SHADOW_DISTANCE = 0.5 * LIGHT_FAR_DISTANCE;
+
+// The combined media of a stack. "scatters" and "samplesLight" are uints so the struct can be held in a storage
+// buffer. A medium with fog samples light at each scatter event, as Cycles does in volumes, where a subsurface
+// walk doesn't
 const mediumMembers = {
 	extinction: 'vec3f',
 	scatters: 'uint',
 
 	albedo: 'vec3f',
 	anisotropy: 'float',
+
+	samplesLight: 'uint',
 };
 
 export const mediumStruct = new DependentStructTypeNode( {
@@ -69,7 +76,7 @@ const getSingleScatterAlbedoFn = wgslTagFn/* wgsl */`
 const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 
 // returns a material's extinction from its glTF attenuation, zero for one without a volume
-const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
+export const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
 
 	fn getMaterialExtinction( attenuationColor: vec3f, attenuationDistance: f32 ) -> vec3f {
 
@@ -185,6 +192,7 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 		var maxAlbedo = vec3f( 0.0 );
 		var anisotropy = 0.0;
 		var anisotropyWeight = 0.0;
+		var samplesLight = false;
 		var ids = stack.ids;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
@@ -197,7 +205,10 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 			let material = ${ materialsStorage }[ ids[ i ] ];
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
-			let entryAlbedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy );
+
+			// a fog volume's color is its single scatter albedo already
+			let isFog = material.fogVolume != 0;
+			let entryAlbedo = select( ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy ), material.multiscatterColor, isFog );
 			let entryScattering = entryAlbedo * entryExtinction;
 			let weight = dot( entryScattering, vec3f( 1.0 / 3.0 ) );
 			extinction += entryExtinction;
@@ -205,17 +216,86 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 			maxAlbedo = max( maxAlbedo, entryAlbedo );
 			anisotropy += entryAnisotropy * weight;
 			anisotropyWeight += weight;
+			samplesLight = samplesLight || isFog;
 
 		}
 
 		// channels without extinction keep the largest albedo for the channel choice
 		var medium: ${ mediumStruct };
 		medium.stack = stack;
+		medium.samplesLight = select( 0u, 1u, samplesLight );
 		medium.extinction = extinction;
 		medium.albedo = select( maxAlbedo, scattering / extinction, extinction > vec3f( 0.0 ) );
 		medium.anisotropy = select( 0.0, anisotropy / anisotropyWeight, anisotropyWeight > 0.0 );
 		medium.scatters = select( 0u, 1u, any( medium.albedo > vec3f( 0.0 ) ) && any( extinction > vec3f( 0.0 ) ) );
 		return medium;
+
+	}
+
+`;
+
+// Returns the stack a surface's shadow ray starts in. A light on the far side of a volume's boundary is reached
+// through it, entering or leaving the volume
+export const getShadowMediumStackFn = wgslTagFn/* wgsl */`
+
+	fn getShadowMediumStack(
+		stack: ${ mediumStackStruct }, materialIndex: u32, side: f32, thinWall: bool,
+		direction: vec3f, lightDirection: vec3f, normal: vec3f,
+	) -> ${ mediumStackStruct } {
+
+		var result = stack;
+		let crossesSurface = dot( direction, normal ) * dot( lightDirection, normal ) > 0.0;
+		if ( crossesSurface && ! thinWall ) {
+
+			if ( side > 0.0 ) {
+
+				${ addToMediumStackFn }( &result, materialIndex );
+
+			} else {
+
+				${ removeFromMediumStackFn }( &result, materialIndex );
+
+			}
+
+		}
+
+		return result;
+
+	}
+
+`;
+
+// Returns the distance a shadow ray's fog depth is measured back from: the light's. A distant light is outside of
+// every closed volume, so the depth is measured from the origin instead, where a far distance would lose its precision
+export const getFogShadowDistanceFn = wgslTagFn/* wgsl */`
+
+	fn getFogShadowDistance( maxDist: f32 ) -> f32 {
+
+		return select( maxDist, 0.0, maxDist >= ${ MEDIUM_DISTANT_SHADOW_DISTANCE } );
+
+	}
+
+`;
+
+// Returns the optical depth of the media a shadow ray starts in, up to the fog shadow distance. The traversal passes
+// fog boundaries in any order, adding their depth back from the same distance, so together they cover the ray
+export const getShadowMediumDepthFn = wgslTagFn/* wgsl */`
+
+	fn getShadowMediumDepth( stack: ${ mediumStackStruct }, maxDist: f32 ) -> vec3f {
+
+		return ${ getCombinedMediumFn }( stack ).extinction * ${ getFogShadowDistanceFn }( maxDist );
+
+	}
+
+`;
+
+// Returns the light a shadow ray lets through: what the partially transparent surfaces passed let through, times
+// the transmittance of the media of the given optical depth on the way
+export const getShadowTransmittanceFn = wgslTagFn/* wgsl */`
+
+	fn getShadowTransmittance( depth: vec3f, occlusion: f32 ) -> vec3f {
+
+		return ( 1.0 - occlusion ) * exp( - max( depth, vec3f( 0.0 ) ) );
 
 	}
 

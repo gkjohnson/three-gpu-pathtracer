@@ -137,8 +137,10 @@ export class CameraRayKernel extends ComputeKernel {
 				rayDataStorage[ index ].auxAlbedo = 0u;
 				rayDataStorage[ index ].auxNormal = 0u;
 				rayDataStorage[ index ].subsurfaceBounces = 0u;
+				rayDataStorage[ index ].fogBounces = 0u;
 				rayDataStorage[ index ].walkPending = 0u;
 				rayDataStorage[ index ].mediumScattered = 0u;
+				rayDataStorage[ index ].fogScatter = 0u;
 
 				// marks the slot as spawned this round. CameraMediumKernel replaces it with the ray's queue index
 				rayDataStorage[ index ].rayIntersectionIndex = 0;

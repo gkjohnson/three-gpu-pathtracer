@@ -58,7 +58,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		this.envInfo = new EquirectHdrInfoNode();
 		this.backgroundInfo = new EquirectBackgroundInfo();
-		this.lightsInfo = new LightsInfoNode();
+		this.lightsInfo = new LightsInfoNode( this.envInfo );
 
 		// The path slot pool, sized to the frame budget and resized in the render loop as the budget
 		// changes. Every per-slot buffer is allocated to the same count so a full pool can never
@@ -575,6 +575,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.maxBounces = this.maxBounces;
+				materialKernel.maxFogBounces = this.maxFogBounces;
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// spawn camera rays for the freed slots, then find the volumes they start inside of and queue them

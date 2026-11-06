@@ -33,8 +33,8 @@ function encodeTextureWrap( wrap ) {
  *
  * A custom material struct must keep the fields the ray traversal and medium stack read: "opacity", "side",
  * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap", "alphaMapTransform",
- * "transmission", "thinWall", "attenuationColor", "attenuationDistance", "multiscatterColor", "scatterStrength"
- * and "scatterAnisotropy".
+ * "transmission", "thinWall", "fogVolume", "attenuationColor", "attenuationDistance", "multiscatterColor",
+ * "scatterStrength" and "scatterAnisotropy".
  *
  * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
  * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",
@@ -256,44 +256,7 @@ export class ShadingModel {
 		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
 			const m = materials[ i ];
-
-			// if ( m.isFogVolumeMaterial ) {
-			//
-			// 	// features.setUsed( 'FOG' );
-			//
-			// 	for ( let j = 0; j < MATERIAL_STRIDE; j ++ ) {
-			//
-			// 		floatArray[ index + j ] = 0;
-			//
-			// 	}
-			//
-			// 	// sample 0 .rgb
-			// 	floatArray[ index + 0 * 4 + 0 ] = m.color.r;
-			// 	floatArray[ index + 0 * 4 + 1 ] = m.color.g;
-			// 	floatArray[ index + 0 * 4 + 2 ] = m.color.b;
-			//
-			// 	// sample 2 .a
-			// 	floatArray[ index + 2 * 4 + 3 ] = this.getField( m, 'emissiveIntensity', 0.0 );
-			//
-			// 	// sample 3 .rgb
-			// 	floatArray[ index + 3 * 4 + 0 ] = m.emissive.r;
-			// 	floatArray[ index + 3 * 4 + 1 ] = m.emissive.g;
-			// 	floatArray[ index + 3 * 4 + 2 ] = m.emissive.b;
-			//
-			// 	// sample 13 .g
-			// 	// reusing opacity field
-			// 	floatArray[ index + 13 * 4 + 1 ] = m.density;
-			//
-			// 	// side
-			// 	floatArray[ index + 13 * 4 + 3 ] = 0.0;
-			//
-			// 	// sample 14 .b
-			// 	floatArray[ index + 14 * 4 + 2 ] = 1 << 2;
-			//
-			// 	index += MATERIAL_STRIDE;
-			// 	continue;
-			//
-			// }
+			const isFogVolume = Boolean( m.isFogVolumeMaterial );
 
 			// color - offset 0
 			floatArray[ index ++ ] = m.color.r;
@@ -407,8 +370,16 @@ export class ShadingModel {
 			intArray[ index ++ ] = Number( isThinWall );
 			index ++;
 
-			// attenuation - offset 44
-			if ( 'attenuationColor' in m ) {
+			// attenuation - offset 44. A fog volume's "density" is its extinction per unit length. The kernels derive
+			// extinction as "- log( attenuationColor ) / attenuationDistance", so a color of e^-1 and a distance of
+			// 1 / density give the density back
+			if ( isFogVolume ) {
+
+				floatArray[ index ++ ] = Math.exp( - 1 );
+				floatArray[ index ++ ] = Math.exp( - 1 );
+				floatArray[ index ++ ] = Math.exp( - 1 );
+
+			} else if ( 'attenuationColor' in m ) {
 
 				floatArray[ index ++ ] = m.attenuationColor.r;
 				floatArray[ index ++ ] = m.attenuationColor.g;
@@ -422,7 +393,15 @@ export class ShadingModel {
 
 			}
 
-			floatArray[ index ++ ] = this.getField( m, 'attenuationDistance', Infinity );
+			if ( isFogVolume ) {
+
+				floatArray[ index ++ ] = m.density > 0 ? 1 / m.density : Infinity;
+
+			} else {
+
+				floatArray[ index ++ ] = this.getField( m, 'attenuationDistance', Infinity );
+
+			}
 
 			// alphaMap - offset 48
 			intArray[ index ++ ] = this.getTextureDescriptor( m, 'alphaMap' );
@@ -430,8 +409,8 @@ export class ShadingModel {
 			floatArray[ index ++ ] = m.opacity;
 			floatArray[ index ++ ] = m.alphaTest;
 
-			// side & matte - offset 52
-			if ( ! isThinWall && m.transmission > 0.0 ) {
+			// side & matte - offset 52. Volumes are entered and left through both faces
+			if ( ( ! isThinWall && m.transmission > 0.0 ) || isFogVolume ) {
 
 				floatArray[ index ++ ] = 0;
 
@@ -483,7 +462,7 @@ export class ShadingModel {
 
 			// transparent, fogVolume - offset 64
 			intArray[ index ++ ] = Number( m.transparent );
-			intArray[ index ++ ] = 0;
+			intArray[ index ++ ] = Number( isFogVolume );
 
 			// anisotropy, anisotropyRotation, anisotropyMap - offset 66
 			floatArray[ index ++ ] = this.getField( m, 'anisotropy', 0.0 );
@@ -544,8 +523,8 @@ export class ShadingModel {
 			// anisotropyMap transform - offset 264
 			index += this.writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
 
-			// scattering volume - offset 276
-			const multiscatterColor = this.getField( m, 'multiscatterColor', null );
+			// scattering volume - offset 276. A fog volume's color is its single scatter albedo, used as is
+			const multiscatterColor = isFogVolume ? m.color : this.getField( m, 'multiscatterColor', null );
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.r : 1.0;
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.g : 1.0;
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.b : 1.0;

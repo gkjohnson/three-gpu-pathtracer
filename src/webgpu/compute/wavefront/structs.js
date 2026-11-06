@@ -57,14 +57,18 @@ const rayDataMembers = {
 	auxAlbedo: 'uint',
 	auxNormal: 'uint',
 
-	// scatter events taken inside media, counted separately from the bounce count
+	// scatter events taken in subsurface walks, and in fog, each counted separately from the bounce count
 	subsurfaceBounces: 'uint',
+	fogBounces: 'uint',
 
 	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
 	walkPending: 'uint',
 
 	// whether the staged segment starts at a medium scatter event, where no light is sampled
 	mediumScattered: 'uint',
+
+	// whether the staged hit is a scatter event in fog at "origin" rather than a surface
+	fogScatter: 'uint',
 
 };
 
@@ -95,10 +99,16 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	_alignment0: 'uint',
 	_alignment1: 'uint',
 
+	// shadow rays only: the optical depth of the media the ray starts in
+	mediumDepth: 'vec3f',
+
 }, 'TraceQueuedRay' );
 
+// the object index MediumKernel writes for a walk ending at a scatter event in fog
+export const FOG_SCATTER_HIT = - 2;
+
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by
-// LogicKernel the following frame. objectIndex < 0 encodes a miss.
+// LogicKernel the following frame. objectIndex < 0 encodes a miss, or a scatter event in fog.
 export const intersectionResultStruct = new StructTypeNode( {
 
 	barycoord: 'vec3f',
@@ -118,13 +128,13 @@ export const intersectionResultStruct = new StructTypeNode( {
 // LogicKernel the following frame. objectIndex >= 0 encodes an occluded light.
 export const shadowTraceResultStruct = new StructTypeNode( {
 
+	// the light let through by the partially transparent surfaces and the volumes passed
+	transmittance: 'vec3f',
+
 	objectIndex: 'int',
 
 	// the share of bsdf rays the skipped faces would stop, whose light weight moves to the light sample
 	skippedOcclusion: 'float',
-
-	// the fraction of light blocked by the partially transparent surfaces passed
-	occlusion: 'float',
 
 }, 'ShadowTraceResult' );
 

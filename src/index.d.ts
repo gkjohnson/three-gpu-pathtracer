@@ -261,6 +261,7 @@ export class DenoiseMaterial extends MaterialBase {
 export interface FogVolumeMaterialParameters extends MeshStandardMaterialParameters {
 
 	density?: number;
+	scatterAnisotropy?: number;
 
 }
 
@@ -271,5 +272,6 @@ export class FogVolumeMaterial extends MeshStandardMaterial {
 	readonly isFogVolumeMaterial: true;
 
 	density: number;
+	scatterAnisotropy: number;
 
 }

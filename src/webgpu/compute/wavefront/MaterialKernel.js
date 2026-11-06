@@ -2,9 +2,10 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, globalId } from 'three/tsl';
 import { contextProxy, contextProxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rngInit, rand1, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
+import { rngInit, rand1, rand2, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_MEDIUM_DIRECTION } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
-import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn } from '../../nodes/medium.wgsl.js';
+import { mediumStackStruct, addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getShadowMediumStackFn, getShadowMediumDepthFn } from '../../nodes/medium.wgsl.js';
+import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sampling.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
@@ -22,6 +23,7 @@ export class MaterialKernel extends ComputeKernel {
 			filterGlossy: uniform( 1 ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
+			maxFogBounces: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
@@ -38,6 +40,27 @@ export class MaterialKernel extends ComputeKernel {
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
+		// Queues the NEE shadow ray from the origin toward the light LogicKernel selected, starting in the given media,
+		// and returns its index in the queue. A whole struct is written to the buffer, which Safari needs
+		const queueShadowRayFn = wgslTagFn/* wgsl */`
+			fn queueShadowRay( input: ${ rayDataStruct }, origin: vec3f, stack: ${ mediumStackStruct } ) -> i32 {
+
+				var queuedRay: ${ traceQueuedRayStruct };
+				queuedRay.origin = origin;
+				queuedRay.direction = input.lightDirection;
+				queuedRay.pixelIndex = input.pixelIndex;
+				queuedRay.rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
+				queuedRay.sampleIndex = input.sampleIndex;
+				queuedRay.maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+				queuedRay.mediumDepth = ${ getShadowMediumDepthFn }( stack, queuedRay.maxDist );
+
+				let shadowIndex = atomicAdd( &${ params.queueCounters }[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
+				${ params.shadowRayQueue }[ shadowIndex ] = queuedRay;
+				return i32( shadowIndex );
+
+			}
+		`;
+
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
@@ -46,13 +69,13 @@ export class MaterialKernel extends ComputeKernel {
 				filterGlossy: f32,
 				maxTransparentBounces: u32,
 				maxBounces: u32,
+				maxFogBounces: u32,
 
 				globalId: vec3u
 			) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 				let rayQueue = &${ params.rayQueue };
-				let shadowRayQueue = &${ params.shadowRayQueue };
 				let queueCounters = &${ params.queueCounters };
 
 				// bound by "rayCount" rather than the pool length. The dispatch rounds up to the
@@ -76,6 +99,67 @@ export class MaterialKernel extends ComputeKernel {
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = input.medium;
 					let segmentInMedium = medium.scatters != 0u;
+
+					// A scatter event in fog, staged at "origin" by LogicKernel, is a path vertex like a surface,
+					// counted as a bounce, that continues through the phase function
+					if ( input.fogScatter != 0u ) {
+
+						let newBounce = input.hit.bounce + 1u;
+						let newDirection = ${ sampleHenyeyGreensteinFn }( input.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+						let phasePdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, newDirection ), medium.anisotropy );
+
+						// russian roulette, as at a surface. The phase function's sample weight is one. Out of
+						// fog bounces the path ends here, keeping the light sampled at the scatter
+						var scatterColor = vec3f( phasePdf );
+						var isTerminated = newBounce >= maxBounces || input.fogBounces >= maxFogBounces;
+						if ( ! isTerminated && newBounce >= 3u ) {
+
+							let rrThroughput = input.throughputColor;
+							let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
+							isTerminated = rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+							if ( ! isTerminated ) {
+
+								scatterColor /= rrProb;
+
+							}
+
+						}
+
+						rayDataStorage[ index ].scatterColor = scatterColor;
+						rayDataStorage[ index ].scatterPdf = select( phasePdf, 0.0, isTerminated );
+						rayDataStorage[ index ].isFullyTransmissive = 0u;
+						rayDataStorage[ index ].emission = vec3f( 0.0 );
+						rayDataStorage[ index ].hit.bounce = newBounce;
+						rayDataStorage[ index ].fogBounces = input.fogBounces + 1u;
+						rayDataStorage[ index ].mediumScattered = 0u;
+						rayDataStorage[ index ].fogScatter = 0u;
+
+						// the next segment is walked through the fog by MediumKernel
+						if ( ! isTerminated ) {
+
+							rayDataStorage[ index ].walkPending = 1u;
+							rayDataStorage[ index ].direction = newDirection;
+
+						}
+
+						// evaluate the phase function toward the light LogicKernel selected and enqueue the shadow ray.
+						// The phase function is its own pdf
+						let lightPhasePdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, input.lightDirection ), medium.anisotropy );
+						if ( input.lightPdf > 0.0 ) {
+
+							rayDataStorage[ index ].lightBsdf = vec3f( lightPhasePdf );
+							rayDataStorage[ index ].lightBsdfPdf = lightPhasePdf;
+							rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, input.origin, medium.stack );
+
+						} else {
+
+							rayDataStorage[ index ].lightPdf = 0.0;
+							rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+
+						}
+						return;
+
+					}
 
 					let objectInfo = ${ transformsStorage }[ u32( input.hit.objectIndex ) ];
 					let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
@@ -116,8 +200,10 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					// Stochastically pass through partially transparent surfaces by re-enqueueing
-					// the ray at the hit point, advancing the alpha depth but not the bounce count.
-					let passesThrough = ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
+					// the ray at the hit point, advancing the alpha depth but not the bounce count. A
+					// fog volume's boundary is always passed, entering or leaving its volume
+					let isFogBoundary = materialInfo.fogVolume != 0;
+					let passesThrough = isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
 					if ( passesThrough ) {
 
 						// out of transparent bounces, so stop rather than shading a surface that
@@ -132,8 +218,27 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
+						if ( isFogBoundary ) {
+
+							var stack = medium.stack;
+							if ( input.hit.side > 0.0 ) {
+
+								${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
+
+							} else {
+
+								${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
+
+							}
+
+							// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
+							medium = ${ getCombinedMediumFn }( stack );
+							${ params.rayDataStorage }[ index ].medium = medium;
+
+						}
+
 						let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.hit.normal );
-						if ( segmentInMedium ) {
+						if ( medium.scatters != 0u ) {
 
 							// inside a medium, MediumKernel walks on past the surface, from the surface
 							rayDataStorage[ index ].walkPending = 1u;
@@ -238,6 +343,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].mediumScattered = 0u;
 
 					// refracting through a volume's surface enters or exits it
+					let surfaceStack = medium.stack;
 					if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
 						var stack = medium.stack;
@@ -294,14 +400,12 @@ export class MaterialKernel extends ComputeKernel {
 							rayDataStorage[ index ].lightBsdf = evalRec.color;
 							rayDataStorage[ index ].lightBsdfPdf = evalRec.pdf;
 
-							let shadowIndex = atomicAdd( &queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
-							shadowRayQueue[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
-							shadowRayQueue[ shadowIndex ].direction = input.lightDirection;
-							shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
-							shadowRayQueue[ shadowIndex ].rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
-							shadowRayQueue[ shadowIndex ].sampleIndex = input.sampleIndex;
-							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
-							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
+							let shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+							let shadowStack = ${ getShadowMediumStackFn }(
+								surfaceStack, objectInfo.materialIndex, input.hit.side, surface.thinWall,
+								input.direction, input.lightDirection, input.hit.normal,
+							);
+							rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowOrigin, shadowStack );
 
 						} else {
 

@@ -12,9 +12,9 @@ import {
 	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
-import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
+import { LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, FOG_SCATTER_HIT } from './structs.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -58,18 +58,16 @@ export class LogicKernel extends ComputeKernel {
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
-		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
 		const getEnvWeight = proxy( 'envInfo.value.getWeight', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider (LightsInfoNode)
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
-		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
 		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
 		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
-		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
+		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -143,7 +141,7 @@ export class LogicKernel extends ComputeKernel {
 						// find the light, so their share of the weight moves to the light sample
 						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && input.hit.bounce < maxBounces;
 						let misWeight = select( 1.0, mix( ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
-						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight * ( 1.0 - shadowHit.occlusion ) / input.lightPdf;
+						let directLight = throughputColor * input.lightEmission * shadowHit.transmittance * input.lightBsdf * misWeight / input.lightPdf;
 						let contribution = ${ clampPathContributionFunc }( directLight, input.hit.bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
 
@@ -185,12 +183,14 @@ export class LogicKernel extends ComputeKernel {
 
 				} else if ( ! isTerminated ) {
 
+					// a walk ending at a scatter event in fog is staged like a surface hit
 					let hitResult = ${ params.rayIntersectionsStorage }[ u32( input.rayIntersectionIndex ) ];
-					let didHit = hitResult.objectIndex >= 0;
+					let isFogScatter = hitResult.objectIndex == ${ FOG_SCATTER_HIT };
+					let didHit = hitResult.objectIndex >= 0 || isFogScatter;
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
 					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none,
-					// and neither do scatter events in a medium
+					// and neither do scatter events in a subsurface walk
 					let isMISWeighted = misEnabled != 0u && input.hit.bounce > 0u && input.mediumScattered == 0u;
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
@@ -234,37 +234,28 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.normal = hitResult.normal;
 						rayDataStorage[ index ].hit.side = hitResult.side;
 						rayDataStorage[ index ].hit.indices = hitResult.indices;
-						rayDataStorage[ index ].hit.objectIndex = hitResult.objectIndex;
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
+						rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
+
+						// a fog scatter has no object. Any non-negative index keeps the slot from being respawned, and
+						// MaterialKernel handles the scatter before reading the object
+						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
+						if ( isFogScatter ) {
+
+							rayDataStorage[ index ].origin = hitResult.position;
+
+						}
 
 						// next event estimation: choose one light or the environment by its estimated
-						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
+						// contribution. MaterialKernel evaluates the bsdf, or the phase function at a scatter
+						// event in fog, and enqueues the shadow ray
 						var lightPdf = 0.0;
 						if ( misEnabled != 0u ) {
 
-							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, ruv.x, &selectionPdf );
-							if ( selectionPdf > 0.0 ) {
+							let lightRec = ${ sampleLightFn }( hitResult.position, envWeight, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							if ( lightRec.pdf > 0.0 ) {
 
-								var lightRec: ${ lightRecordStruct };
-								if ( envActive && lightIndex == lightsCount ) {
-
-									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-									let envSample = ${ sampleEnvDir }( ruv.yz );
-									lightRec.direction = envSample.direction;
-									lightRec.emission = envSample.color;
-									lightRec.pdf = envSample.pdf;
-									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
-
-								} else {
-
-									lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
-
-								}
-
-								lightPdf = lightRec.pdf * selectionPdf;
+								lightPdf = lightRec.pdf;
 								rayDataStorage[ index ].lightDirection = lightRec.direction;
 								rayDataStorage[ index ].lightEmission = lightRec.emission;
 								rayDataStorage[ index ].lightDist = lightRec.dist;
