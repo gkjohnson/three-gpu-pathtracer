@@ -137,7 +137,10 @@ export const getSurfaceRecordFunc = ( {
 	materialStruct,
 	surfaceRecordStruct,
 	attributesStruct,
+	attributesStorage,
+	transformsStorage,
 	sampleTexel,
+	getTextureSize,
 	getUvFromChannel,
 	getColor,
 } ) => wgslTagFn/* wgsl */`
@@ -182,6 +185,42 @@ export const getSurfaceRecordFunc = ( {
 				normal = normalize( vTBN * texNormal );
 
 			}
+
+		} else if ( material.bumpMap != -1 ) {
+
+			// "Bump Mapping Unparametrized Surfaces on the GPU" by Morten S. Mikkelsen, as in three.js, with the
+			// triangle's edges in place of the screen-space derivatives
+			// https://mmikk.github.io/papers3d/mm_sfgrad_bump.pdf
+			let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
+			let a0 = ${ attributesStorage }[ hit.indices.x ];
+			let a1 = ${ attributesStorage }[ hit.indices.y ];
+			let a2 = ${ attributesStorage }[ hit.indices.z ];
+
+			// the triangle's edges in world space, and in the bump map's uv space
+			let sigmaX = ( objectInfo.matrixWorld * vec4f( a1.position.xyz - a0.position.xyz, 0.0 ) ).xyz;
+			let sigmaY = ( objectInfo.matrixWorld * vec4f( a2.position.xyz - a0.position.xyz, 0.0 ) ).xyz;
+			let uv0 = ( material.bumpMapTransform * vec3f( ${ getUvFromChannel }( a0, material.bumpMap ), 1.0 ) ).xy;
+			let uv1 = ( material.bumpMapTransform * vec3f( ${ getUvFromChannel }( a1, material.bumpMap ), 1.0 ) ).xy;
+			let uv2 = ( material.bumpMapTransform * vec3f( ${ getUvFromChannel }( a2, material.bumpMap ), 1.0 ) ).xy;
+
+			// the height gradient in uv space, with central differences one texel apart
+			let uv = ( material.bumpMapTransform * vec3f( ${ getUvFromChannel }( vertexData, material.bumpMap ), 1.0 ) ).xy;
+			let texelSize = 1.0 / ${ getTextureSize }( material.bumpMap );
+			let dx = vec2f( texelSize.x, 0.0 );
+			let dy = vec2f( 0.0, texelSize.y );
+			let gradU = ( ${ sampleTexel }( uv + dx, material.bumpMap, 0 ).x - ${ sampleTexel }( uv - dx, material.bumpMap, 0 ).x ) / ( 2.0 * texelSize.x );
+			let gradV = ( ${ sampleTexel }( uv + dy, material.bumpMap, 0 ).x - ${ sampleTexel }( uv - dy, material.bumpMap, 0 ).x ) / ( 2.0 * texelSize.y );
+
+			// bumpScale is a height in local units, so it follows the object's scale along the normal
+			let scale = material.bumpScale * length( ( transpose( objectInfo.matrixWorld ) * vec4f( baseNormal, 0.0 ) ).xyz );
+			let dBx = scale * dot( vec2f( gradU, gradV ), uv1 - uv0 );
+			let dBy = scale * dot( vec2f( gradU, gradV ), uv2 - uv0 );
+
+			let R1 = cross( sigmaY, baseNormal );
+			let R2 = cross( baseNormal, sigmaX );
+			let det = dot( sigmaX, R1 );
+			let grad = sign( det ) * ( dBx * R1 + dBy * R2 );
+			normal = normalize( abs( det ) * baseNormal - grad );
 
 		}
 

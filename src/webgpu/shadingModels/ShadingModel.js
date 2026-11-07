@@ -8,7 +8,7 @@ import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
 import { hitRecordStruct, materialStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
-import { sampleTexelFunc } from '../nodes/utils.wgsl.js';
+import { sampleTexelFunc, getTextureSizeFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
 function encodeTextureWrap( wrap ) {
@@ -96,7 +96,10 @@ export class ShadingModel {
 			materialStruct: structs.material,
 			surfaceRecordStruct: structs.surfaceRecord,
 			attributesStruct: contextProxy( 'bvhData.structs.attributes' ),
+			attributesStorage: contextProxy( 'bvhData.storage.attributes' ),
+			transformsStorage: contextProxy( 'bvhData.storage.transforms' ),
 			sampleTexel: fns.sampleTexel,
+			getTextureSize: getTextureSizeFunc( textureInfo ),
 			getUvFromChannel: contextProxyFn( 'bvhData.fns.getUvFromChannel' ),
 			getColor: contextProxyFn( 'bvhData.fns.getColor' ),
 		} );
@@ -489,9 +492,11 @@ export class ShadingModel {
 			floatArray[ index ++ ] = this.getField( m, 'anisotropy', 0.0 );
 			floatArray[ index ++ ] = this.getField( m, 'anisotropyRotation', 0.0 );
 			intArray[ index ++ ] = this.getTextureDescriptor( m, 'anisotropyMap' );
+
+			// bumpMap, bumpScale - offset 69
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'bumpMap' );
+			floatArray[ index ++ ] = this.getField( m, 'bumpScale', 1.0 );
 			index ++; // padding for mat3 alignment
-			index ++;
-			index ++;
 
 			// map transform - offset 72
 			index += this.writeTextureMatrixToArray( m, 'map', floatArray, index );
@@ -544,7 +549,10 @@ export class ShadingModel {
 			// anisotropyMap transform - offset 264
 			index += this.writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
 
-			// scattering volume - offset 276
+			// bumpMap transform - offset 276
+			index += this.writeTextureMatrixToArray( m, 'bumpMap', floatArray, index );
+
+			// scattering volume - offset 288
 			const multiscatterColor = this.getField( m, 'multiscatterColor', null );
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.r : 1.0;
 			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.g : 1.0;

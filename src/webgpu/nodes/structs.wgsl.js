@@ -120,6 +120,8 @@ export const materialStruct = new StructTypeNode( {
 	anisotropyRotation: 'float',
 	// offset 68 floats
 	anisotropyMap: 'int',
+	bumpMap: 'int',
+	bumpScale: 'float',
 
 	// offset 72 floats
 	mapTransform: 'mat3',
@@ -156,13 +158,15 @@ export const materialStruct = new StructTypeNode( {
 
 	// offset 264 floats
 	anisotropyMapTransform: 'mat3',
-
 	// offset 276 floats
+	bumpMapTransform: 'mat3',
+
+	// offset 288 floats
 	// the volume's scattering, from "KHR_materials_scatter"
 	multiscatterColor: 'vec3',
 	scatterStrength: 'float',
 	scatterAnisotropy: 'float',
-	// total size = 284
+	// total size = 296
 }, 'Material' );
 
 // A ray's surface hit. "normal" is the face normal on the hit side, "side" is -1 for back face hits and
