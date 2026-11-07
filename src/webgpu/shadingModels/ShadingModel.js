@@ -10,6 +10,7 @@ import { hitRecordStruct, materialStruct, scatterRecordStruct, surfaceRecordStru
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleTexelFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
+import { FogVolumeNodeMaterial } from '../materials/FogVolumeNodeMaterial.js';
 
 function encodeTextureWrap( wrap ) {
 
@@ -56,6 +57,11 @@ export class ShadingModel {
 		this.materialsMap = new Map();
 		this.textures = [];
 		this.texturesMap = new Map();
+
+		// The scene's FogExp2, always written as the first material, a fog volume filling all of space. Its density
+		// is the fog's extinction per unit length, where three.js fades by the square of density times distance, and
+		// zero without one
+		this.sceneFogMaterial = new FogVolumeNodeMaterial();
 
 	}
 
@@ -567,17 +573,27 @@ export class ShadingModel {
 
 		} );
 
-		materials
-			.sort( ( a, b ) => {
+		materials.sort( ( a, b ) => {
 
-				return a.uuid < b.uuid ? 1 : - 1;
+			return a.uuid < b.uuid ? 1 : - 1;
 
-			} )
-			.forEach( ( m, i ) => {
+		} );
 
-				materialsMap.set( m, i );
+		const { fog } = root;
+		const isFogExp2 = Boolean( fog && fog.isFogExp2 );
+		this.sceneFogMaterial.density = isFogExp2 ? fog.density : 0;
+		if ( isFogExp2 ) {
 
-			} );
+			this.sceneFogMaterial.color.copy( fog.color );
+
+		}
+
+		materials.unshift( this.sceneFogMaterial );
+		materials.forEach( ( m, i ) => {
+
+			materialsMap.set( m, i );
+
+		} );
 
 		// the storage is created once so the kernels keep referencing it as it grows
 		if ( this.storage.materials.proxyNode === null ) {

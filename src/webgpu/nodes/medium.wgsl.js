@@ -22,6 +22,10 @@ const MEDIUM_MAX_ANISOTROPY = 0.999;
 // apart. This could be handled more robustly with a per object id, but is skipped for now
 const MEDIUM_STACK_SIZE = 4;
 const MEDIUM_STACK_EMPTY = 0xffffffff;
+
+// the material the shading model writes the scene fog to, a volume filling all of space. Its extinction is zero
+// without scene fog, so it's never added to a stack
+const SCENE_FOG_MATERIAL_INDEX = 0;
 export const mediumStackStruct = new StructTypeNode( {
 	ids: `array<u32, ${ MEDIUM_STACK_SIZE }>`,
 }, 'MediumStack' );
@@ -145,7 +149,7 @@ export const removeFromMediumStackFn = wgslTagFn/* wgsl */`
 
 // Returns the stack of volumes containing the point, as in Cycles' integrator_volume_stack_init: a volume whose
 // nearest hit along a ray from the point is a back face contains it. Assumes closed volumes with outward facing
-// normals
+// normals. The scene fog contains every point
 export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
 	fn getMediumStackAtPoint( point: vec3f ) -> ${ mediumStackStruct } {
@@ -165,6 +169,7 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
 		}
 
+		${ addToMediumStackFn }( &stack, ${ SCENE_FOG_MATERIAL_INDEX }u );
 		for ( var i = 0u; i < hits.count; i ++ ) {
 
 			if ( hits.side[ i ] < 0.0 ) {
@@ -278,12 +283,29 @@ export const getFogShadowDistanceFn = wgslTagFn/* wgsl */`
 `;
 
 // Returns the optical depth of the media a shadow ray starts in, up to the fog shadow distance. The traversal passes
-// fog boundaries in any order, adding their depth back from the same distance, so together they cover the ray
+// fog boundaries in any order, adding their depth back from the same distance, so together they cover the ray. The
+// scene fog has no boundaries and covers the whole ray, so distant lights don't reach through it
 export const getShadowMediumDepthFn = wgslTagFn/* wgsl */`
 
 	fn getShadowMediumDepth( stack: ${ mediumStackStruct }, maxDist: f32 ) -> vec3f {
 
-		return ${ getCombinedMediumFn }( stack ).extinction * ${ getFogShadowDistanceFn }( maxDist );
+		var depth = vec3f( 0.0 );
+		var ids = stack.ids;
+		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
+
+			if ( ids[ i ] == ${ MEDIUM_STACK_EMPTY }u ) {
+
+				continue;
+
+			}
+
+			let material = ${ materialsStorage }[ ids[ i ] ];
+			let dist = select( ${ getFogShadowDistanceFn }( maxDist ), maxDist, ids[ i ] == ${ SCENE_FOG_MATERIAL_INDEX }u );
+			depth += ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) * dist;
+
+		}
+
+		return depth;
 
 	}
 
