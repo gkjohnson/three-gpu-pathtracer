@@ -12,6 +12,7 @@ import {
 	SPOT_LIGHT_TYPE,
 	DIR_LIGHT_TYPE,
 	POINT_LIGHT_TYPE,
+	ENVIRONMENT_LIGHT_TYPE,
 	LIGHT_FAR_DISTANCE,
 	intersectsRectangleFn,
 	intersectsCircleFn,
@@ -24,9 +25,13 @@ import {
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
 
-	constructor() {
+	constructor( envInfo ) {
 
 		super();
+
+		// the environment, sampled as one more light
+		// TODO: own the environment here so the kernels take its weight, escape radiance and pdf from this node
+		this.envInfo = envInfo;
 
 		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
@@ -91,7 +96,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	_initFns() {
 
-		const { bufferNode, countNode, iesProfilesNode, iesInfoNode } = this;
+		const { bufferNode, countNode, iesProfilesNode, iesInfoNode, envInfo } = this;
 
 		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
 		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
@@ -300,6 +305,42 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				}
 
 				return result;
+
+			}
+		`;
+
+		// Picks one light or the environment by its estimated contribution at the position, and samples a direction
+		// to it. The record's pdf includes the selection's, and is zero when nothing is picked
+		this.sampleLight = wgslTagFn/* wgsl */`
+			fn sampleLight( position: vec3f, envWeight: f32, ruv: vec3f ) -> ${ lightRecordStruct } {
+
+				var lightRec: ${ lightRecordStruct };
+				var selectionPdf = 0.0;
+				let lightIndex = ${ this.selectLight }( position, envWeight, ruv.x, &selectionPdf );
+				if ( selectionPdf <= 0.0 ) {
+
+					return lightRec;
+
+				}
+
+				if ( lightIndex == ${ countNode } ) {
+
+					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+					let envSample = ${ envInfo.sampleDir }( ruv.yz );
+					lightRec.direction = envSample.direction;
+					lightRec.emission = envSample.color;
+					lightRec.pdf = envSample.pdf;
+					lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+					lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+
+				} else {
+
+					lightRec = ${ this.randomLightSample }( lightIndex, position, ruv.yz );
+
+				}
+
+				lightRec.pdf *= selectionPdf;
+				return lightRec;
 
 			}
 		`;
