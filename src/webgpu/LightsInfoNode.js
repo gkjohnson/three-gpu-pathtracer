@@ -30,6 +30,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		super();
 
 		// the environment, sampled as one more light
+		// TODO: own the environment here so the kernels take its weight, escape radiance and pdf from this node
 		this.envInfo = envInfo;
 
 		// lights packed into a storage buffer of Light structs
