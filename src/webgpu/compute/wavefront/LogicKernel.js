@@ -25,6 +25,7 @@ export class LogicKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
+			// TODO: provide these through the context, as bvhData, random and shadingModel are
 			envInfo: { value: null },
 			backgroundInfo: { value: null },
 			lightsInfo: { value: null },

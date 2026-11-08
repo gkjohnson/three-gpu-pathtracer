@@ -18,6 +18,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
+			// TODO: provide these through the context, as bvhData, random and shadingModel are
 			envInfo: { value: null },
 			lightsInfo: { value: null },
 
