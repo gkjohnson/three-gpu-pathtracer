@@ -1,7 +1,7 @@
 import { TimestampQuery } from 'three/webgpu';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
-import { AUX_LAYERS } from './nodes/aux.wgsl.js';
+import { AUX_LAYERS } from './nodes/auxiliary.wgsl.js';
 
 // the async compile state of a compute node. A node with no state has not been requested.
 const COMPILE_STARTED = 0;

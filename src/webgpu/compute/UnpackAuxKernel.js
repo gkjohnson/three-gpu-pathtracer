@@ -2,7 +2,7 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { textureStore, globalId } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { createAuxImageTarget, createAuxTarget } from './targets.js';
-import { unpackAuxAlbedoFn, unpackAuxNormalFn, AUX_LAYERS } from '../nodes/aux.wgsl.js';
+import { unpackAuxAlbedoFn, unpackAuxNormalFn, AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
 
 // Unpacks the auxiliary target into separate albedo and normal images
 export class UnpackAuxKernel extends ComputeKernel {

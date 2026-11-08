@@ -145,7 +145,7 @@ export class OIDNDenoiser extends EventDispatcher {
 	 * every frame.
 	 *
 	 * @param {Texture} target - The path traced result, in linear HDR.
-	 * @param {StorageArrayTexture|null} aux - The packed auxiliary buffers, see "aux.wgsl.js".
+	 * @param {StorageArrayTexture|null} aux - The packed auxiliary buffers, see "auxiliary.wgsl.js".
 	 * @returns {Texture|null}
 	 */
 	update( target, aux = null ) {
