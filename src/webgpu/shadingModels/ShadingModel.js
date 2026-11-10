@@ -1,6 +1,7 @@
 /** @import { WebGPURenderer } from 'three/webgpu' */
+/** @import { Material, Color } from 'three' */
 import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute } from 'three/webgpu';
-import { storage, texture, uniformArray } from 'three/tsl';
+import { storage, texture, uniform, uniformArray } from 'three/tsl';
 import { wgslTagFn, proxyFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
 import { AtlasTexture } from '../AtlasTexture.js';
@@ -10,6 +11,9 @@ import { hitRecordStruct, materialStruct, scatterRecordStruct, surfaceRecordStru
 import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleTexelFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
+
+// the "cacheBounce" of models that cache no radiance, past any bounce
+const NO_CACHE_BOUNCE = 0xFFFFFFFF;
 
 function encodeTextureWrap( wrap ) {
 
@@ -56,6 +60,30 @@ export class ShadingModel {
 		this.textures = [];
 		this.texturesMap = new Map();
 
+		/**
+		 * Whether the path tracer's "clampDirect" and "clampIndirect" apply to the paths. Models that bake a
+		 * quantity in other units than the rendered radiance, such as "LightmapShadingModel", turn it off.
+		 * @type {boolean}
+		 */
+		this.allowClamping = true;
+
+		/**
+		 * Whether rays past the camera stop at the back of single sided surfaces, as shadow rays do, rather
+		 * than pass through them as camera rays do. Renders leave it off, so reflections and refractions see
+		 * what the rasterizer would, and the back faces only block shadow rays. Bakes like
+		 * "LightmapShadingModel" turn it on, so light doesn't reach the texels through single sided walls.
+		 * @type {{ value: number }}
+		 */
+		this.occludingBackFaces = uniform( 0, 'uint' );
+
+		/**
+		 * The bounce from which paths end by adding the radiance "fns.getCachedRadiance" returns for the hit,
+		 * rather than sampling light there and scattering on. Unreachable unless a model caches radiance,
+		 * like "LightmapShadingModel" with a "LightmapCache".
+		 * @type {{ value: number }}
+		 */
+		this.cacheBounce = uniform( NO_CACHE_BOUNCE, 'uint' );
+
 	}
 
 	/**
@@ -78,6 +106,8 @@ export class ShadingModel {
 	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
 	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.
+	 * - "fns.getCachedRadiance": ( hit, surface, vertexData ) -> vec3f, the radiance a path ending at a hit
+	 *   from "cacheBounce" on gathers there, besides the surface's emission.
 	 */
 	updateFunctions() {
 
@@ -108,6 +138,17 @@ export class ShadingModel {
 				record.direction = normalize( surf.normalBasis * wi );
 
 				return record;
+
+			}
+
+		`;
+
+		// nothing is cached by default, see "cacheBounce"
+		fns.getCachedRadiance = wgslTagFn/* wgsl */`
+
+			fn getCachedRadiance( hit: ${ hitRecordStruct }, surf: ${ structs.surfaceRecord }, vertexData: ${ contextProxy( 'bvhData.structs.attributes' ) } ) -> vec3f {
+
+				return vec3f( 0.0 );
 
 			}
 
@@ -625,6 +666,36 @@ export class ShadingModel {
 			}
 
 		}
+
+	}
+
+	/**
+	 * Writes the radiance a material emits to "target" when next event estimation can sample its triangles
+	 * as lights, returning false when it can't: materials without emission, with an emissive map, or with
+	 * transparency or alpha testing, whose emission varies over their surface, are only found by bsdf rays.
+	 *
+	 * @param {Material} material
+	 * @param {Color} target
+	 * @returns {boolean}
+	 */
+	getLightEmission( material, target ) {
+
+		// TODO: sample emissive maps, which needs their texel at the sampled point
+		const intensity = this.getField( material, 'emissiveIntensity', 0.0 );
+		if ( ! ( 'emissive' in material ) || intensity <= 0 || material.emissiveMap ) {
+
+			return false;
+
+		}
+
+		if ( material.transparent || material.alphaTest > 0 || material.alphaMap ) {
+
+			return false;
+
+		}
+
+		target.copy( material.emissive ).multiplyScalar( intensity );
+		return target.r + target.g + target.b > 0;
 
 	}
 

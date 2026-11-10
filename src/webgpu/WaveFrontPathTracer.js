@@ -144,6 +144,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.mediumKernel.context.bvhData = bvhData;
 		this.mediumKernel.needsUpdate = true;
 
+		// the camera ray function decides which pixels take a path slot
+		this.populatePixelIndicesKernel.context.bvhData = bvhData;
+		this.populatePixelIndicesKernel.needsUpdate = true;
+
 		this.reset();
 
 	}
@@ -152,8 +156,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.rebuild();
 
-		// MaterialKernel bakes in the camera ray function, so a camera swap needs a recompile
+		// MaterialKernel and PopulatePixelIndicesKernel bake in the camera ray function, so a camera swap needs a
+		// recompile
 		this.materialKernel.needsUpdate = true;
+		this.populatePixelIndicesKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -173,6 +179,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel.needsUpdate = true;
 
 		this.mediumKernel.context.random = random;
+		this.populatePixelIndicesKernel.context.random = random;
+		this.populatePixelIndicesKernel.needsUpdate = true;
 		this.mediumKernel.needsUpdate = true;
 
 		this.reset();
@@ -229,6 +237,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	setLights( lights ) {
 
 		this.lightsInfo.updateFrom( this.renderer, lights );
+		this.reset();
+
+	}
+
+	setEmissiveLights( emissive ) {
+
+		this.lightsInfo.updateEmissive( emissive );
 		this.reset();
 
 	}
@@ -495,11 +510,15 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		zeroDispatchKernel.target = this.queueCounters;
 		this.dispatch( zeroDispatchKernel, [ QUEUE_COUNTER_COUNT ] );
 
-		// assign every path slot in use a pixel and park the overflow pixels in the pixel queue
+		// clear the path slots in use, then assign them the pixels the camera accepts and park the overflow
+		// pixels in the pixel queue
 		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 		populatePixelIndicesKernel.frameBudget = Math.min( this.rayCount, pixelCount );
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
+		populatePixelIndicesKernel.assignPixels = 0;
+		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
+		populatePixelIndicesKernel.assignPixels = 1;
 		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
 		// the sample count indexes each pixel's sequence, and the global seed gives each render its own

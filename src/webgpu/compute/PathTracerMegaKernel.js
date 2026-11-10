@@ -11,7 +11,7 @@ import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFun
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
-import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT, PIXEL_JITTER_INSET } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -59,6 +59,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
+		const cullBackFaces = contextProxy( 'bvhData.cullBackFaces' );
+		const occludingBackFaces = contextProxy( 'shadingModel.occludingBackFaces' );
 		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
@@ -66,6 +68,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+		const getCachedRadianceFn = contextProxyFn( 'shadingModel.fns.getCachedRadiance' );
+		const cacheBounce = contextProxy( 'shadingModel.cacheBounce' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		// environment resources
@@ -84,6 +88,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
 		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
 		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
+		const getEmissiveWeightFn = proxyFn( 'lightsInfo.value.getEmissiveWeight', params );
+		const sampleEmissiveFn = proxyFn( 'lightsInfo.value.sampleEmissive', params );
+		const getEmissiveHitPdfFn = proxyFn( 'lightsInfo.value.getEmissiveHitPdf', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const shader = wgslTagFn/* wgsl */`
@@ -142,7 +149,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				${ rngInit }( globalSeed, indexUV.xy, sampleIndex, 0 );
 
 				// scene ray
-				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
+				let jitter = mix( vec2f( ${ PIXEL_JITTER_INSET } ), vec2f( 1.0 - ${ PIXEL_JITTER_INSET } ), ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) );
+				let jitteredUv = uv + jitter / vec2f( targetDimensions );
 				var ray: ${ rayStruct };
 				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 
@@ -218,6 +226,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					var hitResult: ${ raycastOutput };
+					// camera rays look through the back of single sided surfaces, and the rays past them unless the
+					// shading model has them occlude
+					${ cullBackFaces } = bounce == 0u || ${ occludingBackFaces } == 0u;
 					let didHit = ${ raycastFirstHitFn }( traceRay, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
@@ -273,7 +284,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight + ${ getEmissiveWeightFn }( ray.origin );
 
 					}
 
@@ -362,6 +373,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
+						// the back of a single sided surface, which only rays past the camera hit with "occludingBackFaces",
+						// blocks them like it blocks shadow rays: an occluder that takes and reflects no light
+						if ( materialInfo.side != 0.0 && hit.side != materialInfo.side ) {
+
+							break;
+
+						}
+
 						let isDispersive = surface.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
 						if ( isDispersive ) {
 
@@ -384,9 +403,34 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						// emission, clamped at the depth of the segment that found it, as in Cycles
-						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce, clampDirect, clampIndirect );
+						// emission, clamped at the depth of the segment that found it, as in Cycles. Emitters that NEE
+						// samples are weighted against the chance of having sampled the hit point from the vertex the
+						// ray left
+						var emissionMisWeight = 1.0;
+						if ( isMISWeighted ) {
+
+							let cosLight = dot( hitResult.normal, ray.direction );
+							let emissivePdf = ${ getEmissiveHitPdfFn }( u32( hit.objectIndex ), rayStart + hitResult.dist, cosLight );
+							if ( emissivePdf > 0.0 ) {
+
+								let selectionPdf = ${ getEmissiveWeightFn }( ray.origin ) / lightTotalWeight;
+								emissionMisWeight = ${ misHeuristicFn }( bsdfPdf, emissivePdf * selectionPdf );
+
+							}
+
+						}
+
+						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission * emissionMisWeight, bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( emission, 0.0 );
+
+						// from the cache bounce on the path ends with the radiance the shading model cached for the hit,
+						// which holds its light, so nothing is sampled there
+						if ( bounce >= ${ cacheBounce } ) {
+
+							resultColor += vec4f( throughputColor * ${ getCachedRadianceFn }( hit, surface, vertexData ), 0.0 );
+							break;
+
+						}
 
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution
@@ -394,11 +438,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
 							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, ruv.x, &selectionPdf );
+							let emissiveWeight = ${ getEmissiveWeightFn }( vertexData.position.xyz );
+							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, emissiveWeight, ruv.x, &selectionPdf );
 							if ( selectionPdf > 0.0 ) {
 
 								var lightRec: ${ lightRecordStruct };
-								if ( envActive && lightIndex == lightsCount ) {
+								if ( lightIndex == lightsCount + 1u ) {
+
+									// an emissive triangle, picked with the rest of the light choice's random number
+									let triangleRandom = clamp( 1.0 - ( 1.0 - ruv.x ) / selectionPdf, 0.0, 0.99999994 );
+									lightRec = ${ sampleEmissiveFn }( vertexData.position.xyz, vec3f( triangleRandom, ruv.yz ) );
+
+								} else if ( envActive && lightIndex == lightsCount ) {
 
 									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
 									let envSample = ${ sampleEnvDir }( ruv.yz );
@@ -422,7 +473,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										var shadowRay: ${ rayStruct };
 										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
 										shadowRay.direction = lightRec.direction;
-										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
+
+										// the light distance is measured from the surface, so the offset the origin moved toward the
+										// light comes off it. Otherwise shadow rays can reach emissive triangles they sampled
+										let originOffset = dot( shadowRay.origin - vertexData.position.xyz, lightRec.direction );
+										shadowRay.maxDist = ( lightRec.dist - originOffset ) * ( 1.0 - ${ LIGHT_EPSILON } );
 
 										// opaque occlusion up to the light distance, attenuated by the partially
 										// transparent surfaces passed

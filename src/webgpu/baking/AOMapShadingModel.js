@@ -207,6 +207,13 @@ export class AOMapShadingModel extends ShadingModel {
 
 	}
 
+	// occlusion takes no light, so emitters aren't sampled
+	getLightEmission() {
+
+		return false;
+
+	}
+
 	writeMaterialsBuffer( materials ) {
 
 		// NOTE: make the minimum material buffer length 2 in order to avoid TSL converting it to a scalar

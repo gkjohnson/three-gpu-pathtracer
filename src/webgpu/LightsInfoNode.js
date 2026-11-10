@@ -1,5 +1,5 @@
 import { storage, uniform, uniformArray, texture } from 'three/tsl';
-import { StorageBufferAttribute, HalfFloatType } from 'three/webgpu';
+import { StorageBufferAttribute, HalfFloatType, Vector4 } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { AtlasTexture } from './AtlasTexture.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
@@ -12,6 +12,7 @@ import {
 	SPOT_LIGHT_TYPE,
 	DIR_LIGHT_TYPE,
 	POINT_LIGHT_TYPE,
+	EMISSIVE_LIGHT_TYPE,
 	LIGHT_FAR_DISTANCE,
 	intersectsRectangleFn,
 	intersectsCircleFn,
@@ -21,6 +22,16 @@ import {
 	getDistanceAttenuationFn,
 	getSpotLightNearestFn,
 } from './nodes/lights.wgsl.js';
+
+// vec4 items per emissive triangle: the corner and the cumulative share of the power, the two edges,
+// with the emitting sides in the second edge's w, and the emitted radiance with the triangle's
+// sampling pdf over its area
+export const EMISSIVE_TRIANGLE_STRIDE = 4;
+
+// emitting sides of an emissive triangle, by its world space winding
+export const EMISSIVE_FRONT_SIDE = 0;
+export const EMISSIVE_BACK_SIDE = 1;
+export const EMISSIVE_DOUBLE_SIDE = 2;
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
 
@@ -37,6 +48,17 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.iesAtlas = new AtlasTexture( { type: HalfFloatType } );
 		this.iesProfilesNode = texture( this.iesAtlas.texture );
 		this.iesInfoNode = uniformArray( this.iesAtlas.textureInfo, 'uvec4' ).setName( 'iesInfo' );
+
+		// the triangles of emissive meshes, sampled as lights in proportion to their power, and the pdf
+		// factor of each transform slot that bsdf rays hitting an emitter are weighted with
+		this.emissiveCount = 0;
+		this.emissiveCountNode = uniform( 0, 'uint' );
+		this.emissivePowerNode = uniform( 0 );
+		this.emissiveBoundsNode = uniform( new Vector4() );
+		this.emissiveBuffer = new StorageBufferAttribute( new Float32Array( 2 * EMISSIVE_TRIANGLE_STRIDE * 4 ), 4 );
+		this.emissiveNode = storage( this.emissiveBuffer, 'vec4' ).toReadOnly().setName( 'emissiveTriangles' );
+		this.emissiveSlotBuffer = new StorageBufferAttribute( new Float32Array( 2 ), 1 );
+		this.emissiveSlotNode = storage( this.emissiveSlotBuffer, 'float' ).toReadOnly().setName( 'emissiveSlots' );
 
 		this._initFns();
 
@@ -86,9 +108,57 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	}
 
+	/**
+	 * Sets the emissive triangles that next event estimation samples, as built by
+	 * "WebGPUPathTracer" from the scene.
+	 *
+	 * @param {Object} emissive
+	 * @param {Float32Array} emissive.triangles - EMISSIVE_TRIANGLE_STRIDE vec4s per triangle.
+	 * @param {Float32Array} emissive.slots - The light pdf factor of each transform slot, zero for slots that are not sampled.
+	 * @param {number} emissive.count
+	 * @param {number} emissive.power - The total power the triangles are sampled by.
+	 * @param {Vector4} emissive.bounds - The bounding sphere of the triangles.
+	 */
+	updateEmissive( { triangles, slots, count, power, bounds } ) {
+
+		// at least two items so TSL keeps the buffers arrays
+		const trianglesLength = Math.max( count, 2 ) * EMISSIVE_TRIANGLE_STRIDE * 4;
+		if ( this.emissiveBuffer.array.length !== trianglesLength ) {
+
+			this.emissiveBuffer.dispose();
+			this.emissiveBuffer = new StorageBufferAttribute( new Float32Array( trianglesLength ), 4 );
+			this.emissiveNode.value = this.emissiveBuffer;
+
+		}
+
+		const slotsLength = Math.max( slots.length, 2 );
+		if ( this.emissiveSlotBuffer.array.length !== slotsLength ) {
+
+			this.emissiveSlotBuffer.dispose();
+			this.emissiveSlotBuffer = new StorageBufferAttribute( new Float32Array( slotsLength ), 1 );
+			this.emissiveSlotNode.value = this.emissiveSlotBuffer;
+
+		}
+
+		this.emissiveBuffer.array.fill( 0 );
+		this.emissiveBuffer.array.set( triangles.subarray( 0, count * EMISSIVE_TRIANGLE_STRIDE * 4 ) );
+		this.emissiveBuffer.needsUpdate = true;
+
+		this.emissiveSlotBuffer.array.fill( 0 );
+		this.emissiveSlotBuffer.array.set( slots );
+		this.emissiveSlotBuffer.needsUpdate = true;
+
+		this.emissiveCount = count;
+		this.emissiveCountNode.value = count;
+		this.emissivePowerNode.value = power;
+		this.emissiveBoundsNode.value.copy( bounds );
+
+	}
+
 	_initFns() {
 
 		const { bufferNode, countNode, iesProfilesNode, iesInfoNode } = this;
+		const { emissiveNode, emissiveSlotNode, emissiveCountNode, emissivePowerNode, emissiveBoundsNode } = this;
 
 		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
 		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
@@ -170,13 +240,32 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// Chooses a light, or the environment when the returned index equals the light count, in
-		// proportion to the estimated weights. The pdf is zero when nothing can light the position.
+		// A cheap estimate of how much light the emissive triangles together send to a position, like
+		// "getLightWeight" for an area light the size of their bounding sphere
+		this.getEmissiveWeight = wgslTagFn/* wgsl */`
+			fn getEmissiveWeight( position: vec3f ) -> f32 {
+
+				if ( ${ emissiveCountNode } == 0u ) {
+
+					return 0.0;
+
+				}
+
+				let bounds = ${ emissiveBoundsNode };
+				let toCenter = bounds.xyz - position;
+				return ${ emissivePowerNode } / max( dot( toCenter, toCenter ), bounds.w * bounds.w );
+
+			}
+		`;
+
+		// Chooses a light, the environment when the returned index equals the light count, or the emissive
+		// triangles when it is one past it, in proportion to the estimated weights. The pdf is zero when
+		// nothing can light the position.
 		this.selectLight = wgslTagFn/* wgsl */`
-			fn selectLight( position: vec3f, envWeight: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
+			fn selectLight( position: vec3f, envWeight: f32, emissiveWeight: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
 
 				let count = ${ countNode };
-				let totalWeight = ${ this.getLightsWeight }( position ) + envWeight;
+				let totalWeight = ${ this.getLightsWeight }( position ) + envWeight + emissiveWeight;
 				if ( totalWeight <= 0.0 ) {
 
 					*selectionPdf = 0.0;
@@ -207,10 +296,19 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
-				// rounding can carry the target past the last light when there is no environment
-				if ( index == count && envWeight <= 0.0 ) {
+				// past the lights, the environment and then the emissive triangles. Rounding can carry the
+				// target past the last weighted choice
+				if ( index == count ) {
 
-					index = lastWeighted;
+					if ( emissiveWeight > 0.0 && ( targetWeight >= accumulated + envWeight || envWeight <= 0.0 ) ) {
+
+						index = count + 1u;
+
+					} else if ( envWeight <= 0.0 ) {
+
+						index = lastWeighted;
+
+					}
 
 				}
 
@@ -219,10 +317,86 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 					weight = ${ this.getLightWeight }( index, position );
 
+				} else if ( index > count ) {
+
+					weight = emissiveWeight;
+
 				}
 
 				*selectionPdf = weight / totalWeight;
 				return index;
+
+			}
+		`;
+
+		// Samples a point on an emissive triangle, picked in proportion to its power with the cumulative
+		// shares, and returns it as a light record. The pdf is over the solid angle, and zero when the
+		// position is behind a one sided emitter
+		this.sampleEmissive = wgslTagFn/* wgsl */`
+			fn sampleEmissive( position: vec3f, r: vec3f ) -> ${ lightRecordStruct } {
+
+				var lower = 0u;
+				var upper = ${ emissiveCountNode } - 1u;
+				while ( lower < upper ) {
+
+					let middle = ( lower + upper ) >> 1u;
+					if ( ${ emissiveNode }[ middle * ${ EMISSIVE_TRIANGLE_STRIDE }u ].w < r.x ) {
+
+						lower = middle + 1u;
+
+					} else {
+
+						upper = middle;
+
+					}
+
+				}
+
+				let base = lower * ${ EMISSIVE_TRIANGLE_STRIDE }u;
+				let corner = ${ emissiveNode }[ base ];
+				let edge1 = ${ emissiveNode }[ base + 1u ];
+				let edge2 = ${ emissiveNode }[ base + 2u ];
+				let emission = ${ emissiveNode }[ base + 3u ];
+
+				// a uniformly distributed point on the triangle
+				let s = sqrt( r.y );
+				let point = corner.xyz + edge1.xyz * ( s * ( 1.0 - r.z ) ) + edge2.xyz * ( s * r.z );
+				let toLight = point - position;
+				let distSq = max( dot( toLight, toLight ), 1e-12 );
+				let dist = sqrt( distSq );
+				let direction = toLight / dist;
+
+				// the cosine at the emitter on its emitting sides
+				var cosLight = - dot( normalize( cross( edge1.xyz, edge2.xyz ) ), direction );
+				let sides = u32( edge2.w );
+				if ( sides == ${ EMISSIVE_BACK_SIDE }u ) {
+
+					cosLight = - cosLight;
+
+				} else if ( sides == ${ EMISSIVE_DOUBLE_SIDE }u ) {
+
+					cosLight = abs( cosLight );
+
+				}
+
+				var result: ${ lightRecordStruct };
+				result.lightType = ${ EMISSIVE_LIGHT_TYPE };
+				result.direction = direction;
+				result.dist = dist;
+				result.emission = emission.rgb;
+				result.pdf = select( 0.0, emission.w * distSq / cosLight, cosLight > 0.0 );
+				return result;
+
+			}
+		`;
+
+		// The solid angle pdf of sampling the point a ray from a position hit at the given distance and cosine
+		// on the emitter of a transform slot, before choosing the emissive triangles among the lights. Zero for
+		// emitters that are not sampled
+		this.getEmissiveHitPdf = wgslTagFn/* wgsl */`
+			fn getEmissiveHitPdf( slot: u32, dist: f32, cosLight: f32 ) -> f32 {
+
+				return ${ emissiveSlotNode }[ slot ] * dist * dist / max( abs( cosLight ), 1e-6 );
 
 			}
 		`;
@@ -355,6 +529,8 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		this.tex.dispose();
 		this.buffer.dispose();
+		this.emissiveBuffer.dispose();
+		this.emissiveSlotBuffer.dispose();
 		this.iesAtlas.dispose();
 
 	}

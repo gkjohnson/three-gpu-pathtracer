@@ -34,6 +34,8 @@ export class MediumKernel extends ComputeKernel {
 
 		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 		const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
+		const cullBackFaces = contextProxy( 'bvhData.cullBackFaces' );
+		const occludingBackFaces = contextProxy( 'shadingModel.occludingBackFaces' );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -72,6 +74,7 @@ export class MediumKernel extends ComputeKernel {
 					ray.maxDist = scatterDist;
 
 					var hitResult: ${ raycastOutput };
+					${ cullBackFaces } = ${ occludingBackFaces } == 0u;
 					let didHit = ${ raycastFirstHitFn }( ray, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 

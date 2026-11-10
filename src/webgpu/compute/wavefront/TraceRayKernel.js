@@ -23,6 +23,7 @@ export class TraceRayKernel extends ComputeKernel {
 
 		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 		const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
+		const cullBackFaces = contextProxy( 'bvhData.cullBackFaces' );
 
 		const fn = wgslTagFn /* wgsl */`
 
@@ -46,6 +47,7 @@ export class TraceRayKernel extends ComputeKernel {
 
 				let ray = Ray( queuedRay.origin, queuedRay.direction, queuedRay.maxDist );
 				var hitResult: ${ raycastOutput };
+				${ cullBackFaces } = queuedRay.cullBackFaces != 0u;
 				if ( ${ raycastFirstHitFn }( ray, &hitResult ) ) {
 
 					rayIntersectionsStorage[ index ].barycoord = hitResult.barycoord;

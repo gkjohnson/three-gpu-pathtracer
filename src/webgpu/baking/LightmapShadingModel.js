@@ -1,4 +1,6 @@
-import { wgslTagFn, contextProxy } from 'three-mesh-bvh/webgpu';
+/** @import { LightmapCache } from './LightmapCache.js' */
+import { sampler } from 'three/tsl';
+import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { GLTFShadingModel } from '../shadingModels/GLTFShadingModel.js';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
@@ -9,14 +11,46 @@ import { hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
  * white diffuse so the path accumulates the light arriving there, its irradiance, while every
  * later bounce uses the scene's materials so the indirect light carries their colors. Use with a
  * camera that aims its rays at the texel surface so it is the first hit.
+ *
+ * With a "LightmapCache" the paths end at the surface the texel's ray hits, gathering the irradiance
+ * cached there as the light it reflects, so each sample traces two rays and a shadow ray. The bake
+ * then converges much faster to an approximation limited by the cache, rather than to the path traced
+ * result.
  */
 export class LightmapShadingModel extends GLTFShadingModel {
+
+	/**
+	 * @param {Object} [options] - The options of "GLTFShadingModel", and:
+	 * @param {LightmapCache} [options.cache] - Irradiance cached over the atlas, solved with "update" first.
+	 */
+	constructor( options = {} ) {
+
+		const { cache = null, ...rest } = options;
+		super( rest );
+
+		this.cache = cache;
+		if ( cache ) {
+
+			this.cacheBounce.value = 1;
+
+		}
+
+		// the texel's white lambertian has f = 1 rather than 1 / PI so the map holds irradiance, so every
+		// path carries PI times the throughput a render of it would. The clamps, tuned for the display,
+		// would then cut most of the bounced light rather than its fireflies. Bakes stay unbiased instead
+		this.allowClamping = false;
+
+		// bounce rays that passed through the back of single sided walls would bring light in that their shadow
+		// rays can't, onto texels other geometry covers
+		this.occludingBackFaces.value = 1;
+
+	}
 
 	updateFunctions() {
 
 		super.updateFunctions();
 
-		const { structs, fns } = this;
+		const { structs, fns, cache } = this;
 		const gltfGetSurfaceRecord = fns.getSurfaceRecord.proxyNode;
 		const gltfBsdfSample = fns.bsdfSample.proxyNode;
 		const gltfBsdfEvalPdf = fns.bsdfEvalPdf.proxyNode;
@@ -91,6 +125,37 @@ export class LightmapShadingModel extends GLTFShadingModel {
 			}
 
 		`;
+
+		// the light a hit reflects toward the texel, from the irradiance cached over the atlas. Surfaces
+		// without light map uvs are not in the cache, and block light without reflecting it. The cache holds the
+		// light on the front of the surfaces, so a back face, like the inside of a closed mesh, reflects none
+		if ( cache ) {
+
+			const getUvFromChannel = contextProxyFn( 'bvhData.fns.getUvFromChannel' );
+			const transforms = contextProxy( 'bvhData.storage.transforms' );
+			const cacheSampler = sampler( cache.textureNode );
+			fns.getCachedRadiance = wgslTagFn/* wgsl */`
+
+				fn lightmapGetCachedRadiance( hit: ${ hitRecordStruct }, surf: ${ structs.surfaceRecord }, vertexData: ${ contextProxy( 'bvhData.structs.attributes' ) } ) -> vec3f {
+
+					let object = ${ transforms }[ u32( hit.objectIndex ) ];
+					if ( ( object.flags & 1u ) == 0u || hit.side < 0.0 ) {
+
+						return vec3f( 0.0 );
+
+					}
+
+					// uv channel 1, packed as in the "*Map" descriptors
+					let uv = ${ getUvFromChannel }( vertexData, 1 << 23 );
+					let irradiance = textureSampleLevel( ${ cache.textureNode }, ${ cacheSampler }, uv, 0.0 ).rgb;
+					let albedo = surf.color * ( 1.0 - surf.metalness ) * ( 1.0 - surf.transmission );
+					return albedo * irradiance / PI;
+
+				}
+
+			`;
+
+		}
 
 	}
 

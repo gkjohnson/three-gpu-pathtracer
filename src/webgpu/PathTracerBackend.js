@@ -117,6 +117,10 @@ export class PathTracerBackend {
 
 	}
 
+	setEmissiveLights( /* emissive */ ) {
+
+	}
+
 	setBackground(
 		background,
 		backgroundIntensity,

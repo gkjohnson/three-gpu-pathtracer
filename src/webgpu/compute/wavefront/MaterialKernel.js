@@ -7,10 +7,10 @@ import { contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-b
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import {
 	rayDataStruct, traceQueuedRayStruct,
-	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
+	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER, NO_PIXEL,
 } from './structs.js';
 import { enterMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
-import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
+import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG, PIXEL_JITTER_INSET } from '../../constants.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
@@ -49,6 +49,9 @@ export class MaterialKernel extends ComputeKernel {
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+		const occludingBackFaces = contextProxy( 'shadingModel.occludingBackFaces' );
+		const getCachedRadianceFn = contextProxyFn( 'shadingModel.fns.getCachedRadiance' );
+		const cacheBounce = contextProxy( 'shadingModel.cacheBounce' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -85,25 +88,40 @@ export class MaterialKernel extends ComputeKernel {
 				if ( input.hit.objectIndex < 0 ) {
 
 					// the slot's path has terminated: recycle the pixel through the overflow queue and
-					// generate a fresh camera ray
+					// generate a fresh camera ray. Pixels that finished, and slots without a pixel, try a few
+					// more places in the queue rather than leave the slot empty for a frame
 					var pixelIndex = input.pixelIndex;
+					var indexUV = vec2u( 0u );
+					var combinedField = 0u;
+					var samples = 0u;
+					var isComplete = true;
 					let elementCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ] );
-					if ( elementCount > 0u ) {
+					for ( var attempt = 0u; attempt < 4u; attempt ++ ) {
 
-						// TODO: If we've pulled off a pixel that's already finished we currently just
-						// write a no-op ray, wasting a frame. It may be better to iterate over a few
-						// points in the queue to see if we can find one we can use.
-						let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ], 1u ) % elementCount;
-						pixelIndex = atomicExchange( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], pixelIndex );
+						if ( elementCount > 0u ) {
+
+							let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ], 1u ) % elementCount;
+							pixelIndex = atomicExchange( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], pixelIndex );
+
+						}
+
+						if ( pixelIndex != ${ NO_PIXEL }u ) {
+
+							// skip the pixel if it has hit the sample limit
+							indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
+							combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+							samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
+							isComplete = maxSamples != 0u && samples >= maxSamples;
+
+						}
+
+						if ( ! isComplete || elementCount == 0u ) {
+
+							break;
+
+						}
 
 					}
-
-					let indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
-
-					// skip the pixel if it has hit the sample limit
-					let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
-					let samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
-					let isComplete = maxSamples != 0u && samples >= maxSamples;
 
 					if ( isComplete ) {
 
@@ -117,7 +135,8 @@ export class MaterialKernel extends ComputeKernel {
 					${ rngInit }( globalSeed, indexUV, samples, 0 );
 
 					let uv = vec2f( indexUV ) / vec2f( targetDimensions );
-					let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
+					let jitter = mix( vec2f( ${ PIXEL_JITTER_INSET } ), vec2f( 1.0 - ${ PIXEL_JITTER_INSET } ), ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) );
+					let jitteredUv = uv + jitter / vec2f( targetDimensions );
 					var ray: ${ rayStruct };
 					if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 
@@ -147,6 +166,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue[ rayIndex ].rngIndex = 0u;
 					rayQueue[ rayIndex ].sampleIndex = samples;
 					rayQueue[ rayIndex ].maxDist = ray.maxDist;
+					rayQueue[ rayIndex ].cullBackFaces = 1u;
 
 					rayDataStorage[ index ].origin = ray.origin;
 					rayDataStorage[ index ].direction = ray.direction;
@@ -160,6 +180,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].minPdf = 1.0;
 					rayDataStorage[ index ].isFullyTransmissive = 1u;
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
+					rayDataStorage[ index ].emissionMisWeight = 1.0;
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].alphaDepth = 0u;
 					rayDataStorage[ index ].rayStart = 0.0;
@@ -249,6 +270,7 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue[ alphaIndex ].pixelIndex = input.pixelIndex;
 							rayQueue[ alphaIndex ].rngIndex = input.hit.bounce + input.alphaDepth + 1u + input.subsurfaceBounces;
 							rayQueue[ alphaIndex ].sampleIndex = input.sampleIndex;
+							rayQueue[ alphaIndex ].cullBackFaces = select( 0u, 1u, input.hit.bounce == 0u || ${ occludingBackFaces } == 0u );
 							// the origin advanced to the hit point, so the remaining budget shrinks by the
 							// distance already traced
 							rayQueue[ alphaIndex ].maxDist = max( input.maxDist - input.hit.dist, 0.0 );
@@ -265,6 +287,19 @@ export class MaterialKernel extends ComputeKernel {
 						rayDataStorage[ index ].alphaDepth = input.alphaDepth + 1u;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+						return;
+
+					}
+
+					// the back of a single sided surface, which only rays past the camera hit with "occludingBackFaces", blocks
+					// them like it blocks shadow rays: an occluder that takes and reflects no light. A zeroed throughput
+					// terminates in LogicKernel
+					if ( materialInfo.side != 0.0 && input.hit.side != materialInfo.side ) {
+
+						rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
+						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].lightPdf = 0.0;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
@@ -296,6 +331,23 @@ export class MaterialKernel extends ComputeKernel {
 
 						throughputColor *= ${ transmissionAttenuationFunc }( input.hit.dist,surface.attenuationColor, surface.attenuationDistance );
 						rayDataStorage[ index ].throughputColor = throughputColor;
+
+					}
+
+					// from the cache bounce on the path ends with the radiance the shading model cached for the hit, which
+					// holds its light, so nothing is sampled there. The emission is staged with its MIS weight, and the
+					// zeroed pdf terminates the path in LogicKernel
+					if ( input.hit.bounce >= ${ cacheBounce } ) {
+
+						let cached = throughputColor * ${ getCachedRadianceFn }( input.hit, surface, vertexData );
+						rayDataStorage[ index ].resultColor = input.resultColor + vec4f( cached, 0.0 );
+						rayDataStorage[ index ].emission = surface.emission;
+						rayDataStorage[ index ].scatterColor = vec3f( 0.0 );
+						rayDataStorage[ index ].scatterPdf = 0.0;
+						rayDataStorage[ index ].hit.bounce = input.hit.bounce + 1u;
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+						return;
 
 					}
 
@@ -395,6 +447,7 @@ export class MaterialKernel extends ComputeKernel {
 						rayQueue[ rayIndex ].rngIndex = newBounce + input.alphaDepth + input.subsurfaceBounces;
 						rayQueue[ rayIndex ].sampleIndex = input.sampleIndex;
 						rayQueue[ rayIndex ].maxDist = 0.0;
+						rayQueue[ rayIndex ].cullBackFaces = select( 0u, 1u, ${ occludingBackFaces } == 0u );
 						rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 
 						rayDataStorage[ index ].origin = rayQueue[ rayIndex ].origin;
@@ -415,12 +468,16 @@ export class MaterialKernel extends ComputeKernel {
 							rayDataStorage[ index ].lightBsdfPdf = evalRec.pdf;
 
 							let shadowIndex = atomicAdd( &queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
-							shadowRayQueue[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+							// the light distance is measured from the surface, so the offset the origin moved toward the light
+							// comes off it. Otherwise shadow rays can reach emissive triangles they sampled
+							let shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+							let originOffset = dot( shadowOrigin - vertexData.position.xyz, input.lightDirection );
+							shadowRayQueue[ shadowIndex ].origin = shadowOrigin;
 							shadowRayQueue[ shadowIndex ].direction = input.lightDirection;
 							shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
 							shadowRayQueue[ shadowIndex ].rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
 							shadowRayQueue[ shadowIndex ].sampleIndex = input.sampleIndex;
-							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+							shadowRayQueue[ shadowIndex ].maxDist = ( input.lightDist - originOffset ) * ( 1.0 - ${ LIGHT_EPSILON } );
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {

@@ -14,6 +14,7 @@ export * from './baking/AOMapCamera.js';
 export * from './baking/LightmapCamera.js';
 export * from './baking/AOMapShadingModel.js';
 export * from './baking/LightmapShadingModel.js';
+export * from './baking/LightmapCache.js';
 
 // extend the cameras to avoid adding WebGPU imports to the WebGLPathTracer
 import './shims/EquirectCameraShim.js';

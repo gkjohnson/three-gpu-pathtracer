@@ -105,10 +105,11 @@ export class UVMapCamera extends Camera {
 		return wgslTagFn/* wgsl */`
 			fn getTexelSurface( uvIn: vec2f, surface: ptr<function, ${ texelSurfaceStruct }> ) -> bool {
 
-				// the tracer stores pixel rows flipped
+				// the tracer stores pixel rows flipped. The tracer keeps its jitter inside the pixel, so the floor
+				// can't round into a neighboring texel, and the clamp keeps the last row in the texture
 				let uv = vec2f( uvIn.x, 1.0 - uvIn.y );
 				let dims = vec2f( textureDimensions( ${ _idTextureNode }, 0 ) );
-				let texel = floor( uv * dims );
+				let texel = clamp( floor( uv * dims ), vec2f( 0.0 ), dims - 1.0 );
 				let ids = textureLoad( ${ _idTextureNode }, vec2i( texel ), 0 );
 				let id = i32( round( ids.r ) ) - 1;
 				if ( id < 0 ) {

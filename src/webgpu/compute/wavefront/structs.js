@@ -91,6 +91,9 @@ const rayDataMembers = {
 	// whether the staged segment starts at a medium scatter event, where no light is sampled
 	mediumScattered: 'uint',
 
+	// the MIS weight of the emission staged for the hit, against sampling the hit point with NEE
+	emissionMisWeight: 'float',
+
 };
 
 // The path's last surface hit, nested first, and its medium, nested at the end to share the ray data buffer
@@ -117,7 +120,9 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 
 	sampleIndex: 'uint',
 	maxDist: 'float',
-	_alignment0: 'uint',
+
+	// whether the ray looks through the back of single sided surfaces, only camera rays do
+	cullBackFaces: 'uint',
 	_alignment1: 'uint',
 
 }, 'TraceQueuedRay' );
@@ -165,9 +170,14 @@ export const QUEUE_COUNTER_COUNT = 2;
 export const MEDIUM_QUEUE_LENGTH = 0;
 export const MEDIUM_QUEUE_HEADER = 1;
 
-// Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
-// the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its
-// counters lead the same u32 array, ahead of the elements.
+// Round-robin queue of pixel indices waiting for a free path slot when the pixels the camera renders
+// exceed the ray data pool, sized to the pixel count so retiring slots can always return their pixel.
+// Its counters, and the count of pixels the camera accepted, lead the same u32 array, ahead of the
+// elements.
 export const PIXEL_QUEUE_CURRENT = 0;
 export const PIXEL_QUEUE_ELEMENT_COUNT = 1;
-export const PIXEL_QUEUE_HEADER = 2;
+export const PIXEL_QUEUE_ACCEPTED = 2;
+export const PIXEL_QUEUE_HEADER = 3;
+
+// the pixel index of a path slot that has no pixel, when the camera accepts fewer pixels than the pool holds
+export const NO_PIXEL = 0xFFFFFFFF;
