@@ -343,7 +343,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					${ currentObjectIndex } = objectIndex;
 
 					let material = ${ materialsStorage }[ object.materialIndex ];
-					if ( material.transparent == 1 ) {
+					if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
 						${ baseOpacityScalar } = material.opacity * object.color.a;
 
