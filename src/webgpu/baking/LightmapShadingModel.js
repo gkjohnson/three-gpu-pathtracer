@@ -21,6 +21,10 @@ export class LightmapShadingModel extends GLTFShadingModel {
 		// would then cut most of the bounced light rather than its fireflies. Bakes stay unbiased instead
 		this.allowClamping = false;
 
+		// bounce rays that passed through the back of single sided walls would bring light in that their shadow
+		// rays can't, onto texels other geometry covers
+		this.occludingBackFaces.value = 1;
+
 	}
 
 	updateFunctions() {

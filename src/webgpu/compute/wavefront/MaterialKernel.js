@@ -49,6 +49,7 @@ export class MaterialKernel extends ComputeKernel {
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+		const occludingBackFaces = contextProxy( 'shadingModel.occludingBackFaces' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -147,6 +148,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayQueue[ rayIndex ].rngIndex = 0u;
 					rayQueue[ rayIndex ].sampleIndex = samples;
 					rayQueue[ rayIndex ].maxDist = ray.maxDist;
+					rayQueue[ rayIndex ].cullBackFaces = 1u;
 
 					rayDataStorage[ index ].origin = ray.origin;
 					rayDataStorage[ index ].direction = ray.direction;
@@ -250,6 +252,7 @@ export class MaterialKernel extends ComputeKernel {
 							rayQueue[ alphaIndex ].pixelIndex = input.pixelIndex;
 							rayQueue[ alphaIndex ].rngIndex = input.hit.bounce + input.alphaDepth + 1u + input.subsurfaceBounces;
 							rayQueue[ alphaIndex ].sampleIndex = input.sampleIndex;
+							rayQueue[ alphaIndex ].cullBackFaces = select( 0u, 1u, input.hit.bounce == 0u || ${ occludingBackFaces } == 0u );
 							// the origin advanced to the hit point, so the remaining budget shrinks by the
 							// distance already traced
 							rayQueue[ alphaIndex ].maxDist = max( input.maxDist - input.hit.dist, 0.0 );
@@ -266,6 +269,19 @@ export class MaterialKernel extends ComputeKernel {
 						rayDataStorage[ index ].alphaDepth = input.alphaDepth + 1u;
 						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].scatterColor = vec3f( input.scatterPdf );
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+						return;
+
+					}
+
+					// the back of a single sided surface, which only rays past the camera hit with "occludingBackFaces", blocks
+					// them like it blocks shadow rays: an occluder that takes and reflects no light. A zeroed throughput
+					// terminates in LogicKernel
+					if ( materialInfo.side != 0.0 && input.hit.side != materialInfo.side ) {
+
+						rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
+						rayDataStorage[ index ].emission = vec3f( 0.0 );
 						rayDataStorage[ index ].lightPdf = 0.0;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 						return;
@@ -396,6 +412,7 @@ export class MaterialKernel extends ComputeKernel {
 						rayQueue[ rayIndex ].rngIndex = newBounce + input.alphaDepth + input.subsurfaceBounces;
 						rayQueue[ rayIndex ].sampleIndex = input.sampleIndex;
 						rayQueue[ rayIndex ].maxDist = 0.0;
+						rayQueue[ rayIndex ].cullBackFaces = select( 0u, 1u, ${ occludingBackFaces } == 0u );
 						rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 
 						rayDataStorage[ index ].origin = rayQueue[ rayIndex ].origin;

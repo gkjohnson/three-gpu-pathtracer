@@ -163,6 +163,7 @@ export class ShadingModel {
 	fns: object;
 	textures: Array<Texture>;
 	allowClamping: boolean;
+	occludingBackFaces: { value: number };
 
 	init( renderer: WebGPURenderer ): void;
 	updateFunctions(): void;

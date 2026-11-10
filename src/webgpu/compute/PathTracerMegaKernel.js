@@ -59,6 +59,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 		const raycastFirstHitFn = contextProxyFn( 'bvhData.fns.raycastFirstHit' );
+		const cullBackFaces = contextProxy( 'bvhData.cullBackFaces' );
+		const occludingBackFaces = contextProxy( 'shadingModel.occludingBackFaces' );
 		const raycastShadowFn = contextProxyFn( 'bvhData.fns.raycastShadow' );
 		const sampleTrianglePointFn = contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
@@ -221,6 +223,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					var hitResult: ${ raycastOutput };
+					// camera rays look through the back of single sided surfaces, and the rays past them unless the
+					// shading model has them occlude
+					${ cullBackFaces } = bounce == 0u || ${ occludingBackFaces } == 0u;
 					let didHit = ${ raycastFirstHitFn }( traceRay, &hitResult );
 					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
 
@@ -362,6 +367,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							transparentBounce ++;
 							bounce --;
 							continue;
+
+						}
+
+						// the back of a single sided surface, which only rays past the camera hit with "occludingBackFaces",
+						// blocks them like it blocks shadow rays: an occluder that takes and reflects no light
+						if ( materialInfo.side != 0.0 && hit.side != materialInfo.side ) {
+
+							break;
 
 						}
 

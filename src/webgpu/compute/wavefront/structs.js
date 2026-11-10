@@ -120,7 +120,9 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 
 	sampleIndex: 'uint',
 	maxDist: 'float',
-	_alignment0: 'uint',
+
+	// whether the ray looks through the back of single sided surfaces, only camera rays do
+	cullBackFaces: 'uint',
 	_alignment1: 'uint',
 
 }, 'TraceQueuedRay' );

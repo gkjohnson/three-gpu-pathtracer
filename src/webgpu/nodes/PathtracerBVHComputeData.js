@@ -201,6 +201,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// shadow rays hit both sides, pass through the objects not visible to them and partially transparent
 		// surfaces, and stop at the first opaque hit
 		const isShadowRay = bool( false ).toVar( 'bvh_isShadowRay' );
+
+		// camera rays look through the back of single sided surfaces, as the rasterizer does, and so do the rays
+		// past them unless the shading model's "occludingBackFaces" has them hit it like shadow rays do, where the
+		// kernels end the path. Set by the kernels before tracing
+		const cullBackFaces = bool( true ).toVar( 'bvh_cullBackFaces' );
+		this.cullBackFaces = cullBackFaces;
 		const skipShadowObject = bool( false ).toVar( 'bvh_skipShadowObject' );
 
 		const raycastOptions = {
@@ -280,8 +286,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let material = ${ materialsStorage }[ ${ currentMaterialIndex } ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							// shadow rays hit both sides
-							if ( ! ${ isShadowRay } && material.side != 0 && triResult.side != material.side ) {
+							// shadow rays hit both sides, and with "occludingBackFaces" so do bounce rays
+							if ( ! ${ isShadowRay } && ${ cullBackFaces } && material.side != 0 && triResult.side != material.side ) {
 
 								continue;
 

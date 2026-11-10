@@ -1,7 +1,7 @@
 /** @import { WebGPURenderer } from 'three/webgpu' */
 /** @import { Material, Color } from 'three' */
 import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute } from 'three/webgpu';
-import { storage, texture, uniformArray } from 'three/tsl';
+import { storage, texture, uniform, uniformArray } from 'three/tsl';
 import { wgslTagFn, proxyFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
 import { AtlasTexture } from '../AtlasTexture.js';
@@ -63,6 +63,15 @@ export class ShadingModel {
 		 * @type {boolean}
 		 */
 		this.allowClamping = true;
+
+		/**
+		 * Whether rays past the camera stop at the back of single sided surfaces, as shadow rays do, rather
+		 * than pass through them as camera rays do. Renders leave it off, so reflections and refractions see
+		 * what the rasterizer would, and the back faces only block shadow rays. Bakes like
+		 * "LightmapShadingModel" turn it on, so light doesn't reach the texels through single sided walls.
+		 * @type {{ value: number }}
+		 */
+		this.occludingBackFaces = uniform( 0, 'uint' );
 
 	}
 
