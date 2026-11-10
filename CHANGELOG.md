@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
 - WebGPUPathTracer: Rays parallel to an axis missing bounds they lie on the face of.
 - WebGPUPathTracer: "reset" restoring an old "frameBudget" when "adaptiveFrameBudget" is off.
+- WebGPUPathTracer: Alpha test not working correctly when "transparent" is not set.
 
 ## [0.0.28] - 2026.11.02
 ### Added
