@@ -68,6 +68,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+		const getCachedRadianceFn = contextProxyFn( 'shadingModel.fns.getCachedRadiance' );
+		const cacheBounce = contextProxy( 'shadingModel.cacheBounce' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		// environment resources
@@ -420,6 +422,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission * emissionMisWeight, bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( emission, 0.0 );
+
+						// from the cache bounce on the path ends with the radiance the shading model cached for the hit,
+						// which holds its light, so nothing is sampled there
+						if ( bounce >= ${ cacheBounce } ) {
+
+							resultColor += vec4f( throughputColor * ${ getCachedRadianceFn }( hit, surface, vertexData ), 0.0 );
+							break;
+
+						}
 
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution

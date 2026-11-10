@@ -50,6 +50,8 @@ export class MaterialKernel extends ComputeKernel {
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const occludingBackFaces = contextProxy( 'shadingModel.occludingBackFaces' );
+		const getCachedRadianceFn = contextProxyFn( 'shadingModel.fns.getCachedRadiance' );
+		const cacheBounce = contextProxy( 'shadingModel.cacheBounce' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -329,6 +331,23 @@ export class MaterialKernel extends ComputeKernel {
 
 						throughputColor *= ${ transmissionAttenuationFunc }( input.hit.dist,surface.attenuationColor, surface.attenuationDistance );
 						rayDataStorage[ index ].throughputColor = throughputColor;
+
+					}
+
+					// from the cache bounce on the path ends with the radiance the shading model cached for the hit, which
+					// holds its light, so nothing is sampled there. The emission is staged with its MIS weight, and the
+					// zeroed pdf terminates the path in LogicKernel
+					if ( input.hit.bounce >= ${ cacheBounce } ) {
+
+						let cached = throughputColor * ${ getCachedRadianceFn }( input.hit, surface, vertexData );
+						rayDataStorage[ index ].resultColor = input.resultColor + vec4f( cached, 0.0 );
+						rayDataStorage[ index ].emission = surface.emission;
+						rayDataStorage[ index ].scatterColor = vec3f( 0.0 );
+						rayDataStorage[ index ].scatterPdf = 0.0;
+						rayDataStorage[ index ].hit.bounce = input.hit.bounce + 1u;
+						rayDataStorage[ index ].lightPdf = 0.0;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+						return;
 
 					}
 

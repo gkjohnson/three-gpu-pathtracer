@@ -24,7 +24,9 @@ const transformStruct = new StructTypeNode( {
 	visible: 'uint',
 	materialIndex: 'uint',
 	visibleToShadowRays: 'uint',
-	_alignment0: 'uint',
+
+	// bit 0: the geometry has light map uvs, "uv1"
+	flags: 'uint',
 	color: 'vec4f',
 }, 'TransformStruct' );
 
@@ -742,9 +744,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		super.writeTransformData( info, premultiplyMatrix, writeOffset, targetBuffer );
 		this.writeMaterialData( info, writeOffset, targetBuffer );
 
-		// whether shadow rays see the object, in the slot after the material index
+		// whether shadow rays see the object, in the slot after the material index, and its flags
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 		transformBufferU32[ writeOffset * this.structs.transform.getLength() + 34 ] = info.object.visibleToShadowRays === false ? 0 : 1;
+		transformBufferU32[ writeOffset * this.structs.transform.getLength() + 35 ] = 'uv1' in info.object.geometry.attributes ? 1 : 0;
 
 	}
 

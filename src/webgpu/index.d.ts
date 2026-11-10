@@ -164,6 +164,7 @@ export class ShadingModel {
 	textures: Array<Texture>;
 	allowClamping: boolean;
 	occludingBackFaces: { value: number };
+	cacheBounce: { value: number };
 
 	init( renderer: WebGPURenderer ): void;
 	updateFunctions(): void;
@@ -191,6 +192,30 @@ export interface AOMapShadingModelOptions {
 
 }
 
+export interface LightmapCacheOptions {
+
+	resolution?: number;
+	bounces?: number;
+	samples?: number;
+	finalSamples?: number;
+
+}
+
+export class LightmapCache {
+
+	constructor( renderer: WebGPURenderer, options?: LightmapCacheOptions );
+
+	resolution: number;
+	bounces: number;
+	samples: number;
+	finalSamples: number;
+	readonly texture: Texture;
+
+	update( scene: Scene, root: Object3D ): void;
+	dispose(): void;
+
+}
+
 export class AOMapShadingModel extends ShadingModel {
 
 	constructor( options?: AOMapShadingModelOptions );
@@ -200,7 +225,19 @@ export class AOMapShadingModel extends ShadingModel {
 
 }
 
-export class LightmapShadingModel extends GLTFShadingModel {}
+export interface LightmapShadingModelOptions {
+
+	cache?: LightmapCache;
+
+}
+
+export class LightmapShadingModel extends GLTFShadingModel {
+
+	constructor( options?: LightmapShadingModelOptions );
+
+	cache: LightmapCache | null;
+
+}
 
 export class UVUnwrapper {
 

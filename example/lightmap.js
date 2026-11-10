@@ -22,7 +22,7 @@ import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
-import { WebGPUPathTracer, OIDNDenoiser, UVUnwrapper, LightmapCamera, LightmapShadingModel, GutterFiller, SeamStitcher } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser, UVUnwrapper, LightmapCamera, LightmapShadingModel, LightmapCache, GutterFiller, SeamStitcher } from 'three-gpu-pathtracer/webgpu';
 import { initUNetFromURL } from 'oidn-webgpu';
 
 // the lightmap already holds the environment's diffuse light, so the environment must only add its
@@ -64,10 +64,11 @@ const MAX_SAMPLES = 16;
 const params = {
 	view: 'pbr',
 	resolution: MAP_SIZE,
+	radianceCache: false,
 	regenerate: () => pathTracer.reset(),
 };
 
-let renderer, pathTracer, camera, scene, loader;
+let renderer, pathTracer, camera, scene, bakeScene, loader, lightmapCache;
 let model, uvCamera, gutterFiller, filledColor, filledAlbedo, filledNormal, seamStitcher, mapNode, textureQuad;
 let pbrModel, pbrMaterials, mapModel, mapMaterial;
 
@@ -143,7 +144,7 @@ async function init() {
 	scene.add( pbrModel, mapModel );
 
 	// the bake: the model as it is, lit by the environment
-	const bakeScene = new Scene();
+	bakeScene = new Scene();
 	bakeScene.environment = environment;
 	bakeScene.background = environment;
 	bakeScene.add( model );
@@ -209,6 +210,7 @@ async function init() {
 	gui.add( params, 'view', [ 'pbr', 'map', 'texture' ] );
 	gui.add( params, 'resolution', [ 128, 256, 512, 1024, 2048, 4096 ] ).onChange( setResolution );
 	gui.add( pathTracer, 'maxSamples', 1, 100, 1 );
+	gui.add( params, 'radianceCache' ).name( 'radiance cache' ).onChange( setShadingModel );
 	gui.add( params, 'regenerate' );
 
 	loader.setPercentage( 1 );
@@ -237,6 +239,28 @@ function setResolution( size ) {
 	filledAlbedo = gutterFiller.createTarget();
 	filledNormal = gutterFiller.createTarget();
 	seamStitcher = new SeamStitcher( renderer, model, uvCamera.idTexture.texture );
+
+}
+
+// with a radiance cache the bake gathers the bounced light from irradiance cached over the atlas, which
+// converges much faster than tracing the bounces, to an approximation limited by the cache
+function setShadingModel() {
+
+	let cache = null;
+	if ( params.radianceCache ) {
+
+		if ( ! lightmapCache ) {
+
+			lightmapCache = new LightmapCache( renderer );
+
+		}
+
+		lightmapCache.update( bakeScene, model );
+		cache = lightmapCache;
+
+	}
+
+	pathTracer.setShadingModel( new LightmapShadingModel( { cache } ) );
 
 }
 

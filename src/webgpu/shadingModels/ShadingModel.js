@@ -12,6 +12,9 @@ import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
 import { sampleTexelFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
+// the "cacheBounce" of models that cache no radiance, past any bounce
+const NO_CACHE_BOUNCE = 0xFFFFFFFF;
+
 function encodeTextureWrap( wrap ) {
 
 	switch ( wrap ) {
@@ -73,6 +76,14 @@ export class ShadingModel {
 		 */
 		this.occludingBackFaces = uniform( 0, 'uint' );
 
+		/**
+		 * The bounce from which paths end by adding the radiance "fns.getCachedRadiance" returns for the hit,
+		 * rather than sampling light there and scattering on. Unreachable unless a model caches radiance,
+		 * like "LightmapShadingModel" with a "LightmapCache".
+		 * @type {{ value: number }}
+		 */
+		this.cacheBounce = uniform( NO_CACHE_BOUNCE, 'uint' );
+
 	}
 
 	/**
@@ -95,6 +106,8 @@ export class ShadingModel {
 	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
 	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.
+	 * - "fns.getCachedRadiance": ( hit, surface, vertexData ) -> vec3f, the radiance a path ending at a hit
+	 *   from "cacheBounce" on gathers there, besides the surface's emission.
 	 */
 	updateFunctions() {
 
@@ -125,6 +138,17 @@ export class ShadingModel {
 				record.direction = normalize( surf.normalBasis * wi );
 
 				return record;
+
+			}
+
+		`;
+
+		// nothing is cached by default, see "cacheBounce"
+		fns.getCachedRadiance = wgslTagFn/* wgsl */`
+
+			fn getCachedRadiance( hit: ${ hitRecordStruct }, surf: ${ structs.surfaceRecord }, vertexData: ${ contextProxy( 'bvhData.structs.attributes' ) } ) -> vec3f {
+
+				return vec3f( 0.0 );
 
 			}
 

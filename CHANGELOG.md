@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Emissive surfaces are sampled as lights with next event estimation, picked by their power and weighted against bsdf hits with MIS, so scenes lit by emissive meshes converge much faster. Emitters with an emissive map, transparency or alpha testing are still only found by bsdf rays.
 - ShadingModel: "getLightEmission" decides which materials next event estimation samples as emitters.
 - ShadingModel: "allowClamping", off for "LightmapShadingModel", decides whether "clampDirect" and "clampIndirect" apply.
+- LightmapCache: Irradiance cached over a lightmap atlas, solved by baking it with its own path tracer one bounce per iteration. "LightmapShadingModel" with a "cache" ends its paths in it at the surface the texel's ray hits, so a bake converges several times faster to an approximation limited by the cache. Unbiased path tracing stays the default.
+- ShadingModel: "cacheBounce" and "fns.getCachedRadiance" let a model end paths with radiance it cached for the hit.
+- Lightmap example: A "radiance cache" toggle.
 
 ### Changed
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
