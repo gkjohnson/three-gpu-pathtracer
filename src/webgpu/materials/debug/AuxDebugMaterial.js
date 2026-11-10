@@ -2,7 +2,7 @@ import { MeshBasicNodeMaterial, NoBlending } from 'three/webgpu';
 import { uv, varying, texture, uniform } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { createAuxTarget } from '../../compute/targets.js';
-import { unpackAuxAlbedoFn, unpackAuxNormalFn, AUX_LAYERS } from '../../nodes/aux.wgsl.js';
+import { unpackAuxAlbedoFn, unpackAuxNormalFn, AUX_LAYERS } from '../../nodes/auxiliary.wgsl.js';
 
 // Shows the albedo or normal the path tracer accumulates for the denoiser
 export class AuxDebugMaterial extends MeshBasicNodeMaterial {

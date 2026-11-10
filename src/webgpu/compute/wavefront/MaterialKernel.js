@@ -8,7 +8,7 @@ import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn } from
 import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
-import { isAuxSurfaceFn } from '../../nodes/aux.wgsl.js';
+import { isAuxSurfaceFn } from '../../nodes/auxiliary.wgsl.js';
 
 // Pure material evaluation: live slots evaluate the surface staged by LogicKernel, sample the bsdf, and
 // enqueue the next bounce ray plus the NEE shadow ray toward the light LogicKernel selected.
