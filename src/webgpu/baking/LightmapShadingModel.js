@@ -12,6 +12,17 @@ import { hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
  */
 export class LightmapShadingModel extends GLTFShadingModel {
 
+	constructor( ...args ) {
+
+		super( ...args );
+
+		// the texel's white lambertian has f = 1 rather than 1 / PI so the map holds irradiance, so every
+		// path carries PI times the throughput a render of it would. The clamps, tuned for the display,
+		// would then cut most of the bounced light rather than its fireflies. Bakes stay unbiased instead
+		this.allowClamping = false;
+
+	}
+
 	updateFunctions() {
 
 		super.updateFunctions();

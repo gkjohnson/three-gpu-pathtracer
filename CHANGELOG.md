@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "setShadingModel" is public, and the shading model is given the hit it evaluates at, with "AOMapShadingModel" and "LightmapShadingModel" for baking.
 - WebGPUPathTracer: Emissive surfaces are sampled as lights with next event estimation, picked by their power and weighted against bsdf hits with MIS, so scenes lit by emissive meshes converge much faster. Emitters with an emissive map, transparency or alpha testing are still only found by bsdf rays.
 - ShadingModel: "getLightEmission" decides which materials next event estimation samples as emitters.
+- ShadingModel: "allowClamping", off for "LightmapShadingModel", decides whether "clampDirect" and "clampIndirect" apply.
 
 ### Changed
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
 - WebGPUPathTracer: Shadow rays are measured from their offset origin and stop slightly further short of the light, so they no longer hit the emissive triangle they sample.
+- LightmapShadingModel: Bakes are no longer clamped. The texel's lambertian holds irradiance, so the paths carry PI times a render's throughput and the default "clampIndirect" darkened the bounced light, by 3.6% on the helmet of the lightmap example.
 
 ## [0.0.28] - 2026.11.02
 ### Added

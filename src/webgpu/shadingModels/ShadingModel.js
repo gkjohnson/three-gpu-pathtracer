@@ -57,6 +57,13 @@ export class ShadingModel {
 		this.textures = [];
 		this.texturesMap = new Map();
 
+		/**
+		 * Whether the path tracer's "clampDirect" and "clampIndirect" apply to the paths. Models that bake a
+		 * quantity in other units than the rendered radiance, such as "LightmapShadingModel", turn it off.
+		 * @type {boolean}
+		 */
+		this.allowClamping = true;
+
 	}
 
 	/**

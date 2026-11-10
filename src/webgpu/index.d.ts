@@ -162,6 +162,7 @@ export class ShadingModel {
 	storage: object;
 	fns: object;
 	textures: Array<Texture>;
+	allowClamping: boolean;
 
 	init( renderer: WebGPURenderer ): void;
 	updateFunctions(): void;

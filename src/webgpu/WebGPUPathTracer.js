@@ -451,7 +451,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 * Upper bound on the contribution of a directly lit path segment, for suppressing fireflies.
 	 * @type {number}
 	 * @default 0
-	 * @note `0` disables the clamp. Clamping darkens the image and biases the result.
+	 * @note `0` disables the clamp. Clamping darkens the image and biases the result. Not applied when
+	 *   the shading model turns "allowClamping" off, as "LightmapShadingModel" does.
 	 */
 	get clampDirect() {
 
@@ -465,7 +466,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( this._clampDirect !== v ) {
 
 			this._clampDirect = v;
-			this._pathTracer.setClamping( v, this._clampIndirect );
+			this._applyClamping();
 
 		}
 
@@ -476,7 +477,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 * fireflies.
 	 * @type {number}
 	 * @default 10
-	 * @note `0` disables the clamp. Clamping darkens the image and biases the result.
+	 * @note `0` disables the clamp. Clamping darkens the image and biases the result. Not applied when
+	 *   the shading model turns "allowClamping" off, as "LightmapShadingModel" does.
 	 */
 	get clampIndirect() {
 
@@ -490,7 +492,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( this._clampIndirect !== v ) {
 
 			this._clampIndirect = v;
-			this._pathTracer.setClamping( this._clampDirect, v );
+			this._applyClamping();
 
 		}
 
@@ -585,7 +587,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
-		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
+		this._applyClamping();
 		this._pathTracer.setAccumulateAux( Boolean( this._denoiser && this._denoiser.useAuxiliaryBuffers ) );
 		this.setCamera( this.camera );
 
@@ -1123,6 +1125,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		this._pathTracer.setShadingModel( shadingModel );
+		this._applyClamping();
 		this._updateEmissiveLights();
 		this.reset();
 
@@ -1317,6 +1320,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 		_pathTracer.setLights( lights );
 		this._updateEmissiveLights();
 		this.reset();
+
+	}
+
+	// the clamps, unless the shading model bakes a quantity they don't apply to
+	_applyClamping() {
+
+		const { allowClamping } = this._shadingModel;
+		this._pathTracer.setClamping( allowClamping ? this._clampDirect : 0, allowClamping ? this._clampIndirect : 0 );
 
 	}
 
