@@ -7,7 +7,7 @@ import { contextProxy, contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-b
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import {
 	rayDataStruct, traceQueuedRayStruct,
-	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER,
+	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER, NO_PIXEL,
 } from './structs.js';
 import { enterMediumFn, loadMediumFn, storeMediumFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG, PIXEL_JITTER_INSET } from '../../constants.js';
@@ -86,25 +86,40 @@ export class MaterialKernel extends ComputeKernel {
 				if ( input.hit.objectIndex < 0 ) {
 
 					// the slot's path has terminated: recycle the pixel through the overflow queue and
-					// generate a fresh camera ray
+					// generate a fresh camera ray. Pixels that finished, and slots without a pixel, try a few
+					// more places in the queue rather than leave the slot empty for a frame
 					var pixelIndex = input.pixelIndex;
+					var indexUV = vec2u( 0u );
+					var combinedField = 0u;
+					var samples = 0u;
+					var isComplete = true;
 					let elementCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ] );
-					if ( elementCount > 0u ) {
+					for ( var attempt = 0u; attempt < 4u; attempt ++ ) {
 
-						// TODO: If we've pulled off a pixel that's already finished we currently just
-						// write a no-op ray, wasting a frame. It may be better to iterate over a few
-						// points in the queue to see if we can find one we can use.
-						let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ], 1u ) % elementCount;
-						pixelIndex = atomicExchange( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], pixelIndex );
+						if ( elementCount > 0u ) {
+
+							let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ], 1u ) % elementCount;
+							pixelIndex = atomicExchange( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], pixelIndex );
+
+						}
+
+						if ( pixelIndex != ${ NO_PIXEL }u ) {
+
+							// skip the pixel if it has hit the sample limit
+							indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
+							combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+							samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
+							isComplete = maxSamples != 0u && samples >= maxSamples;
+
+						}
+
+						if ( ! isComplete || elementCount == 0u ) {
+
+							break;
+
+						}
 
 					}
-
-					let indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
-
-					// skip the pixel if it has hit the sample limit
-					let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
-					let samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
-					let isComplete = maxSamples != 0u && samples >= maxSamples;
 
 					if ( isComplete ) {
 

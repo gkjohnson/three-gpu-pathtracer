@@ -170,9 +170,14 @@ export const QUEUE_COUNTER_COUNT = 2;
 export const MEDIUM_QUEUE_LENGTH = 0;
 export const MEDIUM_QUEUE_HEADER = 1;
 
-// Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
-// the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its
-// counters lead the same u32 array, ahead of the elements.
+// Round-robin queue of pixel indices waiting for a free path slot when the pixels the camera renders
+// exceed the ray data pool, sized to the pixel count so retiring slots can always return their pixel.
+// Its counters, and the count of pixels the camera accepted, lead the same u32 array, ahead of the
+// elements.
 export const PIXEL_QUEUE_CURRENT = 0;
 export const PIXEL_QUEUE_ELEMENT_COUNT = 1;
-export const PIXEL_QUEUE_HEADER = 2;
+export const PIXEL_QUEUE_ACCEPTED = 2;
+export const PIXEL_QUEUE_HEADER = 3;
+
+// the pixel index of a path slot that has no pixel, when the camera accepts fewer pixels than the pool holds
+export const NO_PIXEL = 0xFFFFFFFF;

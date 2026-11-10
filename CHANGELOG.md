@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
 - WebGPUPathTracer: Shadow rays are measured from their offset origin and stop slightly further short of the light, so they no longer hit the emissive triangle they sample.
 - LightmapShadingModel: Bounce rays hit the back of single sided surfaces as occluders that end the path, as shadow rays already did, instead of passing through them, so light no longer leaks through single sided walls into texels covered by other geometry. Renders are unchanged, see "ShadingModel.occludingBackFaces".
+- WebGPUPathTracer: Pixels the camera declines, like the empty texels of a light map atlas, no longer take path slots or places in the pixel queue, where they left slots idle a frame each time they came up. Slots that pull a finished pixel try a few more. A helmet bake into a 1024 atlas takes 36% less time per sample.
 - UVMapCamera: A camera ray jittered to the edge of its pixel could round into the neighboring texel, rendering it or, with "maxSamples" set and the neighbor empty, marking the texel finished after a few samples. The jitter now stays inside the pixel, and the texel lookup inside the texture.
 - LightmapShadingModel: Bakes are no longer clamped. The texel's lambertian holds irradiance, so the paths carry PI times a render's throughput and the default "clampIndirect" darkened the bounced light, by 3.6% on the helmet of the lightmap example.
 
