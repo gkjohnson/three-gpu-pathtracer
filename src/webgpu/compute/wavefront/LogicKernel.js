@@ -70,6 +70,9 @@ export class LogicKernel extends ComputeKernel {
 		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
 		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
 		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
+		const getEmissiveWeightFn = proxyFn( 'lightsInfo.value.getEmissiveWeight', params );
+		const sampleEmissiveFn = proxyFn( 'lightsInfo.value.sampleEmissive', params );
+		const getEmissiveHitPdfFn = proxyFn( 'lightsInfo.value.getEmissiveHitPdf', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -151,9 +154,10 @@ export class LogicKernel extends ComputeKernel {
 
 				}
 
-				// emission gathered at the previous surface (pre-scatter throughput). Found light clamps
-				// at the depth of the segment that found it, as in Cycles, so one less than the current
-				let emission = ${ clampPathContributionFunc }( throughputColor * input.emission, max( input.hit.bounce, 1u ) - 1u, clampDirect, clampIndirect );
+				// emission gathered at the previous surface (pre-scatter throughput), with the MIS weight staged
+				// with its hit. Found light clamps at the depth of the segment that found it, as in Cycles, so one
+				// less than the current
+				let emission = ${ clampPathContributionFunc }( throughputColor * input.emission * input.emissionMisWeight, max( input.hit.bounce, 1u ) - 1u, clampDirect, clampIndirect );
 				resultColor += vec4f( emission, 0.0 );
 
 				// reconstruct the scatter record staged by MaterialKernel
@@ -195,7 +199,7 @@ export class LogicKernel extends ComputeKernel {
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight + ${ getEmissiveWeightFn }( input.origin );
 
 					}
 
@@ -237,6 +241,24 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.objectIndex = hitResult.objectIndex;
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
 
+						// the emission MaterialKernel stages for the hit is weighted against the chance of having
+						// sampled the hit point from the vertex the segment left, for emitters that NEE samples
+						var emissionMisWeight = 1.0;
+						if ( isMISWeighted ) {
+
+							let cosLight = dot( hitResult.normal, input.direction );
+							let emissivePdf = ${ getEmissiveHitPdfFn }( u32( hitResult.objectIndex ), input.rayStart + hitResult.dist, cosLight );
+							if ( emissivePdf > 0.0 ) {
+
+								let selectionPdf = ${ getEmissiveWeightFn }( input.origin ) / lightTotalWeight;
+								emissionMisWeight = ${ misHeuristicFn }( input.scatterPdf, emissivePdf * selectionPdf );
+
+							}
+
+						}
+
+						rayDataStorage[ index ].emissionMisWeight = emissionMisWeight;
+
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
 						var lightPdf = 0.0;
@@ -244,11 +266,18 @@ export class LogicKernel extends ComputeKernel {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
 							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, ruv.x, &selectionPdf );
+							let emissiveWeight = ${ getEmissiveWeightFn }( hitResult.position );
+							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, emissiveWeight, ruv.x, &selectionPdf );
 							if ( selectionPdf > 0.0 ) {
 
 								var lightRec: ${ lightRecordStruct };
-								if ( envActive && lightIndex == lightsCount ) {
+								if ( lightIndex == lightsCount + 1u ) {
+
+									// an emissive triangle, picked with the rest of the light choice's random number
+									let triangleRandom = clamp( 1.0 - ( 1.0 - ruv.x ) / selectionPdf, 0.0, 0.99999994 );
+									lightRec = ${ sampleEmissiveFn }( hitResult.position, vec3f( triangleRandom, ruv.yz ) );
+
+								} else if ( envActive && lightIndex == lightsCount ) {
 
 									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
 									let envSample = ${ sampleEnvDir }( ruv.yz );

@@ -233,6 +233,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	setEmissiveLights( emissive ) {
+
+		this.lightsInfo.updateEmissive( emissive );
+		this.reset();
+
+	}
+
 	setEnvironmentParams( envMapIntensity, envMapRotation ) {
 
 		const { envInfo } = this;

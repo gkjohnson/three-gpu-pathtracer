@@ -84,6 +84,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
 		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
 		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
+		const getEmissiveWeightFn = proxyFn( 'lightsInfo.value.getEmissiveWeight', params );
+		const sampleEmissiveFn = proxyFn( 'lightsInfo.value.sampleEmissive', params );
+		const getEmissiveHitPdfFn = proxyFn( 'lightsInfo.value.getEmissiveHitPdf', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const shader = wgslTagFn/* wgsl */`
@@ -273,7 +276,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight + ${ getEmissiveWeightFn }( ray.origin );
 
 					}
 
@@ -384,8 +387,24 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						// emission, clamped at the depth of the segment that found it, as in Cycles
-						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce, clampDirect, clampIndirect );
+						// emission, clamped at the depth of the segment that found it, as in Cycles. Emitters that NEE
+						// samples are weighted against the chance of having sampled the hit point from the vertex the
+						// ray left
+						var emissionMisWeight = 1.0;
+						if ( isMISWeighted ) {
+
+							let cosLight = dot( hitResult.normal, ray.direction );
+							let emissivePdf = ${ getEmissiveHitPdfFn }( u32( hit.objectIndex ), rayStart + hitResult.dist, cosLight );
+							if ( emissivePdf > 0.0 ) {
+
+								let selectionPdf = ${ getEmissiveWeightFn }( ray.origin ) / lightTotalWeight;
+								emissionMisWeight = ${ misHeuristicFn }( bsdfPdf, emissivePdf * selectionPdf );
+
+							}
+
+						}
+
+						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission * emissionMisWeight, bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( emission, 0.0 );
 
 						// next event estimation: choose one light or the environment by its estimated
@@ -394,11 +413,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
 							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, ruv.x, &selectionPdf );
+							let emissiveWeight = ${ getEmissiveWeightFn }( vertexData.position.xyz );
+							let lightIndex = ${ selectLightFn }( vertexData.position.xyz, envWeight, emissiveWeight, ruv.x, &selectionPdf );
 							if ( selectionPdf > 0.0 ) {
 
 								var lightRec: ${ lightRecordStruct };
-								if ( envActive && lightIndex == lightsCount ) {
+								if ( lightIndex == lightsCount + 1u ) {
+
+									// an emissive triangle, picked with the rest of the light choice's random number
+									let triangleRandom = clamp( 1.0 - ( 1.0 - ruv.x ) / selectionPdf, 0.0, 0.99999994 );
+									lightRec = ${ sampleEmissiveFn }( vertexData.position.xyz, vec3f( triangleRandom, ruv.yz ) );
+
+								} else if ( envActive && lightIndex == lightsCount ) {
 
 									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
 									let envSample = ${ sampleEnvDir }( ruv.yz );
@@ -422,7 +448,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 										var shadowRay: ${ rayStruct };
 										shadowRay.origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
 										shadowRay.direction = lightRec.direction;
-										shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
+
+										// the light distance is measured from the surface, so the offset the origin moved toward the
+										// light comes off it. Otherwise shadow rays can reach emissive triangles they sampled
+										let originOffset = dot( shadowRay.origin - vertexData.position.xyz, lightRec.direction );
+										shadowRay.maxDist = ( lightRec.dist - originOffset ) * ( 1.0 - ${ LIGHT_EPSILON } );
 
 										// opaque occlusion up to the light distance, attenuated by the partially
 										// transparent surfaces passed

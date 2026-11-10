@@ -160,6 +160,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].minPdf = 1.0;
 					rayDataStorage[ index ].isFullyTransmissive = 1u;
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
+					rayDataStorage[ index ].emissionMisWeight = 1.0;
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].alphaDepth = 0u;
 					rayDataStorage[ index ].rayStart = 0.0;
@@ -415,12 +416,16 @@ export class MaterialKernel extends ComputeKernel {
 							rayDataStorage[ index ].lightBsdfPdf = evalRec.pdf;
 
 							let shadowIndex = atomicAdd( &queueCounters[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
-							shadowRayQueue[ shadowIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+							// the light distance is measured from the surface, so the offset the origin moved toward the light
+							// comes off it. Otherwise shadow rays can reach emissive triangles they sampled
+							let shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+							let originOffset = dot( shadowOrigin - vertexData.position.xyz, input.lightDirection );
+							shadowRayQueue[ shadowIndex ].origin = shadowOrigin;
 							shadowRayQueue[ shadowIndex ].direction = input.lightDirection;
 							shadowRayQueue[ shadowIndex ].pixelIndex = input.pixelIndex;
 							shadowRayQueue[ shadowIndex ].rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
 							shadowRayQueue[ shadowIndex ].sampleIndex = input.sampleIndex;
-							shadowRayQueue[ shadowIndex ].maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+							shadowRayQueue[ shadowIndex ].maxDist = ( input.lightDist - originOffset ) * ( 1.0 - ${ LIGHT_EPSILON } );
 							rayDataStorage[ index ].shadowRayIntersectionIndex = i32( shadowIndex );
 
 						} else {

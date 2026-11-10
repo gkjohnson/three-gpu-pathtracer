@@ -91,6 +91,9 @@ const rayDataMembers = {
 	// whether the staged segment starts at a medium scatter event, where no light is sampled
 	mediumScattered: 'uint',
 
+	// the MIS weight of the emission staged for the hit, against sampling the hit point with NEE
+	emissionMisWeight: 'float',
+
 };
 
 // The path's last surface hit, nested first, and its medium, nested at the end to share the ray data buffer

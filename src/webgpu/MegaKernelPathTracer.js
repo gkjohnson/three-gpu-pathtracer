@@ -128,6 +128,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	setEmissiveLights( emissive ) {
+
+		this.lightsInfo.updateEmissive( emissive );
+		this.reset();
+
+	}
+
 	setMultipleImportanceSampling( enabled ) {
 
 		this.kernel.misEnabled = enabled ? 1 : 0;

@@ -1,4 +1,5 @@
 /** @import { WebGPURenderer } from 'three/webgpu' */
+/** @import { Material, Color } from 'three' */
 import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute } from 'three/webgpu';
 import { storage, texture, uniformArray } from 'three/tsl';
 import { wgslTagFn, proxyFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
@@ -625,6 +626,36 @@ export class ShadingModel {
 			}
 
 		}
+
+	}
+
+	/**
+	 * Writes the radiance a material emits to "target" when next event estimation can sample its triangles
+	 * as lights, returning false when it can't: materials without emission, with an emissive map, or with
+	 * transparency or alpha testing, whose emission varies over their surface, are only found by bsdf rays.
+	 *
+	 * @param {Material} material
+	 * @param {Color} target
+	 * @returns {boolean}
+	 */
+	getLightEmission( material, target ) {
+
+		// TODO: sample emissive maps, which needs their texel at the sampled point
+		const intensity = this.getField( material, 'emissiveIntensity', 0.0 );
+		if ( ! ( 'emissive' in material ) || intensity <= 0 || material.emissiveMap ) {
+
+			return false;
+
+		}
+
+		if ( material.transparent || material.alphaTest > 0 || material.alphaMap ) {
+
+			return false;
+
+		}
+
+		target.copy( material.emissive ).multiplyScalar( intensity );
+		return target.r + target.g + target.b > 0;
 
 	}
 

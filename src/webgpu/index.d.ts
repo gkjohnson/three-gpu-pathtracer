@@ -169,6 +169,7 @@ export class ShadingModel {
 	getField( material: object, key: string, def: any ): any;
 	writeTextureMatrixToArray( material: object, textureKey: string, array: Float32Array, offset: number ): number;
 	writeMaterialsBuffer( materials: Array<object> ): { materialData: Int32Array };
+	getLightEmission( material: object, target: Color ): boolean;
 	dispose(): void;
 
 }

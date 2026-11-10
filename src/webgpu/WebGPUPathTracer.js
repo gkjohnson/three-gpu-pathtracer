@@ -1123,6 +1123,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		this._pathTracer.setShadingModel( shadingModel );
+		this._updateEmissiveLights();
 		this.reset();
 
 	}
@@ -1226,6 +1227,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		_shadingModel.updateMaterials( scene );
 		_shadingModel.updateTextures( _renderer );
 		_bvhData.updateMaterialIndices();
+		this._updateEmissiveLights();
 		this.reset();
 
 	}
@@ -1239,6 +1241,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this.scene.updateMatrixWorld( true );
 		this._bvhData.updateTransforms();
+		this._updateEmissiveLights();
 		this.reset();
 
 	}
@@ -1303,7 +1306,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Re-collects the lights in the scene. Call after adding, removing, or changing one.
+	 * Re-collects the lights in the scene, and the emissive surfaces that are sampled as lights. Call
+	 * after adding, removing, or changing one.
 	 */
 	updateLights() {
 
@@ -1311,7 +1315,21 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		const lights = getLights( scene );
 		_pathTracer.setLights( lights );
+		this._updateEmissiveLights();
 		this.reset();
+
+	}
+
+	// the triangles of the emissive surfaces, which next event estimation samples like area lights. They
+	// depend on the materials, the shading model and the transforms
+	_updateEmissiveLights() {
+
+		const { _pathTracer, _bvhData, _shadingModel } = this;
+		if ( _bvhData ) {
+
+			_pathTracer.setEmissiveLights( _bvhData.getEmissiveLights( _shadingModel ) );
+
+		}
 
 	}
 

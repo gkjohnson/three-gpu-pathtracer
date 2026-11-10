@@ -1,11 +1,21 @@
 /** @import { Object3D } from 'three' */
-import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
+/** @import { ShadingModel } from '../shadingModels/ShadingModel.js' */
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector3, Vector4, Matrix4, Color, SkinnedMesh, BackSide, DoubleSide } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, bool, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 
 const _colorVec = new Vector4();
 const _range = { start: 0, count: 0, vertexStart: 0, vertexCount: 0 };
+const _matrix = new Matrix4();
+const _a = new Vector3();
+const _b = new Vector3();
+const _c = new Vector3();
+const _normal = new Vector3();
+const _emission = new Color();
+
+// vec4 items per emissive triangle, see LightsInfoNode
+const EMISSIVE_TRIANGLE_STRIDE = 4;
 
 const getObjectKey = ( object, instanceId, root ) => `${ object.uuid }_${ instanceId }_${ root }`;
 const transformStruct = new StructTypeNode( {
@@ -487,7 +497,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			}
 
-			objectInfo.set( getObjectKey( object, instanceId, root ), { slot, triangleOffset: geometryOffsets.get( primBvh ) } );
+			objectInfo.set( getObjectKey( object, instanceId, root ), {
+				slot,
+				triangleOffset: geometryOffsets.get( primBvh ),
+				triangleStart: _range.start / 3,
+				triangleCount: _range.count / 3,
+			} );
 
 		} );
 
@@ -506,6 +521,142 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	getObjectInfo( object, instanceId = 0, root = 0 ) {
 
 		return this.objectInfo.get( getObjectKey( object, instanceId, root ) );
+
+	}
+
+	/**
+	 * Collects the triangles of the emissive surfaces that next event estimation samples as lights, in the
+	 * space the kernels trace in, with their power for choosing between them and, per transform slot, the
+	 * factor that turns a hit's distance and cosine into the pdf of having sampled it. See LightsInfoNode.
+	 *
+	 * @param {ShadingModel} shadingModel
+	 * @returns {{ triangles: Float32Array, slots: Float32Array, count: number, power: number, bounds: Vector4 }}
+	 */
+	getEmissiveLights( shadingModel ) {
+
+		const { storage, structs, bvh } = this;
+		const transformsArray = storage.transforms.proxyNode.value.array;
+		const transformsF32 = new Float32Array( transformsArray.buffer );
+		const transformsU32 = new Uint32Array( transformsArray.buffer );
+		const transformStride = structs.transform.getLength();
+		const indexArray = storage.index.proxyNode.value.array;
+		const attributesF32 = new Float32Array( storage.attributes.proxyNode.value.array.buffer );
+		const attributeStruct = structs.attributes.proxyNode;
+		const attributeStride = attributeStruct.getLength();
+
+		// every geometry attribute is a vec4
+		const positionOffset = 4 * attributeStruct.membersLayout.findIndex( ( { name } ) => name === 'position' );
+
+		const transformMap = this._getTransformMap( bvh );
+		const slotFactors = new Float32Array( transformMap.size );
+		const emitters = [];
+		const boundsMin = new Vector3( Infinity, Infinity, Infinity );
+		const boundsMax = new Vector3( - Infinity, - Infinity, - Infinity );
+		let totalPower = 0;
+
+		transformMap.forEach( ( { object, instanceId, root, slot } ) => {
+
+			let material = object.material;
+			if ( Array.isArray( material ) ) {
+
+				material = material[ object.geometry.groups[ root ].materialIndex ];
+
+			}
+
+			const base = slot * transformStride;
+			const visible = transformsU32[ base + 32 ] !== 0;
+			if ( ! visible || ! material || shadingModel.getMaterialIndex( material ) === - 1 || ! shadingModel.getLightEmission( material, _emission ) ) {
+
+				return;
+
+			}
+
+			// the triangles of the geometry group the slot draws
+			const info = this.getObjectInfo( object, instanceId, root );
+			let start = info.triangleStart;
+			let end = info.triangleStart + info.triangleCount;
+			const { groups } = object.geometry;
+			if ( groups.length > 0 && ! object.isBatchedMesh ) {
+
+				start = Math.max( start, groups[ root ].start / 3 );
+				end = Math.min( end, ( groups[ root ].start + groups[ root ].count ) / 3 );
+
+			}
+
+			// emitting sides, by the world space winding: mirrored transforms flip it
+			_matrix.fromArray( transformsF32, base );
+			let sides = material.side === DoubleSide ? 2 : ( material.side === BackSide ? 1 : 0 );
+			if ( sides !== 2 && _matrix.determinant() < 0 ) {
+
+				sides = 1 - sides;
+
+			}
+
+			const luminance = 0.2126 * _emission.r + 0.7152 * _emission.g + 0.0722 * _emission.b;
+			const sideCount = sides === 2 ? 2 : 1;
+			for ( let t = start; t < end; t ++ ) {
+
+				const triangle = info.triangleOffset + t;
+				_a.fromArray( attributesF32, indexArray[ 3 * triangle ] * attributeStride + positionOffset ).applyMatrix4( _matrix );
+				_b.fromArray( attributesF32, indexArray[ 3 * triangle + 1 ] * attributeStride + positionOffset ).applyMatrix4( _matrix );
+				_c.fromArray( attributesF32, indexArray[ 3 * triangle + 2 ] * attributeStride + positionOffset ).applyMatrix4( _matrix );
+				boundsMin.min( _a ).min( _b ).min( _c );
+				boundsMax.max( _a ).max( _b ).max( _c );
+
+				_b.sub( _a );
+				_c.sub( _a );
+				const area = _normal.crossVectors( _b, _c ).length() / 2;
+				if ( area > 0 ) {
+
+					const power = luminance * area * sideCount;
+					totalPower += power;
+					emitters.push( {
+						corner: _a.clone(), edge1: _b.clone(), edge2: _c.clone(),
+						power, sides, emission: _emission.clone(), luminance: luminance * sideCount,
+					} );
+
+				}
+
+			}
+
+			slotFactors[ slot ] = luminance * sideCount;
+
+		} );
+
+		// the pdf factors were the luminance per area, now relative to the total power
+		const count = emitters.length;
+		const triangles = new Float32Array( Math.max( count, 1 ) * EMISSIVE_TRIANGLE_STRIDE * 4 );
+		const bounds = new Vector4();
+		if ( count > 0 ) {
+
+			for ( let i = 0; i < slotFactors.length; i ++ ) {
+
+				slotFactors[ i ] /= totalPower;
+
+			}
+
+			let cumulative = 0;
+			emitters.forEach( ( { corner, edge1, edge2, power, sides, emission, luminance }, i ) => {
+
+				cumulative += power;
+
+				const offset = i * EMISSIVE_TRIANGLE_STRIDE * 4;
+				corner.toArray( triangles, offset );
+				triangles[ offset + 3 ] = i === count - 1 ? 1 : cumulative / totalPower;
+				edge1.toArray( triangles, offset + 4 );
+				edge2.toArray( triangles, offset + 8 );
+				triangles[ offset + 11 ] = sides;
+				emission.toArray( triangles, offset + 12 );
+				triangles[ offset + 15 ] = luminance / totalPower;
+
+			} );
+
+			const center = boundsMin.clone().add( boundsMax ).multiplyScalar( 0.5 );
+			bounds.set( center.x, center.y, center.z, boundsMin.distanceTo( boundsMax ) / 2 );
+
+		}
+
+		return { triangles, slots: slotFactors, count, power: totalPower, bounds };
 
 	}
 
