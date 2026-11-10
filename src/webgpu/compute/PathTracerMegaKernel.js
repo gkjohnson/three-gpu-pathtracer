@@ -11,7 +11,7 @@ import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFun
 import { lightRecordStruct, hitRecordStruct } from '../nodes/structs.wgsl.js';
 import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, LIGHT_EPSILON, isMISWeightLightFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH, transmissionAttenuationFunc } from '../nodes/material.wgsl.js';
-import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT, PIXEL_JITTER_INSET } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -147,7 +147,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				${ rngInit }( globalSeed, indexUV.xy, sampleIndex, 0 );
 
 				// scene ray
-				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
+				let jitter = mix( vec2f( ${ PIXEL_JITTER_INSET } ), vec2f( 1.0 - ${ PIXEL_JITTER_INSET } ), ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) );
+				let jitteredUv = uv + jitter / vec2f( targetDimensions );
 				var ray: ${ rayStruct };
 				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
 

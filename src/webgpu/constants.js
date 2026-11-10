@@ -51,6 +51,11 @@ export const TRANSMISSIVE_BACKGROUND_OVERLAY = 1;
  */
 export const TRANSMISSIVE_BACKGROUND_TRANSPARENT = 2;
 
+// The camera ray jitter stays this far inside the pixel. The jittered uv is a float, and at a pixel's edge
+// it can round into the neighboring pixel, which cameras that address a texel per pixel, like
+// "UVMapCamera", would then render instead
+export const PIXEL_JITTER_INSET = 1 / 256;
+
 // Layout of the r32uint "sample count" target: two flag bits then a 30 bit count.
 
 // this pixel already has a ray on the queue
