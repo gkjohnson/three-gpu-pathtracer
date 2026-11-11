@@ -261,9 +261,21 @@ export class ShadingModel {
 			const m = materials[ i ];
 
 			// color - offset 0
-			floatArray[ index ++ ] = m.color.r;
-			floatArray[ index ++ ] = m.color.g;
-			floatArray[ index ++ ] = m.color.b;
+			// materials without a color, like NodeMaterial or ShaderMaterial, default to white
+			if ( 'color' in m ) {
+
+				floatArray[ index ++ ] = m.color.r;
+				floatArray[ index ++ ] = m.color.g;
+				floatArray[ index ++ ] = m.color.b;
+
+			} else {
+
+				floatArray[ index ++ ] = 1.0;
+				floatArray[ index ++ ] = 1.0;
+				floatArray[ index ++ ] = 1.0;
+
+			}
+
 			intArray[ index ++ ] = this.getTextureDescriptor( m, 'map' );
 
 			// metalness & roughness - offset 4
