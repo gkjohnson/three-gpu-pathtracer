@@ -12,12 +12,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
 - WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
 - WebGPUPathTracer: "setSize" updates the camera, so camera ray functions that depend on the render size follow it.
+- WebGPUPathTracer: Vertex colors are only stored on the GPU when the scene has them, reducing memory use.
 
 ### Fixed
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
 - WebGPUPathTracer: Rays parallel to an axis missing bounds they lie on the face of.
 - WebGPUPathTracer: "reset" restoring an old "frameBudget" when "adaptiveFrameBudget" is off.
 - WebGPUPathTracer: Alpha test not working correctly when "transparent" is not set.
+- WebGPUPathTracer: The wavefront path tracer failing to compile in Safari.
 
 ## [0.0.28] - 2026.11.02
 ### Added
