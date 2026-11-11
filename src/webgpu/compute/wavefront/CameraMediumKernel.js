@@ -45,8 +45,9 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
+				// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
 				let medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( input.origin ) );
-				rayDataStorage[ index ].medium = medium;
+				${ params.rayDataStorage }[ index ].medium = medium;
 
 				if ( medium.scatters != 0u ) {
 
