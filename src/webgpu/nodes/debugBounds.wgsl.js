@@ -26,7 +26,8 @@ const debugBoundsResultStruct = new StructTypeNode( {
 // driving it are attached as `.uniforms` so the caller can update them each frame.
 export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
-	const { transforms, index, attributes } = bvhData.storage;
+	const { transforms, index } = bvhData.storage;
+	const { getVertexPosition } = bvhData.fns;
 	const { materials } = shadingModel.storage;
 
 	// uniforms
@@ -119,9 +120,9 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 					let i1 = ${ index }[ ti * 3u + 1u ];
 					let i2 = ${ index }[ ti * 3u + 2u ];
 
-					let a = ${ attributes }[ i0 ].position.xyz;
-					let b = ${ attributes }[ i1 ].position.xyz;
-					let c = ${ attributes }[ i2 ].position.xyz;
+					let a = ${ getVertexPosition }( i0 );
+					let b = ${ getVertexPosition }( i1 );
+					let c = ${ getVertexPosition }( i2 );
 
 					var triResult = ${ intersectsTriangle }( ray, a, b, c );
 					triResult.dist *= ${ rayScalar };
@@ -197,7 +198,7 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 		fn debugBounds( vUv: vec2f ) -> vec4f {
 
 			let ndc = vUv * 2.0 - vec2f( 1.0 );
-			var ray = ${ ndcToCameraRay }( ndc, ${ cameraToModelMatrix } * ${ inverseProjectionMatrix } );
+			var ray = ${ ndcToCameraRay }( ndc, ${ cameraToModelMatrix }, ${ inverseProjectionMatrix } );
 			ray.direction = normalize( ray.direction );
 
 			// count the boxes the ray crosses, pruning those behind the nearest hit surface

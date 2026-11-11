@@ -203,9 +203,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					// add support for vertex color opacity
 					if ( material.vertexColors == 1 ) {
 
-						let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
-						let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
-						let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
+						let a = ${ fns.getColor }( ${ fns.getVertex }( i0 ) );
+						let b = ${ fns.getColor }( ${ fns.getVertex }( i1 ) );
+						let c = ${ fns.getColor }( ${ fns.getVertex }( i2 ) );
 						let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 
 						opacity *= col.a;
@@ -215,9 +215,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					// account for alpha component of albedo map
 					if ( material.map != - 1 ) {
 
-						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
-						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
-						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
+						let a = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i0 ), material.map );
+						let b = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i1 ), material.map );
+						let c = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i2 ), material.map );
 						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 						let uvPrime = material.mapTransform * vec3f( uv, 1 );
 
@@ -228,9 +228,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					// account for green component of alpha map
 					if ( material.alphaMap != - 1 ) {
 
-						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
-						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
-						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
+						let a = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i0 ), material.alphaMap );
+						let b = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i1 ), material.alphaMap );
+						let c = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i2 ), material.alphaMap );
 						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 						let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
 
@@ -388,9 +388,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let i1 = ${ storage.index }[ ti * 3u + 1u ];
 						let i2 = ${ storage.index }[ ti * 3u + 2u ];
 
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
+						let a = ${ fns.getVertexPosition }( i0 );
+						let b = ${ fns.getVertexPosition }( i1 );
+						let c = ${ fns.getVertexPosition }( i2 );
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
@@ -450,9 +450,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let i1 = ${ storage.index }[ ti * 3u + 1u ];
 						let i2 = ${ storage.index }[ ti * 3u + 2u ];
 
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
+						let a = ${ fns.getVertexPosition }( i0 );
+						let b = ${ fns.getVertexPosition }( i1 );
+						let c = ${ fns.getVertexPosition }( i2 );
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
@@ -568,9 +568,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let i1 = ${ storage.index }[ ti * 3u + 1u ];
 						let i2 = ${ storage.index }[ ti * 3u + 2u ];
 
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
+						let a = ${ fns.getVertexPosition }( i0 );
+						let b = ${ fns.getVertexPosition }( i1 );
+						let c = ${ fns.getVertexPosition }( i2 );
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
