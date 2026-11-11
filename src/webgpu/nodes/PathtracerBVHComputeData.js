@@ -65,6 +65,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const { attributes } = this;
 		const keys = new Set( [ 'color' ] );
+		delete attributes.color;
 		for ( let i = 0; i < 8; i ++ ) {
 
 			const key = i === 0 ? 'uv' : 'uv' + i;
