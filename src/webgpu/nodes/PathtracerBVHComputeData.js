@@ -42,14 +42,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	constructor( bvh, shadingModel, options = {} ) {
 
-		// TODO: once supported we should use the appropriately-sized member sizes
 		super( bvh, {
 			attributes: {
-				position: 'vec4f',
-				normal: 'vec4f',
+				position: 'vec3f',
+				normal: 'vec3f',
 				tangent: 'vec4f',
 				color: 'vec4f',
-				uv: 'vec4f',
+				uv: 'vec2f',
 			},
 			...options,
 		} );
@@ -81,7 +80,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					if ( keys.has( key ) ) {
 
-						attributes[ key ] = 'vec4f';
+						attributes[ key ] = key === 'color' ? 'vec4f' : 'vec2f';
 
 					}
 

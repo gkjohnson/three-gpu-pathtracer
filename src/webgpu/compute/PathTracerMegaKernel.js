@@ -322,9 +322,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let view = - ray.direction;
 						var vertexData = ${ sampleTrianglePointFn }( hit.barycoord, hit.indices );
-						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+						vertexData.normal = normalize( ( transpose( objectInfo.inverseMatrixWorld ) * vec4f( vertexData.normal, 0.0 ) ).xyz );
 						vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
-						vertexData.position = objectInfo.matrixWorld * vertexData.position;
+						vertexData.position = ( objectInfo.matrixWorld * vec4f( vertexData.position, 1.0 ) ).xyz;
 
 						// blur glossy surfaces after low-probability bounces to suppress fireflies,
 						// from the Cycles "filter glossy" approach in integrator/surface_shader.h
