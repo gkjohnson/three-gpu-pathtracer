@@ -9,12 +9,12 @@ import {
 	getMediumChannelPdfFn, sampleMediumDistanceFn, getMediumDistancePdfFn,
 	MEDIUM_THROUGHPUT_EPSILON,
 } from '../../nodes/medium.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, FOG_SCATTER_HIT, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER } from './structs.js';
 
 // Random walks through scattering media, as in Cycles' subsurface kernel but capped per pass. A walk that
 // reaches a surface hands its hit to LogicKernel like a traced ray, one that doesn't resumes next pass. The
 // walk's weight goes into the staged scatter color.
-export class MediumKernel extends ComputeKernel {
+export class SubsurfaceKernel extends ComputeKernel {
 
 	constructor( ) {
 
@@ -110,22 +110,6 @@ export class MediumKernel extends ComputeKernel {
 					}
 
 					weight *= medium.albedo * medium.extinction * transmittance / distancePdf;
-
-					// a scatter event in fog is a path vertex where light is sampled, handed to LogicKernel like
-					// a surface hit
-					if ( medium.samplesLight != 0u ) {
-
-						let resultIndex = rayCount - 1u - globalId.x;
-						rayIntersectionsStorage[ resultIndex ].objectIndex = ${ FOG_SCATTER_HIT };
-						rayIntersectionsStorage[ resultIndex ].position = ray.origin + ray.direction * scatterDist;
-						rayIntersectionsStorage[ resultIndex ].dist = scatterDist;
-						rayDataStorage[ index ].rayIntersectionIndex = i32( resultIndex );
-
-						isFinished = true;
-						break;
-
-					}
-
 					ray.origin += ray.direction * scatterDist;
 					ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 					hasScattered = true;

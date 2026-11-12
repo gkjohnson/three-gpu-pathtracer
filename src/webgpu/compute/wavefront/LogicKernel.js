@@ -1,7 +1,7 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
-import { blendAuxFn, AUX_LAYERS } from '../../nodes/aux.wgsl.js';
+import { blendAuxFn, AUX_LAYERS } from '../../nodes/auxiliary.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';
@@ -12,9 +12,10 @@ import {
 	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
-import { ENVIRONMENT_LIGHT_TYPE, LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
+import { LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, FOG_SCATTER_HIT } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
+import { getFogSegmentWeightFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -25,6 +26,7 @@ export class LogicKernel extends ComputeKernel {
 	constructor( ) {
 
 		const params = {
+			// TODO: provide these through the context, as bvhData, random and shadingModel are
 			envInfo: { value: null },
 			backgroundInfo: { value: null },
 			lightsInfo: { value: null },
@@ -58,18 +60,16 @@ export class LogicKernel extends ComputeKernel {
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
 		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
-		const sampleEnvDir = proxy( 'envInfo.value.sampleDir', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
-		const getEnvWeight = proxy( 'envInfo.value.getWeight', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider (LightsInfoNode)
 		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
-		const randomLightSampleFn = proxyFn( 'lightsInfo.value.randomLightSample', params );
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
 		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
 		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
-		const selectLightFn = proxyFn( 'lightsInfo.value.selectLight', params );
+		const getEnvironmentPdfFn = proxyFn( 'lightsInfo.value.getEnvironmentPdf', params );
+		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -112,16 +112,7 @@ export class LogicKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.hit.bounce + input.alphaDepth + input.subsurfaceBounces );
 
-				// one-sample NEE chooses between the analytic lights and the environment, matched with
-				// the megakernel
-				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
-				var envWeight = 0.0;
-				if ( envActive ) {
-
-					envWeight = ${ getEnvWeight }();
-
-				}
 
 				var resultColor = input.resultColor;
 				var throughputColor = input.throughputColor;
@@ -176,7 +167,7 @@ export class LogicKernel extends ComputeKernel {
 				if ( isWalking ) {
 
 					// the walk hasn't reached a surface yet, so there's no hit to stage. Clear what was
-					// resolved and let MediumKernel accumulate the walk's weight
+					// resolved and let SubsurfaceKernel accumulate the walk's weight
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
@@ -185,11 +176,22 @@ export class LogicKernel extends ComputeKernel {
 
 				} else if ( ! isTerminated ) {
 
-					// a walk ending at a scatter event in fog is staged like a surface hit
 					let hitResult = ${ params.rayIntersectionsStorage }[ u32( input.rayIntersectionIndex ) ];
-					let isFogScatter = hitResult.objectIndex == ${ FOG_SCATTER_HIT };
-					let didHit = hitResult.objectIndex >= 0 || isFogScatter;
-					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
+					let didHitSurface = hitResult.objectIndex >= 0;
+					var surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
+
+					// A segment in fog was traced up to its sampled scatter distance. Without a nearer surface it scatters
+					// there, a vertex staged like a surface hit
+					var isFogScatter = false;
+					if ( input.scatterDist > 0.0 ) {
+
+						throughputColor *= ${ getFogSegmentWeightFn }( input.medium, throughputColor, input.scatterDist, surfaceDist );
+						isFogScatter = input.scatterDist < surfaceDist;
+						surfaceDist = select( surfaceDist, input.scatterDist, isFogScatter );
+
+					}
+
+					let didHit = didHitSurface || isFogScatter;
 
 					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none,
 					// and neither do scatter events in a subsurface walk
@@ -197,7 +199,7 @@ export class LogicKernel extends ComputeKernel {
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( input.origin );
 
 					}
 
@@ -239,12 +241,14 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
 						rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
 
-						// a fog scatter has no object. Any non-negative index keeps the slot from being respawned, and
-						// MaterialKernel handles the scatter before reading the object
+						// a fog scatter has no object, and is staged at "origin". Any non-negative index keeps the slot from
+						// being respawned, and MaterialKernel handles the scatter before reading the object
+						var position = hitResult.position;
 						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
 						if ( isFogScatter ) {
 
-							rayDataStorage[ index ].origin = hitResult.position;
+							position = input.origin + input.direction * ( input.rayStart + input.scatterDist );
+							rayDataStorage[ index ].origin = position;
 
 						}
 
@@ -254,29 +258,10 @@ export class LogicKernel extends ComputeKernel {
 						var lightPdf = 0.0;
 						if ( misEnabled != 0u ) {
 
-							let ruv = ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } );
-							var selectionPdf = 0.0;
-							let lightIndex = ${ selectLightFn }( hitResult.position, envWeight, ruv.x, &selectionPdf );
-							if ( selectionPdf > 0.0 ) {
+							let lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							if ( lightRec.pdf > 0.0 ) {
 
-								var lightRec: ${ lightRecordStruct };
-								if ( envActive && lightIndex == lightsCount ) {
-
-									// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-									let envSample = ${ sampleEnvDir }( ruv.yz );
-									lightRec.direction = envSample.direction;
-									lightRec.emission = envSample.color;
-									lightRec.pdf = envSample.pdf;
-									lightRec.dist = ${ LIGHT_FAR_DISTANCE };
-									lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
-
-								} else {
-
-									lightRec = ${ randomLightSampleFn }( lightIndex, hitResult.position, ruv.yz );
-
-								}
-
-								lightPdf = lightRec.pdf * selectionPdf;
+								lightPdf = lightRec.pdf;
 								rayDataStorage[ index ].lightDirection = lightRec.direction;
 								rayDataStorage[ index ].lightEmission = lightRec.emission;
 								rayDataStorage[ index ].lightDist = lightRec.dist;
@@ -295,11 +280,11 @@ export class LogicKernel extends ComputeKernel {
 						if ( input.hit.bounce > 0u && input.isFullyTransmissive == 0u ) {
 
 							var misWeight = 1.0;
-							if ( isMISWeighted && envActive ) {
+							if ( isMISWeighted ) {
 
-								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( input.direction ) * envWeight / lightTotalWeight;
-								misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
+								// weighted against the light sampling choosing the environment
+								let envPdf = ${ getEnvironmentPdfFn }( input.origin, input.direction );
+								misWeight = select( 1.0, ${ misHeuristicFn }( input.scatterPdf, envPdf ), envPdf > 0.0 );
 
 							}
 
@@ -327,7 +312,7 @@ export class LogicKernel extends ComputeKernel {
 								let transparency = ( 1.0 - bg.a ) * avg;
 
 								var misWeight = 1.0;
-								if ( misEnabled != 0u && envActive ) {
+								if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0 ) {
 
 									let envPdf = ${ getEnvDirPdf }( input.direction );
 									misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );

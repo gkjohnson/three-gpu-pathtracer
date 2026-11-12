@@ -61,14 +61,17 @@ const rayDataMembers = {
 	subsurfaceBounces: 'uint',
 	fogBounces: 'uint',
 
-	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
+	// whether SubsurfaceKernel walks the path's next segment, cleared once the walk reaches a surface or ends
 	walkPending: 'uint',
 
-	// whether the staged segment starts at a medium scatter event, where no light is sampled
+	// whether the staged segment starts at a subsurface scatter event, where no light is sampled
 	mediumScattered: 'uint',
 
 	// whether the staged hit is a scatter event in fog at "origin" rather than a surface
 	fogScatter: 'uint',
+
+	// the scatter distance sampled for the queued segment in fog, which it's traced up to, or zero outside of fog
+	scatterDist: 'float',
 
 };
 
@@ -104,11 +107,8 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 
 }, 'TraceQueuedRay' );
 
-// the object index MediumKernel writes for a walk ending at a scatter event in fog
-export const FOG_SCATTER_HIT = - 2;
-
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by
-// LogicKernel the following frame. objectIndex < 0 encodes a miss, or a scatter event in fog.
+// LogicKernel the following frame. objectIndex < 0 encodes a miss.
 export const intersectionResultStruct = new StructTypeNode( {
 
 	barycoord: 'vec3f',
@@ -145,8 +145,8 @@ export const RAY_QUEUE_LENGTH = 0;
 export const SHADOW_RAY_QUEUE_LENGTH = 1;
 export const QUEUE_COUNTER_COUNT = 2;
 
-// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
-// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
+// The path slots walking through a medium this pass, for SubsurfaceKernel. Its length leads the same u32
+// array, ahead of the elements, as SubsurfaceKernel is at its storage buffer limit.
 export const MEDIUM_QUEUE_LENGTH = 0;
 export const MEDIUM_QUEUE_HEADER = 1;
 

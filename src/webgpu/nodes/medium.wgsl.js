@@ -33,9 +33,9 @@ export const mediumStackStruct = new StructTypeNode( {
 // shadow rays at least this long go to distant lights, whose distance is the far distance
 const MEDIUM_DISTANT_SHADOW_DISTANCE = 0.5 * LIGHT_FAR_DISTANCE;
 
-// The combined media of a stack. "scatters" and "samplesLight" are uints so the struct can be held in a storage
-// buffer. A medium with fog samples light at each scatter event, as Cycles does in volumes, where a subsurface
-// walk doesn't
+// The medium a path is in: the combined media of its stack of fog and absorbing volumes, or the volume of a
+// subsurface walk, which isn't on the stack. "scatters" and "subsurface" are uints so the struct can be held in a
+// storage buffer. A scatter event in fog is a path vertex, where a subsurface walk takes no light sample
 const mediumMembers = {
 	extinction: 'vec3f',
 	scatters: 'uint',
@@ -43,7 +43,7 @@ const mediumMembers = {
 	albedo: 'vec3f',
 	anisotropy: 'float',
 
-	samplesLight: 'uint',
+	subsurface: 'uint',
 };
 
 export const mediumStruct = new DependentStructTypeNode( {
@@ -90,14 +90,48 @@ export const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Adds the material's volume to an empty slot of the stack. A volume without extinction, one already on the stack,
-// or one past a full stack is not added
+// Returns whether the material's volume scatters, a subsurface volume a path walks through after refracting into it
+// rather than one on the stack
+export const isSubsurfaceMaterialFn = wgslTagFn/* wgsl */`
+
+	fn isSubsurfaceMaterial( materialIndex: u32 ) -> bool {
+
+		let material = ${ materialsStorage }[ materialIndex ];
+		return material.scatterStrength > 0.0 && any( material.multiscatterColor > vec3f( 0.0 ) ) &&
+			any( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) > vec3f( 0.0 ) );
+
+	}
+
+`;
+
+// Returns the medium of a subsurface walk through the material's volume
+export const getSubsurfaceMediumFn = wgslTagFn/* wgsl */`
+
+	fn getSubsurfaceMedium( materialIndex: u32 ) -> ${ mediumStruct } {
+
+		let material = ${ materialsStorage }[ materialIndex ];
+		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
+
+		var medium: ${ mediumStruct };
+		medium.extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+		medium.albedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, anisotropy );
+		medium.anisotropy = anisotropy;
+		medium.scatters = 1u;
+		medium.subsurface = 1u;
+		return medium;
+
+	}
+
+`;
+
+// Adds the material's volume to an empty slot of the stack. A volume without extinction, a subsurface volume, one
+// already on the stack, or one past a full stack is not added
 export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
 	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, materialIndex: u32 ) -> void {
 
 		let material = ${ materialsStorage }[ materialIndex ];
-		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
+		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) || ${ isSubsurfaceMaterialFn }( materialIndex ) ) {
 
 			return;
 
@@ -187,7 +221,7 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 `;
 
 // Returns the combined medium of all the stack's volumes, as if inside them all at once: coefficients summed as
-// in Cycles, with the anisotropy averaged by scattering
+// in Cycles, with the anisotropy averaged by scattering. Only fog scatters, the other volumes only absorb
 export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 
 	fn getCombinedMedium( stack: ${ mediumStackStruct } ) -> ${ mediumStruct } {
@@ -197,7 +231,6 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 		var maxAlbedo = vec3f( 0.0 );
 		var anisotropy = 0.0;
 		var anisotropyWeight = 0.0;
-		var samplesLight = false;
 		var ids = stack.ids;
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
@@ -212,8 +245,7 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 			let entryExtinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 
 			// a fog volume's color is its single scatter albedo already
-			let isFog = material.fogVolume != 0;
-			let entryAlbedo = select( ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy ), material.multiscatterColor, isFog );
+			let entryAlbedo = select( vec3f( 0.0 ), material.multiscatterColor, material.fogVolume != 0 );
 			let entryScattering = entryAlbedo * entryExtinction;
 			let weight = dot( entryScattering, vec3f( 1.0 / 3.0 ) );
 			extinction += entryExtinction;
@@ -221,14 +253,13 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 			maxAlbedo = max( maxAlbedo, entryAlbedo );
 			anisotropy += entryAnisotropy * weight;
 			anisotropyWeight += weight;
-			samplesLight = samplesLight || isFog;
 
 		}
 
 		// channels without extinction keep the largest albedo for the channel choice
 		var medium: ${ mediumStruct };
 		medium.stack = stack;
-		medium.samplesLight = select( 0u, 1u, samplesLight );
+		medium.subsurface = 0u;
 		medium.extinction = extinction;
 		medium.albedo = select( maxAlbedo, scattering / extinction, extinction > vec3f( 0.0 ) );
 		medium.anisotropy = select( 0.0, anisotropy / anisotropyWeight, anisotropyWeight > 0.0 );
@@ -380,6 +411,45 @@ export const getMediumDistancePdfFn = wgslTagFn/* wgsl */`
 
 		let transmittance = exp( - medium.extinction * dist );
 		return select( transmittance, medium.extinction * transmittance, scattered );
+
+	}
+
+`;
+
+// Returns the scatter distance sampled for a segment in fog, which the segment is traced up to, or zero outside of fog
+export const sampleFogDistanceFn = wgslTagFn/* wgsl */`
+
+	fn sampleFogDistance( medium: ${ mediumStruct }, throughput: vec3f, u: vec2f ) -> f32 {
+
+		if ( medium.scatters == 0u || medium.subsurface != 0u ) {
+
+			return 0.0;
+
+		}
+
+		return ${ sampleMediumDistanceFn }( medium, ${ getMediumChannelPdfFn }( throughput, medium.albedo ), u );
+
+	}
+
+`;
+
+// Returns the weight of a segment in fog traced up to its scatter distance: of scattering there, when no surface is
+// nearer, or of reaching the surface. Zero when the segment's pdf is
+export const getFogSegmentWeightFn = wgslTagFn/* wgsl */`
+
+	fn getFogSegmentWeight( medium: ${ mediumStruct }, throughput: vec3f, scatterDist: f32, surfaceDist: f32 ) -> vec3f {
+
+		let scattered = scatterDist < surfaceDist;
+		let segmentDist = select( surfaceDist, scatterDist, scattered );
+		let transmittance = exp( - medium.extinction * segmentDist );
+		let distancePdf = dot( ${ getMediumChannelPdfFn }( throughput, medium.albedo ), ${ getMediumDistancePdfFn }( medium, segmentDist, scattered ) );
+		if ( distancePdf <= 0.0 ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		return select( transmittance, medium.albedo * medium.extinction * transmittance, scattered ) / distancePdf;
 
 	}
 

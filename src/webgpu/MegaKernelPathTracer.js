@@ -29,7 +29,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		this.backgroundInfo = new EquirectBackgroundInfo();
 		this.kernel.backgroundInfo = this.backgroundInfo;
 
-		this.lightsInfo = new LightsInfoNode();
+		this.lightsInfo = new LightsInfoNode( this.envInfo );
 		this.kernel.lightsInfo = this.lightsInfo;
 
 	}

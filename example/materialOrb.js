@@ -303,6 +303,7 @@ function applyDatabaseMaterial( info ) {
 	if ( info.specularColor ) materialProperties.specularColor = toHex( info.specularColor[ 0 ].color[ 0 ].color );
 	if ( 'metalness' in info ) materialProperties.metalness = info.metalness;
 	if ( 'roughness' in info ) materialProperties.roughness = info.roughness;
+	if ( 'diffuseRoughness' in info ) materialProperties.diffuseRoughness = info.diffuseRoughness;
 	if ( 'ior' in info ) materialProperties.ior = info.ior;
 	if ( 'transmission' in info ) materialProperties.transmission = info.transmission;
 

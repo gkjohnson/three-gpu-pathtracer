@@ -68,6 +68,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const { attributes } = this;
 		const keys = new Set( [ 'color' ] );
+		delete attributes.color;
 		for ( let i = 0; i < 8; i ++ ) {
 
 			const key = i === 0 ? 'uv' : 'uv' + i;
@@ -346,7 +347,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					${ currentObjectIndex } = objectIndex;
 
 					let material = ${ materialsStorage }[ object.materialIndex ];
-					if ( material.transparent == 1 ) {
+					if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
 						${ baseOpacityScalar } = material.opacity * object.color.a;
 

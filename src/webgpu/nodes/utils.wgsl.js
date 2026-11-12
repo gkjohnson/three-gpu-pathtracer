@@ -300,6 +300,18 @@ export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// Builds getTextureSize, the size in texels of the texture a "*Map" descriptor refers to, from the same
+// textureInfo uniform sampleTexel reads
+export const getTextureSizeFunc = textureInfoUniform => wgslTagFn/* wgsl */ `
+
+	fn getTextureSize( packed: i32 ) -> vec2f {
+
+		let info = ${ textureInfoUniform }[ u32( packed & 0x7FFFFF ) ];
+		return vec2f( vec2u( info.y & 0xFFFFu, info.y >> 16u ) );
+
+	}
+`;
+
 // Factory: builds sampleTexel bound to the given per-instance textureInfo uniform
 // array node ( must be named "textureInfo" ). Called once per scene so a single
 // sampleTexel / textureInfo binding is shared by every caller in a pipeline. A distinct

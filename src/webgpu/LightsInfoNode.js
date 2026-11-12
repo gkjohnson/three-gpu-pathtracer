@@ -12,6 +12,7 @@ import {
 	SPOT_LIGHT_TYPE,
 	DIR_LIGHT_TYPE,
 	POINT_LIGHT_TYPE,
+	ENVIRONMENT_LIGHT_TYPE,
 	LIGHT_FAR_DISTANCE,
 	intersectsRectangleFn,
 	intersectsCircleFn,
@@ -24,9 +25,13 @@ import {
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
 
-	constructor() {
+	constructor( envInfo ) {
 
 		super();
+
+		// the environment, sampled as one more light
+		// TODO: own the environment's escape radiance here too
+		this.envInfo = envInfo;
 
 		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
@@ -91,7 +96,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	_initFns() {
 
-		const { bufferNode, countNode, iesProfilesNode, iesInfoNode } = this;
+		const { bufferNode, countNode, iesProfilesNode, iesInfoNode, envInfo } = this;
 
 		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
 		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
@@ -158,10 +163,11 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
+		// the total estimated weight of the lights and the environment at the position
 		this.getLightsWeight = wgslTagFn/* wgsl */`
 			fn getLightsWeight( position: vec3f ) -> f32 {
 
-				var total = 0.0;
+				var total = ${ envInfo.getWeight }();
 				for ( var i = 0u; i < ${ countNode }; i ++ ) {
 
 					total += ${ this.getLightWeight }( i, position );
@@ -173,13 +179,31 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
+		// Returns the pdf of the light sampling choosing the environment and then the direction, which paths escaping
+		// to the environment are weighted against. Zero without an environment
+		this.getEnvironmentPdf = wgslTagFn/* wgsl */`
+			fn getEnvironmentPdf( position: vec3f, direction: vec3f ) -> f32 {
+
+				let envWeight = ${ envInfo.getWeight }();
+				if ( envWeight <= 0.0 ) {
+
+					return 0.0;
+
+				}
+
+				return ${ envInfo.getDirPdf }( direction ) * envWeight / ${ this.getLightsWeight }( position );
+
+			}
+		`;
+
 		// Chooses a light, or the environment when the returned index equals the light count, in
 		// proportion to the estimated weights. The pdf is zero when nothing can light the position.
 		this.selectLight = wgslTagFn/* wgsl */`
-			fn selectLight( position: vec3f, envWeight: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
+			fn selectLight( position: vec3f, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
 
 				let count = ${ countNode };
-				let totalWeight = ${ this.getLightsWeight }( position ) + envWeight;
+				let envWeight = ${ envInfo.getWeight }();
+				let totalWeight = ${ this.getLightsWeight }( position );
 				if ( totalWeight <= 0.0 ) {
 
 					*selectionPdf = 0.0;
@@ -300,6 +324,42 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				}
 
 				return result;
+
+			}
+		`;
+
+		// Picks one light or the environment by its estimated contribution at the position, and samples a direction
+		// to it. The record's pdf includes the selection's, and is zero when nothing is picked
+		this.sampleLight = wgslTagFn/* wgsl */`
+			fn sampleLight( position: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
+
+				var lightRec: ${ lightRecordStruct };
+				var selectionPdf = 0.0;
+				let lightIndex = ${ this.selectLight }( position, ruv.x, &selectionPdf );
+				if ( selectionPdf <= 0.0 ) {
+
+					return lightRec;
+
+				}
+
+				if ( lightIndex == ${ countNode } ) {
+
+					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+					let envSample = ${ envInfo.sampleDir }( ruv.yz );
+					lightRec.direction = envSample.direction;
+					lightRec.emission = envSample.color;
+					lightRec.pdf = envSample.pdf;
+					lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+					lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+
+				} else {
+
+					lightRec = ${ this.randomLightSample }( lightIndex, position, ruv.yz );
+
+				}
+
+				lightRec.pdf *= selectionPdf;
+				return lightRec;
 
 			}
 		`;
