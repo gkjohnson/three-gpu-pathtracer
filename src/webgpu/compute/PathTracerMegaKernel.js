@@ -315,10 +315,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					// next event estimation. The vertex below evaluates the bsdf or phase function toward the light. A fog
 					// scatter has no surface, its position is measured along the ray from the origin
-					var vertexPosition = traceOrigin + ray.direction * segmentDist;
+					var position = traceOrigin + ray.direction * segmentDist;
 					if ( isFogScatter ) {
 
-						vertexPosition = ray.origin + ray.direction * ( rayStart + scatterDist );
+						position = ray.origin + ray.direction * ( rayStart + scatterDist );
 
 					}
 
@@ -327,7 +327,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						if ( misEnabled != 0u ) {
 
-							lightRec = ${ sampleLightFn }( vertexPosition, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 
 						}
 
@@ -418,8 +418,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var scatterRec: ${ scatterRecordStruct };
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
-					var bounceOrigin = vertexPosition;
-					var shadowOrigin = vertexPosition;
+					var bounceOrigin = position;
+					var shadowOrigin = position;
 					var shadowStack = medium.stack;
 					var emission = vec3f( 0.0 );
 					var isTerminated = false;

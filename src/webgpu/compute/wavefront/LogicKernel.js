@@ -197,12 +197,12 @@ export class LogicKernel extends ComputeKernel {
 
 						// a fog scatter has no object, and is staged at "origin". Any non-negative index keeps the slot from
 						// being respawned, and MaterialKernel handles the scatter before reading the object
-						var vertexPosition = hitResult.position;
+						var position = hitResult.position;
 						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
 						if ( isFogScatter ) {
 
-							vertexPosition = input.origin + input.direction * ( input.rayStart + input.scatterDist );
-							rayDataStorage[ index ].origin = vertexPosition;
+							position = input.origin + input.direction * ( input.rayStart + input.scatterDist );
+							rayDataStorage[ index ].origin = position;
 
 						}
 
@@ -212,7 +212,7 @@ export class LogicKernel extends ComputeKernel {
 						var lightPdf = 0.0;
 						if ( misEnabled != 0u ) {
 
-							let lightRec = ${ sampleLightFn }( vertexPosition, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							let lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 							if ( lightRec.pdf > 0.0 ) {
 
 								lightPdf = lightRec.pdf;
