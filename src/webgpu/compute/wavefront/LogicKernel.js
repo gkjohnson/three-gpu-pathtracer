@@ -175,7 +175,7 @@ export class LogicKernel extends ComputeKernel {
 				if ( isWalking ) {
 
 					// the walk hasn't reached a surface yet, so there's no hit to stage. Clear what was
-					// resolved and let MediumKernel accumulate the walk's weight
+					// resolved and let SubsurfaceKernel accumulate the walk's weight
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;

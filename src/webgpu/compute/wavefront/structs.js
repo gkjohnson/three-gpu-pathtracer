@@ -60,7 +60,7 @@ const rayDataMembers = {
 	// scatter events taken inside media, counted separately from the bounce count
 	subsurfaceBounces: 'uint',
 
-	// whether MediumKernel walks the path's next segment, cleared once the walk reaches a surface or ends
+	// whether SubsurfaceKernel walks the path's next segment, cleared once the walk reaches a surface or ends
 	walkPending: 'uint',
 
 	// whether the staged segment starts at a medium scatter event, where no light is sampled
@@ -135,8 +135,8 @@ export const RAY_QUEUE_LENGTH = 0;
 export const SHADOW_RAY_QUEUE_LENGTH = 1;
 export const QUEUE_COUNTER_COUNT = 2;
 
-// The path slots walking through a medium this pass, for MediumKernel. Its length leads the same u32
-// array, ahead of the elements, as MediumKernel is at its storage buffer limit.
+// The path slots walking through a medium this pass, for SubsurfaceKernel. Its length leads the same u32
+// array, ahead of the elements, as SubsurfaceKernel is at its storage buffer limit.
 export const MEDIUM_QUEUE_LENGTH = 0;
 export const MEDIUM_QUEUE_HEADER = 1;
 
