@@ -6,6 +6,7 @@ import { rngInit, rand1, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE } from
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
 import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn } from '../../nodes/medium.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
+import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
 import { isAuxSurfaceFn } from '../../nodes/auxiliary.wgsl.js';
@@ -58,6 +59,25 @@ export class MaterialKernel extends ComputeKernel {
 			}
 		`;
 
+		// Queues the path's next segment to be traced. A whole struct is written to the buffer, which Safari needs
+		const queueRayFn = wgslTagFn/* wgsl */`
+			fn queueRay( index: u32, input: ${ rayDataStruct }, origin: vec3f, direction: vec3f, rngIndex: u32, maxDist: f32 ) -> void {
+
+				var queuedRay: ${ traceQueuedRayStruct };
+				queuedRay.origin = origin;
+				queuedRay.direction = direction;
+				queuedRay.pixelIndex = input.pixelIndex;
+				queuedRay.rngIndex = rngIndex;
+				queuedRay.sampleIndex = input.sampleIndex;
+				queuedRay.maxDist = maxDist;
+
+				let rayIndex = atomicAdd( &${ params.queueCounters }[ ${ RAY_QUEUE_LENGTH }u ], 1u );
+				${ params.rayQueue }[ rayIndex ] = queuedRay;
+				${ params.rayDataStorage }[ index ].rayIntersectionIndex = i32( rayIndex );
+
+			}
+		`;
+
 		const fn = wgslTagFn/* wgsl */`
 
 			fn compute(
@@ -71,8 +91,6 @@ export class MaterialKernel extends ComputeKernel {
 			) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
-				let rayQueue = &${ params.rayQueue };
-				let queueCounters = &${ params.queueCounters };
 
 				// bound by "rayCount" rather than the pool length. The dispatch rounds up to the
 				// workgroup size and those extra slots hold a zeroed pixel index
@@ -95,6 +113,19 @@ export class MaterialKernel extends ComputeKernel {
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = input.medium;
 					let segmentInMedium = medium.scatters != 0u;
+					var throughputColor = input.throughputColor;
+
+					// The vertex's next direction, its evaluation toward the light LogicKernel selected, and where the
+					// bounce and shadow rays start
+					var scatterRec: ${ scatterRecordStruct };
+					var lightEvalColor = vec3f( 0.0 );
+					var lightEvalPdf = 0.0;
+					var bounceOrigin = input.origin;
+					var shadowOrigin = input.origin;
+					var emission = vec3f( 0.0 );
+					var minPdf = input.minPdf;
+					var isFullyTransmissive = 0u;
+					var isTerminated = false;
 
 					let objectInfo = ${ transformsStorage }[ u32( input.hit.objectIndex ) ];
 					let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
@@ -126,7 +157,6 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					// a medium that only absorbs attenuates the segment to the hit
-					var throughputColor = input.throughputColor;
 					if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
 
 						throughputColor *= exp( - medium.extinction * input.hit.dist );
@@ -161,18 +191,12 @@ export class MaterialKernel extends ComputeKernel {
 
 						} else {
 
-							let alphaIndex = atomicAdd( &queueCounters[ ${ RAY_QUEUE_LENGTH }u ], 1u );
-							rayQueue[ alphaIndex ].origin = alphaOrigin;
-							rayQueue[ alphaIndex ].direction = input.direction;
-							rayQueue[ alphaIndex ].pixelIndex = input.pixelIndex;
-							rayQueue[ alphaIndex ].rngIndex = input.hit.bounce + input.alphaDepth + 1u + input.subsurfaceBounces;
-							rayQueue[ alphaIndex ].sampleIndex = input.sampleIndex;
-							// the origin advanced to the hit point, so the remaining budget shrinks by the
-							// distance already traced
-							rayQueue[ alphaIndex ].maxDist = max( input.maxDist - input.hit.dist, 0.0 );
-							rayDataStorage[ index ].rayIntersectionIndex = i32( alphaIndex );
-
-							// the ray keeps its origin, and only the queued traversal starts past the surface
+							// the origin advanced to the hit point, so the remaining budget shrinks by the distance already
+							// traced. The ray keeps its origin, and only the queued traversal starts past the surface
+							${ queueRayFn }(
+								index, input, alphaOrigin, input.direction, input.hit.bounce + input.alphaDepth + 1u + input.subsurfaceBounces,
+								max( input.maxDist - input.hit.dist, 0.0 ),
+							);
 							rayDataStorage[ index ].rayStart = input.rayStart + input.hit.dist;
 
 						}
@@ -206,9 +230,8 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					// sample the next bounce direction and stage the scatter state for LogicKernel
-					var scatterRec = ${ bsdfSampleFn }( input.hit, surface, view );
-					let newBounce = input.hit.bounce + 1u;
+					// sample the next bounce direction
+					scatterRec = ${ bsdfSampleFn }( input.hit, surface, view );
 
 					// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is
 					// found the last mirror or transmission hit stands in, for paths that reach the environment.
@@ -224,37 +247,10 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					// decide termination now so finished paths skip the bounce trace entirely - a
-					// zeroed pdf reads as a terminating scatter in LogicKernel, which still resolves
-					// the surface's emission and NEE before freeing the slot
-					var isTerminated = newBounce >= maxBounces || all( scatterRec.color == vec3f( 0.0 ) ) || ${ isTerminatingScatterFunc }( scatterRec );
-
-					// russian roulette early out:
-					// Matches Cycles path_state_continuation_probability in integrator/path_state.h
-					if ( ! isTerminated && newBounce >= 3u ) {
-
-						let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
-						let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
-						isTerminated = rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
-						if ( ! isTerminated ) {
-
-							// fold the survival boost into the scatter color so LogicKernel's
-							// throughput update applies it without a separate division
-							scatterRec.color /= rrProb;
-
-						}
-
-					}
-
-					// Write the ray storage content here since things like the emissive value is read
-					// in the logic kernel on the subsequent frame.
-					rayDataStorage[ index ].scatterColor = scatterRec.color;
-					rayDataStorage[ index ].scatterPdf = select( scatterRec.pdf, 0.0, isTerminated );
-					rayDataStorage[ index ].minPdf = min( input.minPdf, scatterRec.pdf );
-					rayDataStorage[ index ].isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
-					rayDataStorage[ index ].emission = surface.emission;
-					rayDataStorage[ index ].hit.bounce = newBounce;
-					rayDataStorage[ index ].mediumScattered = 0u;
+					emission = surface.emission;
+					minPdf = min( input.minPdf, scatterRec.pdf );
+					isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
+					isTerminated = all( scatterRec.color == vec3f( 0.0 ) ) || ${ isTerminatingScatterFunc }( scatterRec );
 
 					// refracting through a volume's surface enters or exits it
 					if ( scatterRec.isTransmissive && ! surface.thinWall ) {
@@ -284,55 +280,78 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					// the NEE shadow ray below still resolves the surface's direct light, so only
-					// the bounce segment is skipped for finished paths. Inside a medium, SubsurfaceKernel walks it
-					if ( ! isTerminated && medium.scatters != 0u ) {
+					bounceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.hit.normal );
 
-						rayDataStorage[ index ].walkPending = 1u;
-						rayDataStorage[ index ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.hit.normal );
-						rayDataStorage[ index ].direction = scatterRec.direction;
-						rayDataStorage[ index ].rayStart = 0.0;
+					// evaluate the bsdf toward the light LogicKernel selected. The light pdf is 0 if NEE is disabled
+					if ( input.lightPdf > 0.0 ) {
 
-					} else if ( ! isTerminated ) {
-
-						let rayIndex = atomicAdd( &queueCounters[ ${ RAY_QUEUE_LENGTH }u ], 1u );
-						rayQueue[ rayIndex ].origin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.hit.normal );
-						rayQueue[ rayIndex ].direction = scatterRec.direction;
-						rayQueue[ rayIndex ].pixelIndex = input.pixelIndex;
-						rayQueue[ rayIndex ].rngIndex = newBounce + input.alphaDepth + input.subsurfaceBounces;
-						rayQueue[ rayIndex ].sampleIndex = input.sampleIndex;
-						rayQueue[ rayIndex ].maxDist = 0.0;
-						rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
-
-						rayDataStorage[ index ].origin = rayQueue[ rayIndex ].origin;
-						rayDataStorage[ index ].direction = scatterRec.direction;
-						rayDataStorage[ index ].rayStart = 0.0;
+						let evalRec = ${ bsdfEvalPdfFn }( input.hit, surface, view, input.lightDirection );
+						lightEvalColor = evalRec.color;
+						lightEvalPdf = evalRec.pdf;
+						shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
 
 					}
 
-					// evaluate the bsdf toward the light LogicKernel selected and enqueue the shadow ray.
-					// the light pdf will be 0 if NEE is disabled.
-					var lightPdf = input.lightPdf;
-					if ( lightPdf > 0.0 ) {
+					// decide termination now so finished paths skip the bounce trace entirely - a
+					// zeroed pdf reads as a terminating scatter in LogicKernel, which still resolves
+					// the vertex's emission and NEE before freeing the slot
+					let newBounce = input.hit.bounce + 1u;
+					isTerminated = isTerminated || newBounce >= maxBounces;
 
-						let evalRec = ${ bsdfEvalPdfFn }( input.hit, surface, view, input.lightDirection );
-						if ( evalRec.pdf > 0.0 ) {
+					// russian roulette early out:
+					// Matches Cycles path_state_continuation_probability in integrator/path_state.h
+					if ( ! isTerminated && newBounce >= 3u ) {
 
-							rayDataStorage[ index ].lightBsdf = evalRec.color;
-							rayDataStorage[ index ].lightBsdfPdf = evalRec.pdf;
+						let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
+						let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
+						isTerminated = rrProb <= 0.0 || ${ rand1 }( ${ RNG_INDEX_RUSSIAN_ROULETTE } ) > rrProb;
+						if ( ! isTerminated ) {
 
-							let shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
-							rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowOrigin );
-
-						} else {
-
-							lightPdf = 0.0;
+							// fold the survival boost into the scatter color so LogicKernel's
+							// throughput update applies it without a separate division
+							scatterRec.color /= rrProb;
 
 						}
 
 					}
 
-					if ( lightPdf <= 0.0 ) {
+					// Write the ray storage content here since things like the emissive value is read
+					// in the logic kernel on the subsequent frame.
+					rayDataStorage[ index ].scatterColor = scatterRec.color;
+					rayDataStorage[ index ].scatterPdf = select( scatterRec.pdf, 0.0, isTerminated );
+					rayDataStorage[ index ].minPdf = minPdf;
+					rayDataStorage[ index ].isFullyTransmissive = isFullyTransmissive;
+					rayDataStorage[ index ].emission = emission;
+					rayDataStorage[ index ].hit.bounce = newBounce;
+					rayDataStorage[ index ].mediumScattered = 0u;
+
+					// the NEE shadow ray below still resolves the vertex's direct light, so only
+					// the bounce segment is skipped for finished paths. Inside a medium, SubsurfaceKernel walks it
+					if ( ! isTerminated ) {
+
+						rayDataStorage[ index ].origin = bounceOrigin;
+						rayDataStorage[ index ].direction = scatterRec.direction;
+						rayDataStorage[ index ].rayStart = 0.0;
+						if ( medium.scatters != 0u ) {
+
+							rayDataStorage[ index ].walkPending = 1u;
+
+						} else {
+
+							${ queueRayFn }( index, input, bounceOrigin, scatterRec.direction, newBounce + input.alphaDepth + input.subsurfaceBounces, 0.0 );
+
+						}
+
+					}
+
+					// enqueue the shadow ray toward the light LogicKernel selected
+					if ( input.lightPdf > 0.0 && lightEvalPdf > 0.0 ) {
+
+						rayDataStorage[ index ].lightBsdf = lightEvalColor;
+						rayDataStorage[ index ].lightBsdfPdf = lightEvalPdf;
+						rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowOrigin );
+
+					} else {
 
 						rayDataStorage[ index ].lightPdf = 0.0;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
