@@ -142,7 +142,7 @@ export class LogicKernel extends ComputeKernel {
 						// find the light, so their share of the weight moves to the light sample
 						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && input.hit.bounce < maxBounces;
 						let misWeight = select( 1.0, mix( ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
-						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight * ( 1.0 - shadowHit.occlusion ) / input.lightPdf;
+						let directLight = throughputColor * input.lightEmission * shadowHit.transmittance * input.lightBsdf * misWeight / input.lightPdf;
 						let contribution = ${ clampPathContributionFunc }( directLight, input.hit.bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
 

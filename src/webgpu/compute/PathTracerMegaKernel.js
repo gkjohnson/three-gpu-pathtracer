@@ -5,7 +5,11 @@ import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn } from '../nodes/sampling.wgsl.js';
-import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn, getMediumStackAtPointFn, getMediumChannelPdfFn, sampleMediumDistanceFn, getMediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON } from '../nodes/medium.wgsl.js';
+import {
+	mediumStackStruct, addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn,
+	getMediumStackAtPointFn, getShadowMediumStackFn, getShadowMediumDepthFn, getShadowTransmittanceFn, getMediumChannelPdfFn,
+	sampleMediumDistanceFn, getMediumDistancePdfFn, MEDIUM_THROUGHPUT_EPSILON,
+} from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
@@ -86,10 +90,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		// Returns the light a light sample adds at a path vertex, given the vertex evaluated toward the light. The
-		// shadow ray starts at the origin, attenuated by the partially transparent surfaces passed
+		// shadow ray starts at the origin in the given media, attenuated by the partially transparent surfaces passed
+		// and the media
 		const getLightContributionFn = wgslTagFn/* wgsl */`
 			fn getLightContribution(
-				lightRec: ${ lightRecordStruct }, evalColor: vec3f, evalPdf: f32, origin: vec3f,
+				lightRec: ${ lightRecordStruct }, evalColor: vec3f, evalPdf: f32, origin: vec3f, stack: ${ mediumStackStruct },
 				throughput: vec3f, bounce: u32, maxBounces: u32, clampDirect: f32, clampIndirect: f32,
 			) -> vec3f {
 
@@ -112,12 +117,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
+				let lightTransmittance = ${ getShadowTransmittanceFn }( ${ getShadowMediumDepthFn }( stack, shadowRay.maxDist ), shadowHit.occlusion );
+
 				// env + area lights are also found by bsdf rays, so MIS-weight them. Punctual lights, and lights
 				// past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray skipped can't
 				// find the light, so their share of the weight moves to the light sample
 				let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && bounce + 1u < maxBounces;
 				let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightRec.pdf, evalPdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
-				let directLight = throughput * lightRec.emission * evalColor * misWeight * ( 1.0 - shadowHit.occlusion ) / lightRec.pdf;
+				let directLight = throughput * lightRec.emission * lightTransmittance * evalColor * misWeight / lightRec.pdf;
 				return ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
 
 			}
@@ -436,7 +443,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 								let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
 								let shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
-								let contribution = ${ getLightContributionFn }( lightRec, evalRec.color, evalRec.pdf, shadowOrigin, throughputColor, bounce, maxBounces, clampDirect, clampIndirect );
+								let shadowStack = ${ getShadowMediumStackFn }( medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall, ray.direction, lightRec.direction, hit.normal );
+								let contribution = ${ getLightContributionFn }( lightRec, evalRec.color, evalRec.pdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces, clampDirect, clampIndirect );
 								resultColor += vec4f( contribution, 0.0 );
 
 							}

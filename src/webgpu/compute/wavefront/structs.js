@@ -95,6 +95,9 @@ export const traceQueuedRayStruct = new StructTypeNode( {
 	_alignment0: 'uint',
 	_alignment1: 'uint',
 
+	// shadow rays only: the optical depth of the media the ray starts in
+	mediumDepth: 'vec3f',
+
 }, 'TraceQueuedRay' );
 
 // Compact trace result, written by the trace kernels at the ray's queue index and consumed by
@@ -118,13 +121,13 @@ export const intersectionResultStruct = new StructTypeNode( {
 // LogicKernel the following frame. objectIndex >= 0 encodes an occluded light.
 export const shadowTraceResultStruct = new StructTypeNode( {
 
+	// the light let through by the partially transparent surfaces and the media passed
+	transmittance: 'vec3f',
+
 	objectIndex: 'int',
 
 	// the share of bsdf rays the skipped faces would stop, whose light weight moves to the light sample
 	skippedOcclusion: 'float',
-
-	// the fraction of light blocked by the partially transparent surfaces passed
-	occlusion: 'float',
 
 }, 'ShadowTraceResult' );
 

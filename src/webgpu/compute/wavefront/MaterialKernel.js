@@ -4,7 +4,10 @@ import { uniform, storage, globalId } from 'three/tsl';
 import { contextProxy, contextProxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
-import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn } from '../../nodes/medium.wgsl.js';
+import {
+	mediumStackStruct, addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn,
+	getShadowMediumStackFn, getShadowMediumDepthFn,
+} from '../../nodes/medium.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
@@ -39,10 +42,10 @@ export class MaterialKernel extends ComputeKernel {
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
-		// Queues the NEE shadow ray from the origin toward the light LogicKernel selected, and returns its index in
-		// the queue. A whole struct is written to the buffer, which Safari needs
+		// Queues the NEE shadow ray from the origin toward the light LogicKernel selected, starting in the given media,
+		// and returns its index in the queue. A whole struct is written to the buffer, which Safari needs
 		const queueShadowRayFn = wgslTagFn/* wgsl */`
-			fn queueShadowRay( input: ${ rayDataStruct }, origin: vec3f ) -> i32 {
+			fn queueShadowRay( input: ${ rayDataStruct }, origin: vec3f, stack: ${ mediumStackStruct } ) -> i32 {
 
 				var queuedRay: ${ traceQueuedRayStruct };
 				queuedRay.origin = origin;
@@ -51,6 +54,7 @@ export class MaterialKernel extends ComputeKernel {
 				queuedRay.rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
 				queuedRay.sampleIndex = input.sampleIndex;
 				queuedRay.maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+				queuedRay.mediumDepth = ${ getShadowMediumDepthFn }( stack, queuedRay.maxDist );
 
 				let shadowIndex = atomicAdd( &${ params.queueCounters }[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
 				${ params.shadowRayQueue }[ shadowIndex ] = queuedRay;
@@ -122,6 +126,7 @@ export class MaterialKernel extends ComputeKernel {
 					var lightEvalPdf = 0.0;
 					var bounceOrigin = input.origin;
 					var shadowOrigin = input.origin;
+					var shadowStack = medium.stack;
 					var emission = vec3f( 0.0 );
 					var minPdf = input.minPdf;
 					var isFullyTransmissive = 0u;
@@ -240,6 +245,10 @@ export class MaterialKernel extends ComputeKernel {
 						lightEvalColor = evalRec.color;
 						lightEvalPdf = evalRec.pdf;
 						shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+						shadowStack = ${ getShadowMediumStackFn }(
+							medium.stack, objectInfo.materialIndex, input.hit.side, surface.thinWall,
+							input.direction, input.lightDirection, input.hit.normal,
+						);
 
 					}
 
@@ -353,7 +362,7 @@ export class MaterialKernel extends ComputeKernel {
 
 						rayDataStorage[ index ].lightBsdf = lightEvalColor;
 						rayDataStorage[ index ].lightBsdfPdf = lightEvalPdf;
-						rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowOrigin );
+						rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowOrigin, shadowStack );
 
 					} else {
 

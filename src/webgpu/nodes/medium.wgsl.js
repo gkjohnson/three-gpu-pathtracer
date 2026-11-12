@@ -255,6 +255,61 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 
 `;
 
+// Returns the stack a surface's shadow ray starts in. A light on the far side of a volume's boundary is reached
+// through it, entering or leaving the volume
+export const getShadowMediumStackFn = wgslTagFn/* wgsl */`
+
+	fn getShadowMediumStack(
+		stack: ${ mediumStackStruct }, materialIndex: u32, side: f32, thinWall: bool,
+		direction: vec3f, lightDirection: vec3f, normal: vec3f,
+	) -> ${ mediumStackStruct } {
+
+		var result = stack;
+		let crossesSurface = dot( direction, normal ) * dot( lightDirection, normal ) > 0.0;
+		if ( crossesSurface && ! thinWall ) {
+
+			if ( side > 0.0 ) {
+
+				${ addToMediumStackFn }( &result, materialIndex );
+
+			} else {
+
+				${ removeFromMediumStackFn }( &result, materialIndex );
+
+			}
+
+		}
+
+		return result;
+
+	}
+
+`;
+
+// Returns the optical depth of the media a shadow ray starts in, up to the light. Volume boundaries stop shadow rays,
+// so the media extend to the light
+export const getShadowMediumDepthFn = wgslTagFn/* wgsl */`
+
+	fn getShadowMediumDepth( stack: ${ mediumStackStruct }, maxDist: f32 ) -> vec3f {
+
+		return ${ getCombinedMediumFn }( stack ).extinction * maxDist;
+
+	}
+
+`;
+
+// Returns the light a shadow ray lets through: what the partially transparent surfaces passed let through, times
+// the transmittance of the media of the given optical depth on the way
+export const getShadowTransmittanceFn = wgslTagFn/* wgsl */`
+
+	fn getShadowTransmittance( depth: vec3f, occlusion: f32 ) -> vec3f {
+
+		return ( 1.0 - occlusion ) * exp( - max( depth, vec3f( 0.0 ) ) );
+
+	}
+
+`;
+
 // Returns the probability of sampling each color channel's distance, in proportion to throughput times albedo
 // https://github.com/blender/cycles/blob/a456b761034dda42c32eef9f4aae0fa5a5c9f604/src/kernel/closure/volume.h#L157
 export const getMediumChannelPdfFn = wgslTagFn/* wgsl */`
