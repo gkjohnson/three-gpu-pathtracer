@@ -38,7 +38,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			// settings
 			sampleIndex: uniform( 0 ),
 			globalSeed: uniform( 0, 'uint' ),
-			maxBounces: uniform( 5 ),
+			maxBounces: uniform( 5, 'uint' ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxSubsurfaceBounces: uniform( 256, 'uint' ),
 			maxFogBounces: uniform( 0, 'uint' ),
@@ -425,6 +425,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var emission = vec3f( 0.0 );
 					var isTerminated = false;
 
+					// the hit, as staged in the wavefront ray data. A scatter event in fog has no surface, only the bounce
+					var hit: ${ hitRecordStruct };
+					hit.bounce = bounce;
+
 					if ( isFogScatter ) {
 
 						// A scatter event in fog, at "position". The phase function is its own pdf, so a sample's weight
@@ -435,19 +439,17 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						scatterRec.pdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, scatterRec.direction ), medium.anisotropy );
 						scatterRec.color = vec3f( scatterRec.pdf );
 						isTerminated = fogBounces >= maxFogBounces;
+						isFullyTransmissive = false;
 						fogBounces ++;
 
 					} else {
 
-						// the hit, as staged in the wavefront ray data
-						var hit: ${ hitRecordStruct };
 						hit.barycoord = hitResult.barycoord;
 						hit.objectIndex = i32( hitResult.objectIndex );
 						hit.normal = hitResult.normal;
 						hit.side = hitResult.side;
 						hit.indices = hitResult.indices.xyz;
 						hit.dist = hitResult.dist;
-						hit.bounce = bounce;
 
 						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
 						let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
@@ -466,8 +468,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hit, view, blurRoughness );
 
-						// a matte surface hit by the camera ray renders as a fully transparent
-						let isMatte = surface.matte && bounce == 0u;
+						// a matte surface hit by the camera ray renders as a fully transparent, behind the lights its
+						// segment passed, which stay opaque: the light hits are added after the loop
+						let isMatte = surface.matte && hit.bounce == 0u;
 						if ( isMatte ) {
 
 							resultColor = vec4f( 0.0 );
@@ -610,12 +613,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					// decide termination now, so finished paths skip the bounce segment but still gather the vertex's
 					// emission and light sample
-					let newBounce = bounce + 1u;
+					let newBounce = hit.bounce + 1u;
 					isTerminated = isTerminated || newBounce >= maxBounces;
 
-					// russian roulette early out:
-					// Matches Cycles path_state_continuation_probability in integrator/path_state.h
-					if ( ! isTerminated && bounce >= 3u ) {
+					// Russian roulette early out, from the fourth vertex on: "hit.bounce" is the vertex's index, zero at
+					// the camera ray's hit, in both backends. Matches Cycles path_state_continuation_probability in
+					// integrator/path_state.h
+					if ( ! isTerminated && hit.bounce >= 3u ) {
 
 						let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
 						let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );

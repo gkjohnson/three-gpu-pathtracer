@@ -175,11 +175,13 @@ export class MaterialKernel extends ComputeKernel {
 
 						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, input.hit, view, blurRoughness );
 
-						// a matte surface hit by the camera ray renders as a fully transparent
+						// a matte surface hit by the camera ray renders as a fully transparent, behind the lights its
+						// segment passed, which stay opaque: at this point the result holds only those light hits
 						let isMatte = surface.matte && input.hit.bounce == 0u;
 						if ( isMatte ) {
 
-							rayDataStorage[ index ].resultColor = vec4f( 0.0 );
+							let lightHits = input.resultColor.rgb;
+							rayDataStorage[ index ].resultColor = vec4f( lightHits, select( 0.0, 1.0, any( lightHits > vec3f( 0.0 ) ) ) );
 							rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 							rayDataStorage[ index ].emission = vec3f( 0.0 );
 							rayDataStorage[ index ].lightPdf = 0.0;
@@ -365,8 +367,9 @@ export class MaterialKernel extends ComputeKernel {
 					let newBounce = input.hit.bounce + 1u;
 					isTerminated = isTerminated || newBounce >= maxBounces;
 
-					// russian roulette early out:
-					// Matches Cycles path_state_continuation_probability in integrator/path_state.h
+					// Russian roulette early out, from the fourth vertex on: "hit.bounce" is the vertex's index, zero at
+					// the camera ray's hit, in both backends. Matches Cycles path_state_continuation_probability in
+					// integrator/path_state.h
 					if ( ! isTerminated && input.hit.bounce >= 3u ) {
 
 						let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
