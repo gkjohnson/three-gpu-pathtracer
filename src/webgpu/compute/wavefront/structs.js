@@ -34,8 +34,8 @@ const rayDataMembers = {
 	lightEmission: 'vec3f',
 	lightDist: 'float',
 
-	lightBsdf: 'vec3f',
-	lightBsdfPdf: 'float',
+	lightEvalColor: 'vec3f',
+	lightEvalPdf: 'float',
 
 	rayIntersectionIndex: 'int',
 	shadowRayIntersectionIndex: 'int',

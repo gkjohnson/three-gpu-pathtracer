@@ -416,8 +416,8 @@ export class MaterialKernel extends ComputeKernel {
 					// enqueue the shadow ray toward the light LogicKernel selected
 					if ( input.lightPdf > 0.0 && lightEvalPdf > 0.0 ) {
 
-						rayDataStorage[ index ].lightBsdf = lightEvalColor;
-						rayDataStorage[ index ].lightBsdfPdf = lightEvalPdf;
+						rayDataStorage[ index ].lightEvalColor = lightEvalColor;
+						rayDataStorage[ index ].lightEvalPdf = lightEvalPdf;
 						rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowOrigin, shadowStack );
 
 					} else {

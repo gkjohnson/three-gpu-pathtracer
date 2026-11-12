@@ -225,7 +225,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( ray.origin ) );
 
 				// added last, a camera miss overwrites the pixel with the background
-				var lightHits = vec3f( 0.0 );
+				var lightHitColor = vec3f( 0.0 );
 				var cameraHitLight = false;
 
 				// the denoiser's albedo and normal, from the first scatter, or the last mirror or transmission hit
@@ -296,38 +296,38 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					// LogicKernel
-					var surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
+					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
 
 					// the segment's medium weight. In fog it scatters at its sampled distance unless a surface is nearer
 					throughputColor *= ${ getMediumSegmentWeightFn }( medium, throughputColor, scatterDist, surfaceDist );
 					let isFogScatter = scatterDist > 0.0 && scatterDist < surfaceDist;
-					surfaceDist = select( surfaceDist, scatterDist, isFogScatter );
+					let segmentDist = select( surfaceDist, scatterDist, isFogScatter );
 
-					let didHit = didHitSurface || isFogScatter;
+					let hasVertex = didHitSurface || isFogScatter;
 
 					// MIS against the light sampling at the previous vertex. None for camera segments or subsurface scatters
 					let isMISWeighted = misEnabled != 0u && bounce > 0u && ! mediumScattered;
 
 					// area lights crossed along the segment
-					let segmentLight = ${ getLightHitsFn }( ray.origin, ray.direction, rayStart, rayStart + surfaceDist, throughputColor, scatterPdf, isMISWeighted, bounce );
-					lightHits += segmentLight.rgb;
-					cameraHitLight = cameraHitLight || ( bounce == 0u && segmentLight.a > 0.0 );
+					let segmentLightHits = ${ getLightHitsFn }( ray.origin, ray.direction, rayStart, rayStart + segmentDist, throughputColor, scatterPdf, isMISWeighted, bounce );
+					lightHitColor += segmentLightHits.rgb;
+					cameraHitLight = cameraHitLight || ( bounce == 0u && segmentLightHits.a > 0.0 );
 
 					// next event estimation. The vertex below evaluates the bsdf or phase function toward the light. A fog
 					// scatter has no surface, its position is measured along the ray from the origin
-					var position = traceOrigin + ray.direction * surfaceDist;
+					var vertexPosition = traceOrigin + ray.direction * segmentDist;
 					if ( isFogScatter ) {
 
-						position = ray.origin + ray.direction * ( rayStart + scatterDist );
+						vertexPosition = ray.origin + ray.direction * ( rayStart + scatterDist );
 
 					}
 
 					var lightRec: ${ lightRecordStruct };
-					if ( didHit ) {
+					if ( hasVertex ) {
 
 						if ( misEnabled != 0u ) {
 
-							lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							lightRec = ${ sampleLightFn }( vertexPosition, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 
 						}
 
@@ -346,8 +346,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							}
 
 							let environment = ${ sampleEnvColor }( ray.direction ).rgb * throughputColor * misWeight;
-							let contribution = ${ clampPathContributionFunc }( environment, bounce );
-							resultColor += vec4f( contribution, 0.0 );
+							let environmentLight = ${ clampPathContributionFunc }( environment, bounce );
+							resultColor += vec4f( environmentLight, 0.0 );
 
 						} else {
 
@@ -418,8 +418,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var scatterRec: ${ scatterRecordStruct };
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
-					var bounceOrigin = position;
-					var shadowOrigin = position;
+					var bounceOrigin = vertexPosition;
+					var shadowOrigin = vertexPosition;
 					var shadowStack = medium.stack;
 					var emission = vec3f( 0.0 );
 					var isTerminated = false;
@@ -618,8 +618,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// the vertex's light sample and emission, with the pre-scatter throughput, clamped at the segment's depth
 					if ( lightRec.pdf > 0.0 ) {
 
-						let contribution = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
-						resultColor += vec4f( contribution, 0.0 );
+						let directLight = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
+						resultColor += vec4f( directLight, 0.0 );
 
 					}
 
@@ -654,7 +654,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				// visible lights are opaque against a transparent background
-				resultColor += vec4f( lightHits, 0.0 );
+				resultColor += vec4f( lightHitColor, 0.0 );
 				if ( cameraHitLight ) {
 
 					resultColor.a = 1.0;
