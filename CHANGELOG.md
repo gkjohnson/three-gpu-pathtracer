@@ -12,12 +12,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
 - WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
 - WebGPUPathTracer: "setSize" updates the camera, so camera ray functions that depend on the render size follow it.
+- WebGPUPathTracer: Vertex colors are only stored on the GPU when the scene has them, reducing memory use.
 
 ### Fixed
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
 - WebGPUPathTracer: Rays parallel to an axis missing bounds they lie on the face of.
 - WebGPUPathTracer: "reset" restoring an old "frameBudget" when "adaptiveFrameBudget" is off.
 - WebGPUPathTracer: Alpha test not working correctly when "transparent" is not set.
+- WebGPUPathTracer: The wavefront path tracer failing to compile in Safari.
+- WebGPUPathTracer, WebGLPathTracer: Materials without a "color" field, such as NodeMaterial and ShaderMaterial, throwing an error.
+- WebGPUPathTracer: "sheenRoughnessMap" being read from the red channel instead of alpha.
+- WebGPUPathTracer: Dark background and clear colors rendering darker than set, quantized to 8 bits.
 
 ## [0.0.28] - 2026.11.02
 ### Added
@@ -32,6 +37,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "adaptiveDynamicRes" adjusts "lowResScale" to the pixels a frame of "frameBudget" can render.
 - WebGPUPathTracer: Subsurface scattering through volumes, with "scatterStrength", "multiscatterColor" and "scatterAnisotropy" material properties following the "KHR_materials_scatter" proposal, and "maxSubsurfaceBounces".
 - WebGPUPathTracer: A medium stack, so nested and overlapping volumes, like liquid in a glass, absorb and scatter together, including when the camera is inside one.
+- WebGPUPathTracer: "FogVolumeMaterial" support, with light sampled inside the fog, shadows through it, a "scatterAnisotropy" phase setting, and "maxFogBounces", single scattering by default as in Cycles.
+- FogVolumeNodeMaterial: A fog volume material for the WebGPU path tracer that also renders as haze when rasterized.
 
 ### Changed
 - WebGPUPathTracer: Requires three.js r187, which binds every storage buffer as an array.

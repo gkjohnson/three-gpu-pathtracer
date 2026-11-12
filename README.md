@@ -7,6 +7,9 @@
 [![twitter](https://flat.badgen.net/badge/twitter/@garrettkjohnson/?icon&label)](https://twitter.com/garrettkjohnson)
 [![sponsors](https://img.shields.io/github/sponsors/gkjohnson?style=flat-square&color=1da1f2)](https://github.com/sponsors/gkjohnson/)
 
+> [!WARNING]
+> The WebGPU path tracer is not yet stable and relies on three-mesh-bvh APIs that may change between releases. Lock the three-mesh-bvh version for now.
+
 ![](./docs/banner.webp)
 
 Path tracing project using [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) and WebGPU compute shaders to accelerate high quality, physically based rendering on the GPU.

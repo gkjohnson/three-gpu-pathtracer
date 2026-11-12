@@ -12,9 +12,10 @@ import {
 	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
-import { LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
-import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
+import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
+import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
+import { getMediumSegmentWeightFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -43,8 +44,6 @@ export class LogicKernel extends ComputeKernel {
 			misEnabled: uniform( 1, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
-			clampDirect: uniform( 0 ),
-			clampIndirect: uniform( 10 ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 			accumulateAux: uniform( 0, 'uint' ),
 
@@ -60,16 +59,13 @@ export class LogicKernel extends ComputeKernel {
 		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
-		const getEnvWeight = proxy( 'envInfo.value.getWeight', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider (LightsInfoNode)
-		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
-		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
-		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
-		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
+		const getDirectLightFn = proxyFn( 'lightsInfo.value.getDirectLight', params );
+		const getLightHitsFn = proxyFn( 'lightsInfo.value.getLightHits', params );
+		const getEnvironmentPdfFn = proxyFn( 'lightsInfo.value.getEnvironmentPdf', params );
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
-		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -79,8 +75,6 @@ export class LogicKernel extends ComputeKernel {
 				misEnabled: u32,
 				rayCount: u32,
 				maxBounces: u32,
-				clampDirect: f32,
-				clampIndirect: f32,
 				transmissiveBackground: u32,
 				accumulateAux: u32,
 
@@ -111,23 +105,12 @@ export class LogicKernel extends ComputeKernel {
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.hit.bounce + input.alphaDepth + input.subsurfaceBounces );
 
-				// one-sample NEE chooses between the analytic lights and the environment, matched with
-				// the megakernel
-				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
-				let lightsCount = ${ lightsCountNode };
-				var envWeight = 0.0;
-				if ( envActive ) {
-
-					envWeight = ${ getEnvWeight }();
-
-				}
-
 				var resultColor = input.resultColor;
 				var throughputColor = input.throughputColor;
 
 				// added last, since a camera ray miss overwrites the pixel with the background
-				var lightHits = vec3f( 0.0 );
-				var cameraHitLight = false;
+				var lightHitColor = vec3f( 0.0 );
+				var cameraHitLight = input.cameraHitLight != 0u;
 
 				// resolve the previous surface's NEE shadow ray (pre-scatter throughput). The index
 				// is negative when no shadow ray was enqueued last frame
@@ -137,14 +120,11 @@ export class LogicKernel extends ComputeKernel {
 					let occluded = shadowHit.objectIndex >= 0;
 					if ( ! occluded ) {
 
-						// env + area lights are also found by bsdf rays, so MIS-weight them. Punctual lights, and lights
-						// past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray skipped can't
-						// find the light, so their share of the weight moves to the light sample
-						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && input.hit.bounce < maxBounces;
-						let misWeight = select( 1.0, mix( ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
-						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight * ( 1.0 - shadowHit.occlusion ) / input.lightPdf;
-						let contribution = ${ clampPathContributionFunc }( directLight, input.hit.bounce, clampDirect, clampIndirect );
-						resultColor += vec4f( contribution, 0.0 );
+						let directLight = ${ getDirectLightFn }(
+							input.lightPdf, input.lightEmission, input.lightType, input.lightEvalColor, input.lightEvalPdf,
+							shadowHit.transmittance, shadowHit.skippedOcclusion, throughputColor, input.hit.bounce, maxBounces,
+						);
+						resultColor += vec4f( directLight, 0.0 );
 
 					}
 
@@ -152,7 +132,7 @@ export class LogicKernel extends ComputeKernel {
 
 				// emission gathered at the previous surface (pre-scatter throughput). Found light clamps
 				// at the depth of the segment that found it, as in Cycles, so one less than the current
-				let emission = ${ clampPathContributionFunc }( throughputColor * input.emission, max( input.hit.bounce, 1u ) - 1u, clampDirect, clampIndirect );
+				let emission = ${ clampPathContributionFunc }( throughputColor * input.emission, max( input.hit.bounce, 1u ) - 1u );
 				resultColor += vec4f( emission, 0.0 );
 
 				// reconstruct the scatter record staged by MaterialKernel
@@ -175,7 +155,7 @@ export class LogicKernel extends ComputeKernel {
 				if ( isWalking ) {
 
 					// the walk hasn't reached a surface yet, so there's no hit to stage. Clear what was
-					// resolved and let MediumKernel accumulate the walk's weight
+					// resolved and let SubsurfaceKernel accumulate the walk's weight
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
@@ -185,46 +165,25 @@ export class LogicKernel extends ComputeKernel {
 				} else if ( ! isTerminated ) {
 
 					let hitResult = ${ params.rayIntersectionsStorage }[ u32( input.rayIntersectionIndex ) ];
-					let didHit = hitResult.objectIndex >= 0;
-					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
+					let didHitSurface = hitResult.objectIndex >= 0;
+					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
 
-					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none,
+					// the segment's medium weight. In fog it scatters at its sampled distance unless a surface is nearer, a
+					// vertex staged like a surface hit
+					throughputColor *= ${ getMediumSegmentWeightFn }( input.medium, throughputColor, input.scatterDist, surfaceDist );
+					let isFogScatter = input.scatterDist > 0.0 && input.scatterDist < surfaceDist;
+					let segmentDist = select( surfaceDist, input.scatterDist, isFogScatter );
+
+					let didHit = didHitSurface || isFogScatter;
+
+					// MIS weights against the light sampling at the vertex this segment left. Camera segments have none,
 					// and neither do scatter events in a subsurface walk
 					let isMISWeighted = misEnabled != 0u && input.hit.bounce > 0u && input.mediumScattered == 0u;
-					var lightTotalWeight = 0.0;
-					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( input.origin ) + envWeight;
-
-					}
-
-					// forward hits on area lights along the traced segment, which starts "rayStart" along the ray.
-					// Camera rays only see visibleToCameraRays lights, at full weight
-					for ( var li = 0u; li < lightsCount; li ++ ) {
-
-						if ( input.hit.bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
-
-							continue;
-
-						}
-
-						var lightRec: ${ lightRecordStruct };
-						if ( ${ intersectLightAtIndexFn }( input.origin, input.direction, li, &lightRec ) && lightRec.dist > input.rayStart && lightRec.dist < input.rayStart + surfaceDist ) {
-
-							var misWeight = 1.0;
-							if ( isMISWeighted ) {
-
-								let selectionPdf = ${ getLightWeightFn }( li, input.origin ) / lightTotalWeight;
-								misWeight = ${ misHeuristicFn }( input.scatterPdf, lightRec.pdf * selectionPdf );
-
-							}
-
-							lightHits += ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, input.hit.bounce, clampDirect, clampIndirect );
-							cameraHitLight = cameraHitLight || input.hit.bounce == 0u;
-
-						}
-
-					}
+					// forward hits on area lights along the traced segment, which starts "rayStart" along the ray
+					let segmentLightHits = ${ getLightHitsFn }( input.origin, input.direction, input.rayStart, input.rayStart + segmentDist, throughputColor, input.scatterPdf, isMISWeighted, input.hit.bounce );
+					lightHitColor += segmentLightHits.rgb;
+					cameraHitLight = cameraHitLight || ( input.hit.bounce == 0u && segmentLightHits.a > 0.0 );
 
 					if ( didHit ) {
 
@@ -233,15 +192,27 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.normal = hitResult.normal;
 						rayDataStorage[ index ].hit.side = hitResult.side;
 						rayDataStorage[ index ].hit.indices = hitResult.indices;
-						rayDataStorage[ index ].hit.objectIndex = hitResult.objectIndex;
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
+						rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
+
+						// a fog scatter has no object, and is staged at "origin". Any non-negative index keeps the slot from
+						// being respawned, and MaterialKernel handles the scatter before reading the object
+						var position = hitResult.position;
+						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
+						if ( isFogScatter ) {
+
+							position = input.origin + input.direction * ( input.rayStart + input.scatterDist );
+							rayDataStorage[ index ].origin = position;
+
+						}
 
 						// next event estimation: choose one light or the environment by its estimated
-						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
+						// contribution. MaterialKernel evaluates the bsdf, or the phase function at a scatter
+						// event in fog, and enqueues the shadow ray
 						var lightPdf = 0.0;
 						if ( misEnabled != 0u ) {
 
-							let lightRec = ${ sampleLightFn }( hitResult.position, envWeight, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							let lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 							if ( lightRec.pdf > 0.0 ) {
 
 								lightPdf = lightRec.pdf;
@@ -263,17 +234,17 @@ export class LogicKernel extends ComputeKernel {
 						if ( input.hit.bounce > 0u && input.isFullyTransmissive == 0u ) {
 
 							var misWeight = 1.0;
-							if ( isMISWeighted && envActive ) {
+							if ( isMISWeighted ) {
 
-								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( input.direction ) * envWeight / lightTotalWeight;
-								misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
+								// weighted against the light sampling choosing the environment
+								let envPdf = ${ getEnvironmentPdfFn }( input.origin, input.direction );
+								misWeight = select( 1.0, ${ misHeuristicFn }( input.scatterPdf, envPdf ), envPdf > 0.0 );
 
 							}
 
 							let environment = ${ sampleEnvColor }( input.direction ).rgb * throughputColor * misWeight;
-							let contribution = ${ clampPathContributionFunc }( environment, input.hit.bounce, clampDirect, clampIndirect );
-							resultColor += vec4f( contribution, 0.0 );
+							let environmentLight = ${ clampPathContributionFunc }( environment, input.hit.bounce );
+							resultColor += vec4f( environmentLight, 0.0 );
 
 						} else {
 
@@ -284,7 +255,7 @@ export class LogicKernel extends ComputeKernel {
 							if ( input.hit.bounce == 0u ) {
 
 								// sample the background directly if this is the primary ray
-								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb, input.hit.bounce, clampDirect, clampIndirect );
+								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb, input.hit.bounce );
 								resultColor = vec4f( background, bg.a );
 
 							} else {
@@ -295,7 +266,7 @@ export class LogicKernel extends ComputeKernel {
 								let transparency = ( 1.0 - bg.a ) * avg;
 
 								var misWeight = 1.0;
-								if ( misEnabled != 0u && envActive ) {
+								if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0 ) {
 
 									let envPdf = ${ getEnvDirPdf }( input.direction );
 									misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
@@ -305,7 +276,7 @@ export class LogicKernel extends ComputeKernel {
 								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
 
 									// display the env map through transmissive surfaces
-									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor * misWeight, input.hit.bounce, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor * misWeight, input.hit.bounce );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0,
@@ -314,7 +285,7 @@ export class LogicKernel extends ComputeKernel {
 								} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
 
 									// fade the background by the throughput color average
-									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor * misWeight, input.hit.bounce, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor * misWeight, input.hit.bounce );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0 - transparency,
@@ -324,7 +295,7 @@ export class LogicKernel extends ComputeKernel {
 
 									// fade the background by the throughput color average, mixing in env lighting
 									var light = mix( env.rgb, bg.rgb, bg.a ) * misWeight;
-									let background = ${ clampPathContributionFunc }( light * throughputColor, input.hit.bounce, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( light * throughputColor, input.hit.bounce );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0 - transparency,
@@ -343,7 +314,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				// visible lights are opaque against a transparent background
-				resultColor += vec4f( lightHits, 0.0 );
+				resultColor += vec4f( lightHitColor, 0.0 );
 				if ( cameraHitLight ) {
 
 					resultColor.a = 1.0;
@@ -397,6 +368,7 @@ export class LogicKernel extends ComputeKernel {
 
 					rayDataStorage[ index ].resultColor = resultColor;
 					rayDataStorage[ index ].throughputColor = throughputColor;
+					rayDataStorage[ index ].cameraHitLight = select( 0u, 1u, cameraHitLight );
 
 				}
 

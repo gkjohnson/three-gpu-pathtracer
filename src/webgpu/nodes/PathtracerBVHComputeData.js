@@ -2,6 +2,7 @@ import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh }
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL } from 'three-mesh-bvh';
+import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
@@ -15,13 +16,15 @@ const transformStruct = new StructTypeNode( {
 }, 'TransformStruct' );
 
 // three-mesh-bvh's ray hit result. Shadow rays also record the share of bsdf rays the faces they skipped
-// would stop, and the share of light the partially transparent surfaces they passed block
+// would stop, the share of light the partially transparent surfaces they passed block, and the optical
+// depth of the fog volume boundaries they passed
 const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
 	didHit: 'bool',
 	barycoord: 'vec3f',
 	objectIndex: 'uint',
+	fogDepth: 'vec3f',
 	side: 'float',
 	dist: 'float',
 	skippedOcclusion: 'float',
@@ -64,6 +67,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const { attributes } = this;
 		const keys = new Set( [ 'color' ] );
+		delete attributes.color;
 		for ( let i = 0; i < 8; i ++ ) {
 
 			const key = i === 0 ? 'uv' : 'uv' + i;
@@ -454,6 +458,17 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
 							let material = ${ materialsStorage }[ object.materialIndex ];
 
+							// pass fog volume boundaries, in any order: entering adds the fog's optical depth back from
+							// the fog shadow distance, and leaving takes it away
+							if ( material.fogVolume != 0 ) {
+
+								let extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+								let depth = extinction * ( ${ getFogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
+								result.fogDepth += select( - depth, depth, triResult.side > 0.0 );
+								continue;
+
+							}
+
 							let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
 							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
@@ -597,7 +612,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					${ raycastOptions.transformShapeFn }( ray, objectIndex );
 
 					let material = ${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
-					let isVolume = material.transmission > 0.0 && material.thinWall == 0;
+					let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
 					${ skipObject } = select( 1u, 0u, isVolume );
 
 				}

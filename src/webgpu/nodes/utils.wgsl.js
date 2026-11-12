@@ -1,6 +1,6 @@
 import { wgslFn } from 'three/tsl';
 import { scatterRecordStruct } from './structs.wgsl.js';
-import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, contextProxy } from 'three-mesh-bvh/webgpu';
 
 export const inverseMat3x3Func = wgslFn( /* wgsl */ `
 
@@ -205,12 +205,13 @@ export const isTerminatingScatterFunc = wgslFn( /* wgsl */ `
 
 // Clamp individual light-path contributions using Cycles' RGB sum while preserving chromaticity.
 // Matches film_clamp_light in Cycles' kernel/film/light_passes.h, including the x3 limit
-// scaling applied to the user-facing clamp values in scene/integrator.cpp.
-export const clampPathContributionFunc = wgslFn( /* wgsl */ `
+// scaling applied to the user-facing clamp values in scene/integrator.cpp. The clamp values are read from the
+// kernel's context.
+export const clampPathContributionFunc = wgslTagFn/* wgsl */`
 
-	fn clampPathContribution( contribution: vec3f, pathDepth: u32, clampDirect: f32, clampIndirect: f32 ) -> vec3f {
+	fn clampPathContribution( contribution: vec3f, pathDepth: u32 ) -> vec3f {
 
-		let limit = select( clampIndirect, clampDirect, pathDepth <= 1u ) * 3.0;
+		let limit = select( ${ contextProxy( 'clampIndirect' ) }, ${ contextProxy( 'clampDirect' ) }, pathDepth <= 1u ) * 3.0;
 		if ( limit <= 0.0 ) {
 
 			return contribution;
@@ -228,7 +229,7 @@ export const clampPathContributionFunc = wgslFn( /* wgsl */ `
 
 	}
 
-` );
+`;
 
 export const applyWrapFunc = wgslFn( /* wgsl */ `
 

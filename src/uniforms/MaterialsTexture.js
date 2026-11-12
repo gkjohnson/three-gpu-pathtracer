@@ -190,9 +190,21 @@ export class MaterialsTexture extends DataTexture {
 
 			// sample 0
 			// color
-			floatArray[ index ++ ] = m.color.r;
-			floatArray[ index ++ ] = m.color.g;
-			floatArray[ index ++ ] = m.color.b;
+			// materials without a color, like NodeMaterial or ShaderMaterial, default to white
+			if ( 'color' in m ) {
+
+				floatArray[ index ++ ] = m.color.r;
+				floatArray[ index ++ ] = m.color.g;
+				floatArray[ index ++ ] = m.color.b;
+
+			} else {
+
+				floatArray[ index ++ ] = 1.0;
+				floatArray[ index ++ ] = 1.0;
+				floatArray[ index ++ ] = 1.0;
+
+			}
+
 			floatArray[ index ++ ] = getTexture( m, 'map' );
 
 			// sample 1

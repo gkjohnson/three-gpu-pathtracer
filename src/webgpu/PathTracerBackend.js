@@ -1,4 +1,5 @@
 import { TimestampQuery } from 'three/webgpu';
+import { uniform } from 'three/tsl';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/auxiliary.wgsl.js';
@@ -20,7 +21,12 @@ export class PathTracerBackend {
 
 		this.maxTransparentBounces = 15;
 		this.maxSubsurfaceBounces = 256;
+		this.maxFogBounces = 0;
 		this.lowResMode = false;
+
+		// the light clamping values, shared with the kernels through their context
+		this.clampDirect = uniform( 0 );
+		this.clampIndirect = uniform( 10 );
 
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
@@ -101,7 +107,11 @@ export class PathTracerBackend {
 
 	}
 
-	setClamping( _direct, _indirect ) {
+	setClamping( direct, indirect ) {
+
+		this.clampDirect.value = direct;
+		this.clampIndirect.value = indirect;
+		this.reset();
 
 	}
 

@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -8,6 +8,7 @@ import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
+import { toHalfFloatArray } from '../utils/TextureUtils.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
@@ -107,7 +108,9 @@ class TextureCache {
 		this.texture = null;
 		this.hash = null;
 
-		const colorTex = new DataTexture( new Uint8Array( [ 255, 255, 255, 255 ] ), 1, 1 );
+		// half float, since 8 bit linear data truncates dark colors (0x080808 becomes black)
+		const colorTex = new DataTexture( toHalfFloatArray( [ 1, 1, 1, 1 ] ), 1, 1 );
+		colorTex.type = HalfFloatType;
 		colorTex.minFilter = LinearFilter;
 		colorTex.magFilter = LinearFilter;
 		this.colorTex = colorTex;
@@ -132,10 +135,7 @@ class TextureCache {
 			const clearAlpha = renderer.getClearAlpha();
 			renderer.getClearColor( _color );
 
-			colorTex.image.data[ 0 ] = _color.r * 255;
-			colorTex.image.data[ 1 ] = _color.g * 255;
-			colorTex.image.data[ 2 ] = _color.b * 255;
-			colorTex.image.data[ 3 ] = clearAlpha * 255;
+			colorTex.image.data.set( toHalfFloatArray( [ _color.r, _color.g, _color.b, clearAlpha ] ) );
 
 			value = colorTex;
 			hash = colorTex.image.data.join();
@@ -143,10 +143,7 @@ class TextureCache {
 
 		} else if ( value.isColor ) {
 
-			colorTex.image.data[ 0 ] = value.r * 255;
-			colorTex.image.data[ 1 ] = value.g * 255;
-			colorTex.image.data[ 2 ] = value.b * 255;
-			colorTex.image.data[ 3 ] = 255;
+			colorTex.image.data.set( toHalfFloatArray( [ value.r, value.g, value.b, 1 ] ) );
 
 			value = colorTex;
 			hash = colorTex.image.data.join();
@@ -309,6 +306,26 @@ export class WebGPUPathTracer extends EventDispatcher {
 	set maxSubsurfaceBounces( v ) {
 
 		this._pathTracer.maxSubsurfaceBounces = v;
+		this.reset();
+
+	}
+
+	/**
+	 * Maximum number of times a path continues after scattering in fog. Light is still sampled at the
+	 * scatter that reaches it, so 0 renders single scattering, as Cycles' volume bounces do. Fog scatters
+	 * also count toward {@link WebGPUPathTracer#maxBounces}.
+	 * @type {number}
+	 * @default 0
+	 */
+	get maxFogBounces() {
+
+		return this._pathTracer.maxFogBounces;
+
+	}
+
+	set maxFogBounces( v ) {
+
+		this._pathTracer.maxFogBounces = v;
 		this.reset();
 
 	}

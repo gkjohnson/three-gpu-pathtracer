@@ -1,6 +1,8 @@
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn, rayStruct, contextProxy } from 'three-mesh-bvh/webgpu';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
+import { rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from './random.wgsl.js';
+import { sampleHenyeyGreensteinFn } from './sampling.wgsl.js';
 import { DependentStructTypeNode } from './DependentStructTypeNode.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
@@ -26,13 +28,20 @@ export const mediumStackStruct = new StructTypeNode( {
 	ids: `array<u32, ${ MEDIUM_STACK_SIZE }>`,
 }, 'MediumStack' );
 
-// The combined media of a stack. "scatters" is a uint so the struct can be held in a storage buffer
+// shadow rays at least this long go to distant lights, whose distance is the far distance
+const MEDIUM_DISTANT_SHADOW_DISTANCE = 0.5 * LIGHT_FAR_DISTANCE;
+
+// The medium a path is in: the combined media of its stack of fog and absorbing volumes, or the volume of a
+// subsurface walk, which isn't on the stack. "scatters" and "subsurface" are uints so the struct can be held in a
+// storage buffer. A scatter event in fog is a path vertex, where a subsurface walk takes no light sample
 const mediumMembers = {
 	extinction: 'vec3f',
 	scatters: 'uint',
 
 	albedo: 'vec3f',
 	anisotropy: 'float',
+
+	subsurface: 'uint',
 };
 
 export const mediumStruct = new DependentStructTypeNode( {
@@ -67,9 +76,16 @@ const getSingleScatterAlbedoFn = wgslTagFn/* wgsl */`
 `;
 
 const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
+const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
+
+// the result of a step of a random walk through a subsurface medium
+export const MEDIUM_WALK_SCATTERED = 0;
+export const MEDIUM_WALK_SURFACE = 1;
+export const MEDIUM_WALK_TERMINATED = 2;
 
 // returns a material's extinction from its glTF attenuation, zero for one without a volume
-const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
+export const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
 
 	fn getMaterialExtinction( attenuationColor: vec3f, attenuationDistance: f32 ) -> vec3f {
 
@@ -79,14 +95,48 @@ const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Adds the material's volume to an empty slot of the stack. A volume without extinction, one already on the stack,
-// or one past a full stack is not added
+// Returns whether the material's volume scatters, a subsurface volume a path walks through after refracting into it
+// rather than one on the stack
+export const isSubsurfaceMaterialFn = wgslTagFn/* wgsl */`
+
+	fn isSubsurfaceMaterial( materialIndex: u32 ) -> bool {
+
+		let material = ${ materialsStorage }[ materialIndex ];
+		return material.scatterStrength > 0.0 && any( material.multiscatterColor > vec3f( 0.0 ) ) &&
+			any( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) > vec3f( 0.0 ) );
+
+	}
+
+`;
+
+// Returns the medium of a subsurface walk through the material's volume
+export const getSubsurfaceMediumFn = wgslTagFn/* wgsl */`
+
+	fn getSubsurfaceMedium( materialIndex: u32 ) -> ${ mediumStruct } {
+
+		let material = ${ materialsStorage }[ materialIndex ];
+		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
+
+		var medium: ${ mediumStruct };
+		medium.extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+		medium.albedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, anisotropy );
+		medium.anisotropy = anisotropy;
+		medium.scatters = 1u;
+		medium.subsurface = 1u;
+		return medium;
+
+	}
+
+`;
+
+// Adds the material's volume to an empty slot of the stack. A volume without extinction, a subsurface volume, one
+// already on the stack, or one past a full stack is not added
 export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
 	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, materialIndex: u32 ) -> void {
 
 		let material = ${ materialsStorage }[ materialIndex ];
-		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
+		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) || ${ isSubsurfaceMaterialFn }( materialIndex ) ) {
 
 			return;
 
@@ -175,7 +225,7 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 `;
 
 // Returns the combined medium of all the stack's volumes, as if inside them all at once: coefficients summed as
-// in Cycles, with the anisotropy averaged by scattering
+// in Cycles, with the anisotropy averaged by scattering. Only fog scatters, the other volumes only absorb
 export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 
 	fn getCombinedMedium( stack: ${ mediumStackStruct } ) -> ${ mediumStruct } {
@@ -197,7 +247,9 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 			let material = ${ materialsStorage }[ ids[ i ] ];
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
-			let entryAlbedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, entryAnisotropy );
+
+			// a fog volume's color is its single scatter albedo already
+			let entryAlbedo = select( vec3f( 0.0 ), material.multiscatterColor, material.fogVolume != 0 );
 			let entryScattering = entryAlbedo * entryExtinction;
 			let weight = dot( entryScattering, vec3f( 1.0 / 3.0 ) );
 			extinction += entryExtinction;
@@ -211,11 +263,79 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 		// channels without extinction keep the largest albedo for the channel choice
 		var medium: ${ mediumStruct };
 		medium.stack = stack;
+		medium.subsurface = 0u;
 		medium.extinction = extinction;
 		medium.albedo = select( maxAlbedo, scattering / extinction, extinction > vec3f( 0.0 ) );
 		medium.anisotropy = select( 0.0, anisotropy / anisotropyWeight, anisotropyWeight > 0.0 );
 		medium.scatters = select( 0u, 1u, any( medium.albedo > vec3f( 0.0 ) ) && any( extinction > vec3f( 0.0 ) ) );
 		return medium;
+
+	}
+
+`;
+
+// Returns the stack a surface's shadow ray starts in. A light on the far side of a volume's boundary is reached
+// through it, entering or leaving the volume
+export const getShadowMediumStackFn = wgslTagFn/* wgsl */`
+
+	fn getShadowMediumStack(
+		stack: ${ mediumStackStruct }, materialIndex: u32, side: f32, thinWall: bool,
+		direction: vec3f, lightDirection: vec3f, normal: vec3f,
+	) -> ${ mediumStackStruct } {
+
+		var result = stack;
+		let crossesSurface = dot( direction, normal ) * dot( lightDirection, normal ) > 0.0;
+		if ( crossesSurface && ! thinWall ) {
+
+			if ( side > 0.0 ) {
+
+				${ addToMediumStackFn }( &result, materialIndex );
+
+			} else {
+
+				${ removeFromMediumStackFn }( &result, materialIndex );
+
+			}
+
+		}
+
+		return result;
+
+	}
+
+`;
+
+// Returns the distance a shadow ray's fog depth is measured back from: the light's. A distant light is outside of
+// every closed volume, so the depth is measured from the origin instead, where a far distance would lose its precision
+export const getFogShadowDistanceFn = wgslTagFn/* wgsl */`
+
+	fn getFogShadowDistance( maxDist: f32 ) -> f32 {
+
+		return select( maxDist, 0.0, maxDist >= ${ MEDIUM_DISTANT_SHADOW_DISTANCE } );
+
+	}
+
+`;
+
+// Returns the optical depth of the media a shadow ray starts in, up to the fog shadow distance. The traversal passes
+// fog boundaries in any order, adding their depth back from the same distance, so together they cover the ray
+export const getShadowMediumDepthFn = wgslTagFn/* wgsl */`
+
+	fn getShadowMediumDepth( stack: ${ mediumStackStruct }, maxDist: f32 ) -> vec3f {
+
+		return ${ getCombinedMediumFn }( stack ).extinction * ${ getFogShadowDistanceFn }( maxDist );
+
+	}
+
+`;
+
+// Returns the light a shadow ray lets through: what the partially transparent surfaces passed let through, times
+// the transmittance of the media of the given optical depth on the way
+export const getShadowTransmittanceFn = wgslTagFn/* wgsl */`
+
+	fn getShadowTransmittance( depth: vec3f, occlusion: f32 ) -> vec3f {
+
+		return ( 1.0 - occlusion ) * exp( - max( depth, vec3f( 0.0 ) ) );
 
 	}
 
@@ -278,6 +398,115 @@ export const getMediumDistancePdfFn = wgslTagFn/* wgsl */`
 
 		let transmittance = exp( - medium.extinction * dist );
 		return select( transmittance, medium.extinction * transmittance, scattered );
+
+	}
+
+`;
+
+// Returns the scatter distance sampled for a segment in fog, which the segment is traced up to, or zero outside of fog
+export const sampleFogDistanceFn = wgslTagFn/* wgsl */`
+
+	fn sampleFogDistance( medium: ${ mediumStruct }, throughput: vec3f, u: vec2f ) -> f32 {
+
+		if ( medium.scatters == 0u || medium.subsurface != 0u ) {
+
+			return 0.0;
+
+		}
+
+		return ${ sampleMediumDistanceFn }( medium, ${ getMediumChannelPdfFn }( throughput, medium.albedo ), u );
+
+	}
+
+`;
+
+// Returns the weight of a traced segment through its medium. A medium that only absorbs attenuates it to the surface.
+// Fog, traced up to the scatter distance, weights scattering there when no surface is nearer, or reaching the surface,
+// zero when the segment's pdf is. A walked segment, with no scatter distance, was weighted by its walk
+export const getMediumSegmentWeightFn = wgslTagFn/* wgsl */`
+
+	fn getMediumSegmentWeight( medium: ${ mediumStruct }, throughput: vec3f, scatterDist: f32, surfaceDist: f32 ) -> vec3f {
+
+		if ( medium.scatters == 0u ) {
+
+			return exp( - medium.extinction * surfaceDist );
+
+		}
+
+		if ( scatterDist <= 0.0 ) {
+
+			return vec3f( 1.0 );
+
+		}
+
+		let scattered = scatterDist < surfaceDist;
+		let segmentDist = select( surfaceDist, scatterDist, scattered );
+		let transmittance = exp( - medium.extinction * segmentDist );
+		let distancePdf = dot( ${ getMediumChannelPdfFn }( throughput, medium.albedo ), ${ getMediumDistancePdfFn }( medium, segmentDist, scattered ) );
+		if ( distancePdf <= 0.0 ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		return select( transmittance, medium.albedo * medium.extinction * transmittance, scattered ) / distancePdf;
+
+	}
+
+`;
+
+// One step of a random walk through a subsurface medium, as in Cycles' subsurface_random_walk: the ray is traced up to
+// a sampled scatter event, where it scatters, or reaches a surface first, weighted by the chance of not scattering
+// before it. "throughput" is the path's with the walk's weight so far, which chooses the sampled channel and ends a
+// walk once negligible. The walk also ends once the subsurface bounces, counted separately from bounces, run out
+export const walkMediumStepFn = wgslTagFn/* wgsl */`
+
+	fn walkMediumStep(
+		medium: ${ mediumStruct }, throughput: vec3f, maxSubsurfaceBounces: u32,
+		ray: ptr<function, ${ rayStruct }>, hitResult: ptr<function, ${ raycastOutput }>,
+		weight: ptr<function, vec3f>, subsurfaceBounces: ptr<function, u32>,
+	) -> u32 {
+
+		// only trace up to the sampled scatter event
+		let channelPdf = ${ getMediumChannelPdfFn }( throughput, medium.albedo );
+		let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+		ray.maxDist = scatterDist;
+
+		let didHit = ${ raycastFirstHitFn }( *ray, hitResult );
+		let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
+
+		let scattered = scatterDist < surfaceDist;
+		let segmentDist = select( surfaceDist, scatterDist, scattered );
+		let transmittance = exp( - medium.extinction * segmentDist );
+		let distancePdf = dot( channelPdf, ${ getMediumDistancePdfFn }( medium, segmentDist, scattered ) );
+		if ( distancePdf <= 0.0 ) {
+
+			return ${ MEDIUM_WALK_TERMINATED }u;
+
+		}
+
+		if ( ! scattered ) {
+
+			// reaching the surface, weighted by the chance of not scattering before it
+			*weight = transmittance / distancePdf;
+			return ${ MEDIUM_WALK_SURFACE }u;
+
+		}
+
+		*weight = medium.albedo * medium.extinction * transmittance / distancePdf;
+		ray.origin += ray.direction * scatterDist;
+		ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+
+		// capped separately from bounces, and ends once the throughput is negligible
+		*subsurfaceBounces += 1u;
+		let walkThroughput = throughput * ( *weight );
+		if ( *subsurfaceBounces >= maxSubsurfaceBounces || max( max( walkThroughput.r, walkThroughput.g ), walkThroughput.b ) < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
+
+			return ${ MEDIUM_WALK_TERMINATED }u;
+
+		}
+
+		return ${ MEDIUM_WALK_SCATTERED }u;
 
 	}
 
