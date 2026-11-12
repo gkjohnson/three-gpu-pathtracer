@@ -4,8 +4,8 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { AtlasTexture } from './AtlasTexture.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
-import { sampleTexelFunc } from './nodes/utils.wgsl.js';
-import { luminanceFn } from './nodes/sampling.wgsl.js';
+import { sampleTexelFunc, clampPathContributionFunc } from './nodes/utils.wgsl.js';
+import { luminanceFn, misHeuristicFn } from './nodes/sampling.wgsl.js';
 import {
 	RECT_AREA_LIGHT_TYPE,
 	CIRC_AREA_LIGHT_TYPE,
@@ -408,6 +408,56 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				}
 
 				return false;
+
+			}
+		`;
+
+		// Returns the light of the area lights a ray passes between "start" and "end" along it, each clamped at the
+		// segment's depth, as in Cycles. When "isMISWeighted" each is weighted against the light sampling at the ray's
+		// origin. Camera rays only see visibleToCameraRays lights. The alpha is one if a light was hit
+		this.getLightHits = wgslTagFn/* wgsl */`
+			fn getLightHits(
+				origin: vec3f, direction: vec3f, start: f32, end: f32,
+				throughput: vec3f, scatterPdf: f32, isMISWeighted: bool, bounce: u32,
+			) -> vec4f {
+
+				// NEE's total weight at the ray's origin
+				var lightTotalWeight = 0.0;
+				if ( isMISWeighted ) {
+
+					lightTotalWeight = ${ this.getLightsWeight }( origin );
+
+				}
+
+				var light = vec3f( 0.0 );
+				var didHit = false;
+				for ( var i = 0u; i < ${ countNode }; i ++ ) {
+
+					if ( bounce == 0u && ! ${ this.isLightVisibleToCamera }( i ) ) {
+
+						continue;
+
+					}
+
+					var lightRec: ${ lightRecordStruct };
+					if ( ${ this.intersectLightAtIndex }( origin, direction, i, &lightRec ) && lightRec.dist > start && lightRec.dist < end ) {
+
+						var misWeight = 1.0;
+						if ( isMISWeighted ) {
+
+							let selectionPdf = ${ this.getLightWeight }( i, origin ) / lightTotalWeight;
+							misWeight = ${ misHeuristicFn }( scatterPdf, lightRec.pdf * selectionPdf );
+
+						}
+
+						light += ${ clampPathContributionFunc }( lightRec.emission * throughput * misWeight, bounce );
+						didHit = true;
+
+					}
+
+				}
+
+				return vec4f( light, select( 0.0, 1.0, didHit ) );
 
 			}
 		`;

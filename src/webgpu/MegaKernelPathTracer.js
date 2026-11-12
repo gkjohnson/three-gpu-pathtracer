@@ -24,6 +24,8 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// kernels
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
+		this.kernel.context.clampDirect = this.clampDirect;
+		this.kernel.context.clampIndirect = this.clampIndirect;
 		this.kernel.envInfo = this.envInfo;
 
 		this.backgroundInfo = new EquirectBackgroundInfo();
@@ -101,14 +103,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// the kernel takes the inverted threshold, mirroring Cycles
 		this.kernel.filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
-		this.reset();
-
-	}
-
-	setClamping( direct, indirect ) {
-
-		this.kernel.clampDirect = direct;
-		this.kernel.clampIndirect = indirect;
 		this.reset();
 
 	}

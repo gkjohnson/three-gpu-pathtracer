@@ -110,6 +110,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.resetSlotsKernel = new ResetSlotsKernel().setWorkgroupSize( 64, 1, 1 );
 		this.copyRayDataKernel = new CopyBufferKernel( rayDataStruct ).setWorkgroupSize( 64, 1, 1 );
 
+		// the logic kernel clamps the light it gathers
+		this.logicKernel.context.clampDirect = this.clampDirect;
+		this.logicKernel.context.clampIndirect = this.clampIndirect;
+
 		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
 		this.logicKernel.envInfo = this.envInfo;
 		this.logicKernel.backgroundInfo = this.backgroundInfo;
@@ -191,14 +195,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// the kernel takes the inverted threshold, mirroring Cycles
 		this.materialKernel.filterGlossy = value === 0 ? FILTER_GLOSSY_DISABLED : 1 / value;
-		this.reset();
-
-	}
-
-	setClamping( direct, indirect ) {
-
-		this.logicKernel.clampDirect = direct;
-		this.logicKernel.clampIndirect = indirect;
 		this.reset();
 
 	}
