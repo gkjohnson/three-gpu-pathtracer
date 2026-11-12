@@ -70,6 +70,9 @@ const rayDataMembers = {
 	// whether the staged hit is a scatter event in fog at "origin" rather than a surface
 	fogScatter: 'uint',
 
+	// whether the camera ray passed a light, which stays opaque against a transparent background or matte surface
+	cameraHitLight: 'uint',
+
 	// the scatter distance sampled for the queued segment in fog, which it's traced up to, or zero outside of fog
 	scatterDist: 'float',
 
