@@ -4,7 +4,7 @@ import { uniform, storage, globalId } from 'three/tsl';
 import { contextProxy, contextProxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
-import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn } from '../../nodes/medium.wgsl.js';
+import { addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn } from '../../nodes/medium.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
@@ -154,7 +154,7 @@ export class MaterialKernel extends ComputeKernel {
 						let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.hit.normal );
 						if ( segmentInMedium ) {
 
-							// inside a medium, MediumKernel walks on past the surface, from the surface
+							// inside a medium, SubsurfaceKernel walks on past the surface, from the surface
 							rayDataStorage[ index ].walkPending = 1u;
 							rayDataStorage[ index ].origin = alphaOrigin;
 							rayDataStorage[ index ].rayStart = 0.0;
@@ -270,14 +270,22 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
-						// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
+						// a subsurface volume isn't on the stack, refracting into one starts a walk through it
 						medium = ${ getCombinedMediumFn }( stack );
+						if ( input.hit.side > 0.0 && ${ isSubsurfaceMaterialFn }( objectInfo.materialIndex ) ) {
+
+							medium = ${ getSubsurfaceMediumFn }( objectInfo.materialIndex );
+							medium.stack = stack;
+
+						}
+
+						// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
 						${ params.rayDataStorage }[ index ].medium = medium;
 
 					}
 
 					// the NEE shadow ray below still resolves the surface's direct light, so only
-					// the bounce segment is skipped for finished paths. Inside a medium, MediumKernel walks it
+					// the bounce segment is skipped for finished paths. Inside a medium, SubsurfaceKernel walks it
 					if ( ! isTerminated && medium.scatters != 0u ) {
 
 						rayDataStorage[ index ].walkPending = 1u;

@@ -6,7 +6,7 @@ import { getCombinedMediumFn, getMediumStackAtPointFn } from '../../nodes/medium
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH } from './structs.js';
 
 // Sets the medium of the camera rays CameraRayKernel spawned from the volumes around their origin, then queues
-// each ray to be traced, or walked when it starts in a scattering medium.
+// each ray to be traced. Subsurface volumes aren't on the stack, so a camera inside one sees its walls, as in Cycles.
 export class CameraMediumKernel extends ComputeKernel {
 
 	constructor( ) {
@@ -49,24 +49,14 @@ export class CameraMediumKernel extends ComputeKernel {
 				let medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( input.origin ) );
 				${ params.rayDataStorage }[ index ].medium = medium;
 
-				if ( medium.scatters != 0u ) {
-
-					// walk the medium, marking the slot as in use so it's queued for the walk rather than respawned
-					rayDataStorage[ index ].walkPending = 1u;
-					rayDataStorage[ index ].hit.objectIndex = 0;
-
-				} else {
-
-					let rayIndex = atomicAdd( &queueCounters[ ${ RAY_QUEUE_LENGTH }u ], 1u );
-					rayQueue[ rayIndex ].origin = input.origin;
-					rayQueue[ rayIndex ].direction = input.direction;
-					rayQueue[ rayIndex ].pixelIndex = input.pixelIndex;
-					rayQueue[ rayIndex ].rngIndex = 0u;
-					rayQueue[ rayIndex ].sampleIndex = input.sampleIndex;
-					rayQueue[ rayIndex ].maxDist = input.maxDist;
-					rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
-
-				}
+				let rayIndex = atomicAdd( &queueCounters[ ${ RAY_QUEUE_LENGTH }u ], 1u );
+				rayQueue[ rayIndex ].origin = input.origin;
+				rayQueue[ rayIndex ].direction = input.direction;
+				rayQueue[ rayIndex ].pixelIndex = input.pixelIndex;
+				rayQueue[ rayIndex ].rngIndex = 0u;
+				rayQueue[ rayIndex ].sampleIndex = input.sampleIndex;
+				rayQueue[ rayIndex ].maxDist = input.maxDist;
+				rayDataStorage[ index ].rayIntersectionIndex = i32( rayIndex );
 
 			}
 		`;

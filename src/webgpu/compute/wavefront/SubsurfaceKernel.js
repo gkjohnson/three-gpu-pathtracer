@@ -14,7 +14,7 @@ import { rayDataStruct, intersectionResultStruct, MEDIUM_QUEUE_LENGTH, MEDIUM_QU
 // Random walks through scattering media, as in Cycles' subsurface kernel but capped per pass. A walk that
 // reaches a surface hands its hit to LogicKernel like a traced ray, one that doesn't resumes next pass. The
 // walk's weight goes into the staged scatter color.
-export class MediumKernel extends ComputeKernel {
+export class SubsurfaceKernel extends ComputeKernel {
 
 	constructor( ) {
 

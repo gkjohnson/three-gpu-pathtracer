@@ -4,7 +4,7 @@ import { LogicKernel } from './compute/wavefront/LogicKernel.js';
 import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
 import { TraceRayKernel } from './compute/wavefront/TraceRayKernel.js';
 import { TraceShadowRayKernel } from './compute/wavefront/TraceShadowRayKernel.js';
-import { MediumKernel } from './compute/wavefront/MediumKernel.js';
+import { SubsurfaceKernel } from './compute/wavefront/SubsurfaceKernel.js';
 import { QueueMediumWalksKernel } from './compute/wavefront/QueueMediumWalksKernel.js';
 import { CameraRayKernel } from './compute/wavefront/CameraRayKernel.js';
 import { CameraMediumKernel } from './compute/wavefront/CameraMediumKernel.js';
@@ -96,7 +96,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.materialKernel = new MaterialKernel().setWorkgroupSize( 64, 1, 1 );
 		this.traceRayKernel = new TraceRayKernel().setWorkgroupSize( 64, 1, 1 );
 		this.traceShadowRayKernel = new TraceShadowRayKernel().setWorkgroupSize( 64, 1, 1 );
-		this.mediumKernel = new MediumKernel().setWorkgroupSize( 64, 1, 1 );
+		this.subsurfaceKernel = new SubsurfaceKernel().setWorkgroupSize( 64, 1, 1 );
 		this.queueMediumWalksKernel = new QueueMediumWalksKernel().setWorkgroupSize( 64, 1, 1 );
 		this.cameraRayKernel = new CameraRayKernel().setWorkgroupSize( 64, 1, 1 );
 		this.cameraMediumKernel = new CameraMediumKernel().setWorkgroupSize( 64, 1, 1 );
@@ -139,7 +139,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.materialKernel.context.bvhData = bvhData;
 		this.traceRayKernel.context.bvhData = bvhData;
 		this.traceShadowRayKernel.context.bvhData = bvhData;
-		this.mediumKernel.context.bvhData = bvhData;
+		this.subsurfaceKernel.context.bvhData = bvhData;
 		this.cameraRayKernel.context.bvhData = bvhData;
 		this.cameraMediumKernel.context.bvhData = bvhData;
 		this.rebuild();
@@ -155,7 +155,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.materialKernel.needsUpdate = true;
 		this.traceRayKernel.needsUpdate = true;
 		this.traceShadowRayKernel.needsUpdate = true;
-		this.mediumKernel.needsUpdate = true;
+		this.subsurfaceKernel.needsUpdate = true;
 		this.cameraRayKernel.needsUpdate = true;
 		this.cameraMediumKernel.needsUpdate = true;
 		this.reset();
@@ -169,7 +169,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.cameraRayKernel.context.random = random;
 		this.traceRayKernel.context.random = random;
 		this.traceShadowRayKernel.context.random = random;
-		this.mediumKernel.context.random = random;
+		this.subsurfaceKernel.context.random = random;
 		this.rebuild();
 
 	}
@@ -180,7 +180,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.materialKernel.context.shadingModel = shadingModel;
 		this.traceRayKernel.context.shadingModel = shadingModel;
 		this.traceShadowRayKernel.context.shadingModel = shadingModel;
-		this.mediumKernel.context.shadingModel = shadingModel;
+		this.subsurfaceKernel.context.shadingModel = shadingModel;
 		this.cameraMediumKernel.context.shadingModel = shadingModel;
 		this.rebuild();
 
@@ -292,7 +292,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.materialKernel.dispose();
 		this.traceRayKernel.dispose();
 		this.traceShadowRayKernel.dispose();
-		this.mediumKernel.dispose();
+		this.subsurfaceKernel.dispose();
 		this.queueMediumWalksKernel.dispose();
 		this.cameraRayKernel.dispose();
 		this.cameraMediumKernel.dispose();
@@ -358,7 +358,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const shadowRayQueue = new StorageBufferAttribute( count, traceQueuedRayStruct.getLength() );
 		shadowRayQueue.name = 'Shadow Ray Queue';
 
-		// Traced rays fill the results from the front at their queue index, and MediumKernel fills them from the
+		// Traced rays fill the results from the front at their queue index, and SubsurfaceKernel fills them from the
 		// back with the hits of medium walks. In a round each path slot either queues one ray or walks a medium,
 		// never both, so the two ranges together never exceed the slot count and can't overlap
 		const rayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
@@ -451,7 +451,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			materialKernel,
 			traceRayKernel,
 			traceShadowRayKernel,
-			mediumKernel,
+			subsurfaceKernel,
 			queueMediumWalksKernel,
 			cameraRayKernel,
 			cameraMediumKernel,
@@ -470,7 +470,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			materialKernel,
 			traceRayKernel,
 			traceShadowRayKernel,
-			mediumKernel,
+			subsurfaceKernel,
 			queueMediumWalksKernel,
 			cameraRayKernel,
 			cameraMediumKernel,
@@ -512,7 +512,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		cameraRayKernel.globalSeed = this.globalSeed;
 		traceRayKernel.globalSeed = this.globalSeed;
 		traceShadowRayKernel.globalSeed = this.globalSeed;
-		mediumKernel.globalSeed = this.globalSeed;
+		subsurfaceKernel.globalSeed = this.globalSeed;
 
 		while ( true ) {
 
@@ -621,13 +621,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				mediumDispatchConverter.queueCounters = mediumQueue;
 				this.dispatch( mediumDispatchConverter, [ 1, 1, 1 ] );
 
-				mediumKernel.rayDataStorage = rayDataStorage;
-				mediumKernel.mediumQueue = mediumQueue;
-				mediumKernel.rayIntersectionsStorage = rayIntersectionsStorage;
-				mediumKernel.rayCount = rayCount;
-				mediumKernel.maxSubsurfaceBounces = this.maxSubsurfaceBounces;
-				mediumKernel.stepsPerPass = this.mediumStepsPerPass;
-				this.dispatch( mediumKernel, mediumDispatchConverter.outputDispatch );
+				subsurfaceKernel.rayDataStorage = rayDataStorage;
+				subsurfaceKernel.mediumQueue = mediumQueue;
+				subsurfaceKernel.rayIntersectionsStorage = rayIntersectionsStorage;
+				subsurfaceKernel.rayCount = rayCount;
+				subsurfaceKernel.maxSubsurfaceBounces = this.maxSubsurfaceBounces;
+				subsurfaceKernel.stepsPerPass = this.mediumStepsPerPass;
+				this.dispatch( subsurfaceKernel, mediumDispatchConverter.outputDispatch );
 
 			}
 
