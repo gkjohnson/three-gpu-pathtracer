@@ -196,6 +196,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				ray.direction = normalize( ray.direction );
 
+				// CameraRayKernel
 				// the path state, as in the wavefront ray data
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
@@ -221,6 +222,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// whether the segment starts at a subsurface scatter event, where no light is sampled
 				var mediumScattered = false;
 
+				// CameraMediumKernel
 				// the medium the camera ray starts in, which the path's scatters enter and exit
 				var medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( ray.origin ) );
 
@@ -237,9 +239,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
+					// TraceRayKernel, or SubsurfaceKernel inside a subsurface medium
 					// Trace the segment, in fog up to a scatter distance sampled with the segment's own random sequence
-					// index, as queued in the wavefront. Inside a subsurface medium the segment is walked instead, as in
-					// SubsurfaceKernel, step by step to each scatter event until the walk reaches a surface or ends
+					// index, as queued in the wavefront. Inside a subsurface medium the segment is walked instead, step by
+					// step to each scatter event until the walk reaches a surface or ends
 					var traceRay = Ray( traceOrigin, ray.direction, 0.0 );
 					var hitResult: ${ raycastOutput };
 					var didHitSurface = false;
@@ -294,6 +297,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
+					// LogicKernel
 					var surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
 
 					// A segment in fog was traced up to its sampled scatter distance. Without a nearer surface it scatters
@@ -414,8 +418,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
+					// MaterialKernel
 					// The vertex's next direction, its evaluation toward the light sampled above, and where the
-					// bounce and shadow rays start, as in MaterialKernel
+					// bounce and shadow rays start
 					var scatterRec: ${ scatterRecordStruct };
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
@@ -633,9 +638,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
+					// LogicKernel, on its next pass
 					// the light sampled at the vertex, through its shadow ray, and its emission, resolved with the
-					// pre-scatter throughput as in LogicKernel. Found light clamps at the depth of the segment that
-					// found it, as in Cycles
+					// pre-scatter throughput. Found light clamps at the depth of the segment that found it, as in Cycles
 					if ( lightRec.pdf > 0.0 ) {
 
 						let contribution = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
@@ -661,6 +666,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
+					// MaterialKernel
 					// the next segment starts at the bounce origin
 					ray.origin = bounceOrigin;
 					ray.direction = scatterRec.direction;
