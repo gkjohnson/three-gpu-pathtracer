@@ -21,6 +21,7 @@ import {
 	getSpotAttenuationFn,
 	getDistanceAttenuationFn,
 	getSpotLightNearestFn,
+	isMISWeightLightFn,
 } from './nodes/lights.wgsl.js';
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
@@ -408,6 +409,25 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				}
 
 				return false;
+
+			}
+		`;
+
+		// Returns the light a shadow ray lets through to its vertex: the light sample, evaluated at the vertex, scaled by
+		// the transmittance along the ray. Env + area lights are also found by bsdf rays, so they are MIS weighted.
+		// Punctual lights, and lights past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray
+		// skipped can't find the light, so their share of the weight moves to the light sample. "bounce" is the shadow
+		// ray's depth, one past its vertex, which clamps it
+		this.getDirectLight = wgslTagFn/* wgsl */`
+			fn getDirectLight(
+				lightPdf: f32, lightEmission: vec3f, lightType: i32, evalColor: vec3f, evalPdf: f32,
+				transmittance: vec3f, skippedOcclusion: f32, throughput: vec3f, bounce: u32, maxBounces: u32,
+			) -> vec3f {
+
+				let isMISWeighted = ${ isMISWeightLightFn }( lightType ) && bounce < maxBounces;
+				let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightPdf, evalPdf ), 1.0, skippedOcclusion ), isMISWeighted );
+				let directLight = throughput * lightEmission * transmittance * evalColor * misWeight / lightPdf;
+				return ${ clampPathContributionFunc }( directLight, bounce );
 
 			}
 		`;

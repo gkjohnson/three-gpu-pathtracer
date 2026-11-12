@@ -1,6 +1,8 @@
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn, rayStruct, contextProxy } from 'three-mesh-bvh/webgpu';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
+import { rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from './random.wgsl.js';
+import { sampleHenyeyGreensteinFn } from './sampling.wgsl.js';
 import { DependentStructTypeNode } from './DependentStructTypeNode.js';
 
 // Random walk subsurface scattering, following Cycles' subsurface_random_walk.h
@@ -74,6 +76,13 @@ const getSingleScatterAlbedoFn = wgslTagFn/* wgsl */`
 `;
 
 const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
+const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
+
+// the result of a step of a random walk through a subsurface medium
+export const MEDIUM_WALK_SCATTERED = 0;
+export const MEDIUM_WALK_SURFACE = 1;
+export const MEDIUM_WALK_TERMINATED = 2;
 
 // returns a material's extinction from its glTF attenuation, zero for one without a volume
 export const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
@@ -428,6 +437,63 @@ export const getFogSegmentWeightFn = wgslTagFn/* wgsl */`
 		}
 
 		return select( transmittance, medium.albedo * medium.extinction * transmittance, scattered ) / distancePdf;
+
+	}
+
+`;
+
+// One step of a random walk through a subsurface medium, as in Cycles' subsurface_random_walk: the ray is traced up to
+// a sampled scatter event, where it scatters, or reaches a surface first, weighted by the chance of not scattering
+// before it. "throughput" is the path's with the walk's weight so far, which chooses the sampled channel and ends a
+// walk once negligible. The walk also ends once the subsurface bounces, counted separately from bounces, run out
+export const walkMediumStepFn = wgslTagFn/* wgsl */`
+
+	fn walkMediumStep(
+		medium: ${ mediumStruct }, throughput: vec3f, maxSubsurfaceBounces: u32,
+		ray: ptr<function, ${ rayStruct }>, hitResult: ptr<function, ${ raycastOutput }>,
+		weight: ptr<function, vec3f>, subsurfaceBounces: ptr<function, u32>,
+	) -> u32 {
+
+		// only trace up to the sampled scatter event
+		let channelPdf = ${ getMediumChannelPdfFn }( throughput, medium.albedo );
+		let scatterDist = ${ sampleMediumDistanceFn }( medium, channelPdf, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+		ray.maxDist = scatterDist;
+
+		let didHit = ${ raycastFirstHitFn }( *ray, hitResult );
+		let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
+
+		let scattered = scatterDist < surfaceDist;
+		let segmentDist = select( surfaceDist, scatterDist, scattered );
+		let transmittance = exp( - medium.extinction * segmentDist );
+		let distancePdf = dot( channelPdf, ${ getMediumDistancePdfFn }( medium, segmentDist, scattered ) );
+		if ( distancePdf <= 0.0 ) {
+
+			return ${ MEDIUM_WALK_TERMINATED }u;
+
+		}
+
+		if ( ! scattered ) {
+
+			// reaching the surface, weighted by the chance of not scattering before it
+			*weight = transmittance / distancePdf;
+			return ${ MEDIUM_WALK_SURFACE }u;
+
+		}
+
+		*weight = medium.albedo * medium.extinction * transmittance / distancePdf;
+		ray.origin += ray.direction * scatterDist;
+		ray.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+
+		// capped separately from bounces, and ends once the throughput is negligible
+		*subsurfaceBounces += 1u;
+		let walkThroughput = throughput * ( *weight );
+		if ( *subsurfaceBounces >= maxSubsurfaceBounces || max( max( walkThroughput.r, walkThroughput.g ), walkThroughput.b ) < ${ MEDIUM_THROUGHPUT_EPSILON } ) {
+
+			return ${ MEDIUM_WALK_TERMINATED }u;
+
+		}
+
+		return ${ MEDIUM_WALK_SCATTERED }u;
 
 	}
 

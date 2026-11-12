@@ -12,7 +12,7 @@ import {
 	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
-import { LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
+import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
 import { getFogSegmentWeightFn } from '../../nodes/medium.wgsl.js';
@@ -62,6 +62,7 @@ export class LogicKernel extends ComputeKernel {
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider (LightsInfoNode)
+		const getDirectLightFn = proxyFn( 'lightsInfo.value.getDirectLight', params );
 		const getLightHitsFn = proxyFn( 'lightsInfo.value.getLightHits', params );
 		const getEnvironmentPdfFn = proxyFn( 'lightsInfo.value.getEnvironmentPdf', params );
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
@@ -119,13 +120,10 @@ export class LogicKernel extends ComputeKernel {
 					let occluded = shadowHit.objectIndex >= 0;
 					if ( ! occluded ) {
 
-						// env + area lights are also found by bsdf rays, so MIS-weight them. Punctual lights, and lights
-						// past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray skipped can't
-						// find the light, so their share of the weight moves to the light sample
-						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && input.hit.bounce < maxBounces;
-						let misWeight = select( 1.0, mix( ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
-						let directLight = throughputColor * input.lightEmission * shadowHit.transmittance * input.lightBsdf * misWeight / input.lightPdf;
-						let contribution = ${ clampPathContributionFunc }( directLight, input.hit.bounce );
+						let contribution = ${ getDirectLightFn }(
+							input.lightPdf, input.lightEmission, input.lightType, input.lightBsdf, input.lightBsdfPdf,
+							shadowHit.transmittance, shadowHit.skippedOcclusion, throughputColor, input.hit.bounce, maxBounces,
+						);
 						resultColor += vec4f( contribution, 0.0 );
 
 					}
