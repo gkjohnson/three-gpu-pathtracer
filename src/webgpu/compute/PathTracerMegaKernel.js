@@ -235,12 +235,22 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
-					// TraceRayKernel, or SubsurfaceKernel in a subsurface medium
-					// trace the segment, in fog up to a sampled scatter distance, or walk it scatter by scatter to a surface
+					// TraceRayKernel
+					// trace the queued segment, in fog up to a sampled scatter distance as "queueRay" does
 					var traceRay = Ray( traceOrigin, ray.direction, 0.0 );
 					var hitResult: ${ raycastOutput };
 					var didHitSurface = false;
 					var scatterDist = 0.0;
+					if ( medium.subsurface == 0u ) {
+
+						scatterDist = ${ sampleFogDistanceFn }( medium, throughputColor, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+						traceRay.maxDist = select( maxDist, select( scatterDist, min( maxDist, scatterDist ), maxDist > 0.0 ), scatterDist > 0.0 );
+						didHitSurface = ${ raycastFirstHitFn }( traceRay, &hitResult );
+
+					}
+
+					// SubsurfaceKernel
+					// walk a path inside a subsurface medium, scatter by scatter, until it reaches a surface or ends
 					if ( medium.subsurface != 0u ) {
 
 						var isWalkTerminated = false;
@@ -282,12 +292,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						ray.direction = traceRay.direction;
 						rayStart = 0.0;
 						traceOrigin = ray.origin;
-
-					} else {
-
-						scatterDist = ${ sampleFogDistanceFn }( medium, throughputColor, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
-						traceRay.maxDist = select( maxDist, select( scatterDist, min( maxDist, scatterDist ), maxDist > 0.0 ), scatterDist > 0.0 );
-						didHitSurface = ${ raycastFirstHitFn }( traceRay, &hitResult );
 
 					}
 
