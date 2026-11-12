@@ -420,11 +420,24 @@ export const sampleFogDistanceFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Returns the weight of a segment in fog traced up to its scatter distance: of scattering there, when no surface is
-// nearer, or of reaching the surface. Zero when the segment's pdf is
-export const getFogSegmentWeightFn = wgslTagFn/* wgsl */`
+// Returns the weight of a traced segment through its medium. A medium that only absorbs attenuates it to the surface.
+// Fog, traced up to the scatter distance, weights scattering there when no surface is nearer, or reaching the surface,
+// zero when the segment's pdf is. A walked segment, with no scatter distance, was weighted by its walk
+export const getMediumSegmentWeightFn = wgslTagFn/* wgsl */`
 
-	fn getFogSegmentWeight( medium: ${ mediumStruct }, throughput: vec3f, scatterDist: f32, surfaceDist: f32 ) -> vec3f {
+	fn getMediumSegmentWeight( medium: ${ mediumStruct }, throughput: vec3f, scatterDist: f32, surfaceDist: f32 ) -> vec3f {
+
+		if ( medium.scatters == 0u ) {
+
+			return exp( - medium.extinction * surfaceDist );
+
+		}
+
+		if ( scatterDist <= 0.0 ) {
+
+			return vec3f( 1.0 );
+
+		}
 
 		let scattered = scatterDist < surfaceDist;
 		let segmentDist = select( surfaceDist, scatterDist, scattered );

@@ -190,14 +190,6 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
-						// a medium that only absorbs attenuates the segment to the hit
-						if ( medium.scatters == 0u && any( medium.extinction > vec3f( 0.0 ) ) ) {
-
-							throughputColor *= exp( - medium.extinction * input.hit.dist );
-							rayDataStorage[ index ].throughputColor = throughputColor;
-
-						}
-
 						// Stochastically pass through partially transparent surfaces by re-enqueueing
 						// the ray at the hit point, advancing the alpha depth but not the bounce count. A
 						// fog volume's boundary is always passed, entering or leaving its volume

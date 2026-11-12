@@ -15,7 +15,7 @@ import {
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
-import { getFogSegmentWeightFn } from '../../nodes/medium.wgsl.js';
+import { getMediumSegmentWeightFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -168,16 +168,11 @@ export class LogicKernel extends ComputeKernel {
 					let didHitSurface = hitResult.objectIndex >= 0;
 					var surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
 
-					// A segment in fog was traced up to its sampled scatter distance. Without a nearer surface it scatters
-					// there, a vertex staged like a surface hit
-					var isFogScatter = false;
-					if ( input.scatterDist > 0.0 ) {
-
-						throughputColor *= ${ getFogSegmentWeightFn }( input.medium, throughputColor, input.scatterDist, surfaceDist );
-						isFogScatter = input.scatterDist < surfaceDist;
-						surfaceDist = select( surfaceDist, input.scatterDist, isFogScatter );
-
-					}
+					// the segment's medium weight. In fog it scatters at its sampled distance unless a surface is nearer, a
+					// vertex staged like a surface hit
+					throughputColor *= ${ getMediumSegmentWeightFn }( input.medium, throughputColor, input.scatterDist, surfaceDist );
+					let isFogScatter = input.scatterDist > 0.0 && input.scatterDist < surfaceDist;
+					surfaceDist = select( surfaceDist, input.scatterDist, isFogScatter );
 
 					let didHit = didHitSurface || isFogScatter;
 

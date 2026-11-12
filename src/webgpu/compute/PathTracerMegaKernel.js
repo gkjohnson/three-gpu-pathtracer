@@ -8,7 +8,7 @@ import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyG
 import {
 	mediumStackStruct, addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn,
 	getMediumStackAtPointFn, getShadowMediumStackFn, getShadowMediumDepthFn, getShadowTransmittanceFn, sampleFogDistanceFn,
-	getFogSegmentWeightFn, walkMediumStepFn, MEDIUM_WALK_SURFACE, MEDIUM_WALK_TERMINATED,
+	getMediumSegmentWeightFn, walkMediumStepFn, MEDIUM_WALK_SURFACE, MEDIUM_WALK_TERMINATED,
 } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
@@ -197,52 +197,46 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				ray.direction = normalize( ray.direction );
 
 				// CameraRayKernel
-				// the path state, as in the wavefront ray data
+				// path state
 				var resultColor = vec4f( 0, 0, 0, 1 );
 				var throughputColor = vec3f( 1.0 );
 				var scatterPdf = 1.0;
 				var minPdf = 1.0;
 				var isFullyTransmissive = true;
 
-				// Alpha pass throughs only move where the BVH traversal starts, "rayStart" along the ray, so the
-				// ray keeps the origin it scattered from, which its MIS weights are measured from. The camera
-				// segment's maximum trace distance is carried across them
+				// alpha pass throughs move the traversal start, "rayStart" along the ray, and keep the origin for MIS
 				var alphaDepth = 0u;
 				var rayStart = 0.0;
 				var maxDist = ray.maxDist;
 				var traceOrigin = ray.origin;
 
-				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
+				// negative until the first dispersive hit applies its weight
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
-				// scatter events taken in subsurface walks, and in fog, each counted separately from the bounce count
+				// scatter events in subsurface walks and fog, counted apart from bounces
 				var subsurfaceBounces = 0u;
 				var fogBounces = 0u;
 
-				// whether the segment starts at a subsurface scatter event, where no light is sampled
+				// set after a subsurface scatter, where no light is sampled
 				var mediumScattered = false;
 
 				// CameraMediumKernel
-				// the medium the camera ray starts in, which the path's scatters enter and exit
+				// the medium the camera ray starts in
 				var medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( ray.origin ) );
 
-				// added last, since a camera ray miss overwrites the pixel with the background
+				// added last, a camera miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
 				var cameraHitLight = false;
 
-				// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is found
-				// the last mirror or transmission hit stands in, for paths that reach the environment. The albedo
-				// is tinted by the throughput of the surfaces looked past to reach it
+				// the denoiser's albedo and normal, from the first scatter, or the last mirror or transmission hit
 				var auxFound = false;
 				var auxAlbedo = vec3f( 0.0 );
 				var auxNormal = vec3f( 0.0 );
 
 				for ( var bounce = 0u; bounce < maxBounces; bounce ++ ) {
 
-					// TraceRayKernel, or SubsurfaceKernel inside a subsurface medium
-					// Trace the segment, in fog up to a scatter distance sampled with the segment's own random sequence
-					// index, as queued in the wavefront. Inside a subsurface medium the segment is walked instead, step by
-					// step to each scatter event until the walk reaches a surface or ends
+					// TraceRayKernel, or SubsurfaceKernel in a subsurface medium
+					// trace the segment, in fog up to a sampled scatter distance, or walk it scatter by scatter to a surface
 					var traceRay = Ray( traceOrigin, ray.direction, 0.0 );
 					var hitResult: ${ raycastOutput };
 					var didHitSurface = false;
@@ -283,7 +277,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						// the walk's last segment starts at its last scatter event
+						// the walk ends with a segment from its last scatter
 						ray.origin = traceRay.origin;
 						ray.direction = traceRay.direction;
 						rayStart = 0.0;
@@ -300,30 +294,22 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// LogicKernel
 					var surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
 
-					// A segment in fog was traced up to its sampled scatter distance. Without a nearer surface it scatters
-					// there, a vertex handled like a surface hit
-					var isFogScatter = false;
-					if ( scatterDist > 0.0 ) {
-
-						throughputColor *= ${ getFogSegmentWeightFn }( medium, throughputColor, scatterDist, surfaceDist );
-						isFogScatter = scatterDist < surfaceDist;
-						surfaceDist = select( surfaceDist, scatterDist, isFogScatter );
-
-					}
+					// the segment's medium weight. In fog it scatters at its sampled distance unless a surface is nearer
+					throughputColor *= ${ getMediumSegmentWeightFn }( medium, throughputColor, scatterDist, surfaceDist );
+					let isFogScatter = scatterDist > 0.0 && scatterDist < surfaceDist;
+					surfaceDist = select( surfaceDist, scatterDist, isFogScatter );
 
 					let didHit = didHitSurface || isFogScatter;
 
-					// MIS weights against the light sampling at the vertex this segment left. Camera segments have none,
-					// and neither do scatter events in a subsurface walk
+					// MIS against the light sampling at the previous vertex. None for camera segments or subsurface scatters
 					let isMISWeighted = misEnabled != 0u && bounce > 0u && ! mediumScattered;
 
-					// forward hits on area lights along the traced segment, which starts "rayStart" along the ray
+					// area lights crossed along the segment
 					let segmentLight = ${ getLightHitsFn }( ray.origin, ray.direction, rayStart, rayStart + surfaceDist, throughputColor, scatterPdf, isMISWeighted, bounce );
 					lightHits += segmentLight.rgb;
 					cameraHitLight = cameraHitLight || ( bounce == 0u && segmentLight.a > 0.0 );
 
-					// next event estimation: choose one light or the environment by its estimated contribution. The
-					// vertex below evaluates the bsdf, or the phase function at a scatter event in fog, toward it
+					// next event estimation. The vertex below evaluates the bsdf or phase function toward the light
 					let position = traceOrigin + ray.direction * surfaceDist;
 					var lightRec: ${ lightRecordStruct };
 					if ( didHit ) {
@@ -336,8 +322,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					} else {
 
-						// the segment escaped the scene: gather the environment for opaque paths, or
-						// the background for camera segments and fully transmissive paths
+						// escaped: the environment, or the background for camera segments and fully transmissive paths
 						if ( bounce > 0u && ! isFullyTransmissive ) {
 
 							var misWeight = 1.0;
@@ -355,19 +340,18 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						} else {
 
-							// hit the background
-							// support multiple transparent background blending techniques
+							// the background, blended by the transmissive background mode
 							let rng = ${ rand2 }( ${ RNG_INDEX_BACKGROUND_SAMPLE } );
 							let bg = ${ sampleBackground }( ray.direction, rng );
 							if ( bounce == 0u ) {
 
-								// sample the background directly if this is the primary ray
+								// camera ray
 								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb, bounce );
 								resultColor = vec4f( background, bg.a );
 
 							} else {
 
-								// transmissive ray handling
+								// seen through transmissive surfaces
 								let env = ${ sampleEnvColor }( ray.direction );
 								let avg = saturate( dot( throughputColor, vec3f( 1.0 / 3.0 ) ) );
 								let transparency = ( 1.0 - bg.a ) * avg;
@@ -419,8 +403,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					// MaterialKernel
-					// The vertex's next direction, its evaluation toward the light sampled above, and where the
-					// bounce and shadow rays start
+					// the vertex: its light evaluation, next direction, and where the bounce and shadow rays start
 					var scatterRec: ${ scatterRecordStruct };
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
@@ -430,14 +413,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var emission = vec3f( 0.0 );
 					var isTerminated = false;
 
-					// the hit, as staged in the wavefront ray data. A scatter event in fog has no surface, only the bounce
+					// the hit as staged by the wavefront. A fog scatter has no surface
 					var hit: ${ hitRecordStruct };
 					hit.bounce = bounce;
 
 					if ( isFogScatter ) {
 
-						// A scatter event in fog, at "position". The phase function is its own pdf, so a sample's weight
-						// is one. Out of fog bounces the path ends here, keeping the light sampled at it
+						// a fog scatter. The phase function is its own pdf. Out of fog bounces the path ends here
 						lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
 						lightEvalColor = vec3f( lightEvalPdf );
 						scatterRec.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
@@ -456,7 +438,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						hit.indices = hitResult.indices.xyz;
 						hit.dist = hitResult.dist;
 
-						// whole structs are read from the buffer, not a pointer alias, which Safari fails to compile
+						// whole structs, not pointer aliases, which Safari fails to compile
 						let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
@@ -467,14 +449,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						let view = - ray.direction;
 
-						// blur glossy surfaces after low-probability bounces to suppress fireflies,
-						// from the Cycles "filter glossy" approach in integrator/surface_shader.h
+						// blur glossy surfaces after low pdf bounces, Cycles' filter glossy
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hit, view, blurRoughness );
 
-						// a matte surface hit by the camera ray renders as a fully transparent, behind the lights its
-						// segment passed, which stay opaque: the light hits are added after the loop
+						// a matte surface hit by the camera renders transparent. Lights passed stay, added after the loop
 						let isMatte = surface.matte && hit.bounce == 0u;
 						if ( isMatte ) {
 
@@ -483,22 +463,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						// a medium that only absorbs attenuates the segment to the hit
-						if ( medium.scatters == 0u && any( medium.extinction > vec3f( 0.0 ) ) ) {
-
-							throughputColor *= exp( - medium.extinction * hit.dist );
-
-						}
-
-						// Stochastically pass through partially transparent surfaces by restarting
-						// the traversal at the hit point, advancing the alpha depth but not the bounce count. A
-						// fog volume's boundary is always passed, entering or leaving its volume
+						// pass through partially transparent surfaces by chance, and fog boundaries always, advancing the
+						// alpha depth but not the bounce
 						let isFogBoundary = materialInfo.fogVolume != 0;
 						let passesThrough = isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
 						if ( passesThrough ) {
 
-							// out of transparent bounces, so stop rather than shading a surface that
-							// should be invisible
+							// out of transparent bounces
 							if ( alphaDepth >= maxTransparentBounces ) {
 
 								break;
@@ -522,8 +493,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
-							// the traversal restarts past the surface, so the remaining budget shrinks by the distance already
-							// traced. The ray keeps its origin
+							// restart the traversal past the surface. The ray keeps its origin
 							traceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hit.normal );
 							maxDist = max( maxDist - hit.dist, 0.0 );
 							rayStart += hit.dist;
@@ -534,8 +504,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						// apply the hero wavelength to dispersive surfaces, folding the spectral weight
-						// into the throughput at the path's first dispersive interaction
+						// dispersion, with the hero wavelength's weight applied at the first dispersive hit
 						let isDispersive = surface.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
 						if ( isDispersive ) {
 
@@ -553,7 +522,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// emission, gathered below
 						emission = surface.emission;
 
-						// evaluate the bsdf toward the light sampled above. The light pdf is 0 if NEE is disabled
+						// evaluate the bsdf toward the light. The pdf is 0 without NEE
 						if ( lightRec.pdf > 0.0 ) {
 
 							let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
@@ -570,9 +539,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// sample the next bounce direction
 						scatterRec = ${ bsdfSampleFn }( hit, surface, view );
 
-						// The first surface the path scatters off fills the denoiser's auxiliary images. Until one is
-						// found the last mirror or transmission hit stands in, for paths that reach the environment.
-						// The albedo is tinted by the throughput of the surfaces looked past to reach it
+						// the denoiser's albedo and normal, from the first scatter
 						if ( ! auxFound ) {
 
 							auxFound = ${ isAuxSurfaceFn }( surface, scatterRec );
@@ -616,14 +583,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// decide termination now, so finished paths skip the bounce segment but still gather the vertex's
-					// emission and light sample
+					// finished paths skip the bounce but still gather the vertex's light below
 					let newBounce = hit.bounce + 1u;
 					isTerminated = isTerminated || newBounce >= maxBounces;
 
-					// Russian roulette early out, from the fourth vertex on: "hit.bounce" is the vertex's index, zero at
-					// the camera ray's hit, in both backends. Matches Cycles path_state_continuation_probability in
-					// integrator/path_state.h
+					// russian roulette from the fourth vertex on, "hit.bounce" being zero at the camera hit in both
+					// backends. Matches Cycles path_state_continuation_probability
 					if ( ! isTerminated && hit.bounce >= 3u ) {
 
 						let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
@@ -638,9 +603,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// LogicKernel, on its next pass
-					// the light sampled at the vertex, through its shadow ray, and its emission, resolved with the
-					// pre-scatter throughput. Found light clamps at the depth of the segment that found it, as in Cycles
+					// LogicKernel, resolving the vertex on its next pass
+					// the vertex's light sample and emission, with the pre-scatter throughput, clamped at the segment's depth
 					if ( lightRec.pdf > 0.0 ) {
 
 						let contribution = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
