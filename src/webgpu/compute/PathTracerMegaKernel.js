@@ -354,40 +354,38 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// The vertex the segment reached: its light sample, and the next direction it sets for the bounce below
+					// next event estimation: choose one light or the environment by its estimated
+					// contribution. The vertex below evaluates the bsdf, or the phase function at a scatter
+					// event in fog, toward it
+					var lightRec: ${ lightRecordStruct };
+					if ( misEnabled != 0u && ( fogScatter || didHit ) ) {
+
+						let position = traceOrigin + ray.direction * segmentEnd;
+						lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+
+					}
+
+					// The vertex's next direction, its evaluation toward the light sampled above, and where the
+					// bounce and shadow rays start
 					var scatterRec: ${ scatterRecordStruct };
+					var lightEvalColor = vec3f( 0.0 );
+					var lightEvalPdf = 0.0;
 					var bounceOrigin = vec3f( 0.0 );
+					var shadowOrigin = vec3f( 0.0 );
+					var shadowStack = medium.stack;
+					var isTerminated = false;
 					if ( fogScatter ) {
 
-						// a scatter event in fog
+						// A scatter event in fog. The phase function is its own pdf, so a sample's weight is one. Out
+						// of fog bounces the path ends here, keeping the light sampled at it
 						bounceOrigin = traceOrigin + ray.direction * segmentEnd;
-
-						// next event estimation. The phase function is its own pdf
-						if ( misEnabled != 0u ) {
-
-							let lightRec = ${ sampleLightFn }( bounceOrigin, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
-							if ( lightRec.pdf > 0.0 ) {
-
-								let phasePdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
-								let contribution = ${ getLightContributionFn }( lightRec, vec3f( phasePdf ), phasePdf, bounceOrigin, medium.stack, throughputColor, bounce, maxBounces, clampDirect, clampIndirect );
-								resultColor += vec4f( contribution, 0.0 );
-
-							}
-
-						}
-
-						// sample the next direction. The phase function's sample weight is one
+						shadowOrigin = bounceOrigin;
+						lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
+						lightEvalColor = vec3f( lightEvalPdf );
 						scatterRec.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 						scatterRec.pdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, scatterRec.direction ), medium.anisotropy );
 						scatterRec.color = vec3f( scatterRec.pdf );
-
-						// out of fog bounces the path ends here, keeping the light sampled at the scatter
-						if ( fogBounces >= maxFogBounces ) {
-
-							break;
-
-						}
-
+						isTerminated = fogBounces >= maxFogBounces;
 						fogBounces ++;
 
 					} else if ( didHit ) {
@@ -491,20 +489,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( emission, 0.0 );
 
-						// next event estimation: choose one light or the environment by its estimated
-						// contribution
-						if ( misEnabled != 0u ) {
+						// evaluate the bsdf toward the light sampled above. The light pdf is 0 if NEE is disabled
+						if ( lightRec.pdf > 0.0 ) {
 
-							let lightRec = ${ sampleLightFn }( vertexData.position.xyz, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
-							if ( lightRec.pdf > 0.0 ) {
-
-								let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
-								let shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
-								let shadowStack = ${ getShadowMediumStackFn }( medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall, ray.direction, lightRec.direction, hit.normal );
-								let contribution = ${ getLightContributionFn }( lightRec, evalRec.color, evalRec.pdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces, clampDirect, clampIndirect );
-								resultColor += vec4f( contribution, 0.0 );
-
-							}
+							let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
+							lightEvalColor = evalRec.color;
+							lightEvalPdf = evalRec.pdf;
+							shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
+							shadowStack = ${ getShadowMediumStackFn }( medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall, ray.direction, lightRec.direction, hit.normal );
 
 						}
 
@@ -518,12 +510,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						if ( ${ isTerminatingScatterFunc }( scatterRec ) ) {
-
-							break;
-
-						}
-
+						isTerminated = ${ isTerminatingScatterFunc }( scatterRec );
 						isFullyTransmissive = isFullyTransmissive && scatterRec.isTransmissive;
 
 						// track the smallest pdf seen along the path for the glossy filter
@@ -632,6 +619,20 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							}
 
 						}
+
+						break;
+
+					}
+
+					// the light sampled at the vertex, through its shadow ray. A finished path still gathers it
+					if ( lightRec.pdf > 0.0 ) {
+
+						let contribution = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces, clampDirect, clampIndirect );
+						resultColor += vec4f( contribution, 0.0 );
+
+					}
+
+					if ( isTerminated ) {
 
 						break;
 
