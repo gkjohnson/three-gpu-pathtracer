@@ -107,7 +107,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// generate the switch cases for the uv channels
 		const cases = [];
+		const offsetCases = [];
 		let fallback = null;
+		let offsetFallback = '';
 		structs.attributes.membersLayout.forEach( ( { name } ) => {
 
 			if ( /^uv/.test( name ) ) {
@@ -121,9 +123,19 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					}
 				` );
 
+				const offset = /* wgsl */`shifted.${ name } = vec4f( shifted.${ name }.xy + offset, shifted.${ name }.zw );`;
+				offsetCases.push( /* wgsl */`
+					case ${ channel }u: {
+
+						${ offset }
+
+					}
+				` );
+
 				if ( fallback === null ) {
 
 					fallback = `vertexData.${ name }.xy`;
+					offsetFallback = offset;
 
 				}
 
@@ -146,6 +158,28 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					}
 
 				}
+
+			}
+		`;
+
+		// shifts the channel that getUvFromChannel reads for the descriptor, so every texture on it sees the offset
+		fns.offsetUvChannel = wgslTagFn/* wgsl */`
+			fn offsetUvChannel( vertexData: ${ structs.attributes }, packed: i32, offset: vec2f ) -> ${ structs.attributes } {
+
+				var shifted = vertexData;
+				let channel = u32( ( packed >> 23 ) & 0x7 );
+				switch ( channel ) {
+
+					${ offsetCases.join( '\n' ) }
+					default: {
+
+						${ offsetFallback }
+
+					}
+
+				}
+
+				return shifted;
 
 			}
 		`;

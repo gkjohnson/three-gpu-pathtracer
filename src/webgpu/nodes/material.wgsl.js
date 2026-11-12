@@ -142,13 +142,14 @@ export const getSurfaceRecordFunc = ( {
 	sampleTexel,
 	getTextureSize,
 	getUvFromChannel,
+	offsetUvChannel,
 	getColor,
 } ) => wgslTagFn/* wgsl */`
 	${ [ constants ] }
 	fn getSurfaceRecord(
 		material: ${ materialStruct },
 		objectColor: vec4f,
-		vertexData: ${ attributesStruct },
+		vertexDataIn: ${ attributesStruct },
 		hit: ${ hitRecordStruct },
 		view: vec3f,
 		blurRoughness: f32,
@@ -156,6 +157,42 @@ export const getSurfaceRecordFunc = ( {
 
 		let side = hit.side;
 		let faceNormal = hit.normal;
+
+		// experimental single step parallax offset: before any texture is read, shift the bump map's uv channel
+		// along the view direction in the surface's uv frame, scaled by the depth below the height map's top
+		var vertexData = vertexDataIn;
+		if ( material.bumpMap != -1 && material.parallaxDepth != 0.0 ) {
+
+			let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
+			let a0 = ${ attributesStorage }[ hit.indices.x ];
+			let a1 = ${ attributesStorage }[ hit.indices.y ];
+			let a2 = ${ attributesStorage }[ hit.indices.z ];
+
+			// world space position change per unit of u and v, from the triangle's edges
+			let e1 = ( objectInfo.matrixWorld * vec4f( a1.position.xyz - a0.position.xyz, 0.0 ) ).xyz;
+			let e2 = ( objectInfo.matrixWorld * vec4f( a2.position.xyz - a0.position.xyz, 0.0 ) ).xyz;
+			let uv0 = ${ getUvFromChannel }( a0, material.bumpMap );
+			let d1 = ${ getUvFromChannel }( a1, material.bumpMap ) - uv0;
+			let d2 = ${ getUvFromChannel }( a2, material.bumpMap ) - uv0;
+			let det = d1.x * d2.y - d2.x * d1.y;
+			if ( abs( det ) > 1e-20 ) {
+
+				let dPdu = ( e1 * d2.y - e2 * d1.y ) / det;
+				let dPdv = ( e2 * d1.x - e1 * d2.x ) / det;
+				let lu = dot( dPdu, dPdu );
+				let lv = dot( dPdv, dPdv );
+				if ( lu > 1e-24 && lv > 1e-24 ) {
+
+					let uv = ( material.bumpMapTransform * vec3f( ${ getUvFromChannel }( vertexData, material.bumpMap ), 1.0 ) ).xy;
+					let depth = material.parallaxDepth * ( 1.0 - ${ sampleTexel }( uv, material.bumpMap, 0 ).x );
+					let offset = vec2f( dot( view, dPdu ) / lu, dot( view, dPdv ) / lv ) * depth;
+					vertexData = ${ offsetUvChannel }( vertexData, material.bumpMap, - offset );
+
+				}
+
+			}
+
+		}
 
 		// "faceNormal" is provided on the hit side so flip it back to the geometric side
 		var normal = faceNormal * side;
