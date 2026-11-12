@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "reset" restoring an old "frameBudget" when "adaptiveFrameBudget" is off.
 - WebGPUPathTracer: Alpha test not working correctly when "transparent" is not set.
 - WebGPUPathTracer: The wavefront path tracer failing to compile in Safari.
+- WebGPUPathTracer, WebGLPathTracer: Materials without a "color" field, such as NodeMaterial and ShaderMaterial, throwing an error.
 
 ## [0.0.28] - 2026.11.02
 ### Added
