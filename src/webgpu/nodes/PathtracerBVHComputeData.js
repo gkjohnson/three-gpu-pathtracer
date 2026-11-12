@@ -2,7 +2,7 @@ import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh }
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL } from 'three-mesh-bvh';
-import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.js';
+import { getMaterialExtinctionFn, getFogShadowDistanceFn, isSubsurfaceMaterialFn } from './medium.wgsl.js';
 
 const _colorVec = new Vector4();
 const transformStruct = new StructTypeNode( {
@@ -620,8 +620,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					${ raycastOptions.transformShapeFn }( ray, objectIndex );
 
-					let material = ${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
-					let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
+					// subsurface volumes aren't on the stack, so a ray starting inside one isn't in a medium
+					let materialIndex = ${ storage.transforms }[ objectIndex ].materialIndex;
+					let material = ${ materialsStorage }[ materialIndex ];
+					let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 && ! ${ isSubsurfaceMaterialFn }( materialIndex ) );
 					${ skipObject } = select( 1u, 0u, isVolume );
 
 				}

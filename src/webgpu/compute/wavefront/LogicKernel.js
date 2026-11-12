@@ -14,7 +14,8 @@ import {
 } from '../../nodes/random.wgsl.js';
 import { LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, FOG_SCATTER_HIT } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
+import { getFogSegmentWeightFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -175,7 +176,7 @@ export class LogicKernel extends ComputeKernel {
 				if ( isWalking ) {
 
 					// the walk hasn't reached a surface yet, so there's no hit to stage. Clear what was
-					// resolved and let MediumKernel accumulate the walk's weight
+					// resolved and let SubsurfaceKernel accumulate the walk's weight
 					rayDataStorage[ index ].emission = vec3f( 0.0 );
 					rayDataStorage[ index ].lightPdf = 0.0;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
@@ -184,11 +185,22 @@ export class LogicKernel extends ComputeKernel {
 
 				} else if ( ! isTerminated ) {
 
-					// a walk ending at a scatter event in fog is staged like a surface hit
 					let hitResult = ${ params.rayIntersectionsStorage }[ u32( input.rayIntersectionIndex ) ];
-					let isFogScatter = hitResult.objectIndex == ${ FOG_SCATTER_HIT };
-					let didHit = hitResult.objectIndex >= 0 || isFogScatter;
-					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
+					let didHitSurface = hitResult.objectIndex >= 0;
+					var surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
+
+					// A segment in fog was traced up to its sampled scatter distance. Without a nearer surface it scatters
+					// there, a vertex staged like a surface hit
+					var isFogScatter = false;
+					if ( input.scatterDist > 0.0 ) {
+
+						throughputColor *= ${ getFogSegmentWeightFn }( input.medium, throughputColor, input.scatterDist, surfaceDist );
+						isFogScatter = input.scatterDist < surfaceDist;
+						surfaceDist = select( surfaceDist, input.scatterDist, isFogScatter );
+
+					}
+
+					let didHit = didHitSurface || isFogScatter;
 
 					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none,
 					// and neither do scatter events in a subsurface walk
@@ -238,12 +250,14 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
 						rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
 
-						// a fog scatter has no object. Any non-negative index keeps the slot from being respawned, and
-						// MaterialKernel handles the scatter before reading the object
+						// a fog scatter has no object, and is staged at "origin". Any non-negative index keeps the slot from
+						// being respawned, and MaterialKernel handles the scatter before reading the object
+						var position = hitResult.position;
 						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
 						if ( isFogScatter ) {
 
-							rayDataStorage[ index ].origin = hitResult.position;
+							position = input.origin + input.direction * ( input.rayStart + input.scatterDist );
+							rayDataStorage[ index ].origin = position;
 
 						}
 
@@ -253,7 +267,7 @@ export class LogicKernel extends ComputeKernel {
 						var lightPdf = 0.0;
 						if ( misEnabled != 0u ) {
 
-							let lightRec = ${ sampleLightFn }( hitResult.position, envWeight, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							let lightRec = ${ sampleLightFn }( position, envWeight, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 							if ( lightRec.pdf > 0.0 ) {
 
 								lightPdf = lightRec.pdf;
