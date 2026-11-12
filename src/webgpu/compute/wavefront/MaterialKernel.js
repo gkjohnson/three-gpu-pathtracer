@@ -274,7 +274,8 @@ export class MaterialKernel extends ComputeKernel {
 						medium = ${ getCombinedMediumFn }( stack );
 						if ( input.hit.side > 0.0 && ${ isSubsurfaceMaterialFn }( objectInfo.materialIndex ) ) {
 
-							medium = ${ getSubsurfaceMediumFn }( objectInfo.materialIndex, stack );
+							medium = ${ getSubsurfaceMediumFn }( objectInfo.materialIndex );
+							medium.stack = stack;
 
 						}
 

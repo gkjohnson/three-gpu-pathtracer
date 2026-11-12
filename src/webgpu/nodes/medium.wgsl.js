@@ -94,17 +94,15 @@ export const isSubsurfaceMaterialFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Returns the medium of a subsurface walk through the material's volume. The walk isn't on the stack, which is kept
-// for the media the path is in once it leaves
+// Returns the medium of a subsurface walk through the material's volume
 export const getSubsurfaceMediumFn = wgslTagFn/* wgsl */`
 
-	fn getSubsurfaceMedium( materialIndex: u32, stack: ${ mediumStackStruct } ) -> ${ mediumStruct } {
+	fn getSubsurfaceMedium( materialIndex: u32 ) -> ${ mediumStruct } {
 
 		let material = ${ materialsStorage }[ materialIndex ];
 		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 
 		var medium: ${ mediumStruct };
-		medium.stack = stack;
 		medium.extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 		medium.albedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, anisotropy );
 		medium.anisotropy = anisotropy;

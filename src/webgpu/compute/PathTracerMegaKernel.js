@@ -484,7 +484,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							medium = ${ getCombinedMediumFn }( stack );
 							if ( hit.side > 0.0 && ${ isSubsurfaceMaterialFn }( objectInfo.materialIndex ) ) {
 
-								medium = ${ getSubsurfaceMediumFn }( objectInfo.materialIndex, stack );
+								medium = ${ getSubsurfaceMediumFn }( objectInfo.materialIndex );
+								medium.stack = stack;
 
 							}
 
