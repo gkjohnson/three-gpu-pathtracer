@@ -7,7 +7,8 @@ import { getCombinedMediumFn, getMediumStackAtPointFn, sampleFogDistanceFn } fro
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH } from './structs.js';
 
 // Sets the medium of the camera rays CameraRayKernel spawned from the volumes around their origin, then queues
-// each ray to be traced, in fog up to a sampled scatter distance.
+// each ray to be traced, in fog up to a sampled scatter distance. Subsurface volumes aren't on the stack, so a camera
+// inside one sees its walls, as in Cycles.
 export class CameraMediumKernel extends ComputeKernel {
 
 	constructor( ) {
@@ -47,8 +48,9 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
+				// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
 				let medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( input.origin ) );
-				rayDataStorage[ index ].medium = medium;
+				${ params.rayDataStorage }[ index ].medium = medium;
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( globalSeed, indexUV, input.sampleIndex, 0u );

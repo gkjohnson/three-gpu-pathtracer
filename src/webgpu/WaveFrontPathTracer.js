@@ -360,7 +360,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		shadowRayQueue.name = 'Shadow Ray Queue';
 
 		// Traced rays fill the results from the front at their queue index, and SubsurfaceKernel fills them from the
-		// back with the hits of subsurface walks. In a round each path slot either queues one ray or walks,
+		// back with the hits of medium walks. In a round each path slot either queues one ray or walks a medium,
 		// never both, so the two ranges together never exceed the slot count and can't overlap
 		const rayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
 		rayIntersectionsStorage.name = 'Ray Intersections';
@@ -614,7 +614,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				traceShadowRayKernel.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 				this.dispatch( traceShadowRayKernel, shadowDispatchConverter.outputDispatch );
 
-				// Step 5: walk the paths inside subsurface volumes for a capped number of steps
+				// Step 5: walk the paths inside media for a capped number of steps
 				queueMediumWalksKernel.rayDataStorage = rayDataStorage;
 				queueMediumWalksKernel.mediumQueue = mediumQueue;
 				queueMediumWalksKernel.rayCount = rayCount;

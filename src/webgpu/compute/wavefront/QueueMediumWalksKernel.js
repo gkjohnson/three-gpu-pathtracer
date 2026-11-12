@@ -4,7 +4,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rayDataStruct, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER } from './structs.js';
 
-// Gathers the path slots walking a subsurface volume for SubsurfaceKernel's dispatch. Separate from MaterialKernel, which
+// Gathers the path slots walking a medium for SubsurfaceKernel's dispatch. Separate from MaterialKernel, which
 // is at its storage buffer limit.
 export class QueueMediumWalksKernel extends ComputeKernel {
 

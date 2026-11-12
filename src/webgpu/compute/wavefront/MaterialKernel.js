@@ -13,7 +13,7 @@ import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/mate
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
-import { isAuxSurfaceFn } from '../../nodes/aux.wgsl.js';
+import { isAuxSurfaceFn } from '../../nodes/auxiliary.wgsl.js';
 
 // Pure material evaluation: live slots evaluate the vertex staged by LogicKernel, a surface or a scatter event in
 // fog, sample the next direction, and enqueue the next bounce ray plus the NEE shadow ray toward the light
@@ -122,17 +122,18 @@ export class MaterialKernel extends ComputeKernel {
 				let input = ${ params.rayDataStorage }[ index ];
 				if ( input.hit.objectIndex >= 0 && input.walkPending == 0u ) {
 
-					// evaluate the vertex staged by LogicKernel. Paths still walking a subsurface volume have none, and
+					// evaluate the vertex staged by LogicKernel. Paths still walking a medium have none, and
 					// CameraRayKernel starts new paths in the free slots
 					let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 					${ rngInit }( globalSeed, indexUV, input.sampleIndex, input.hit.bounce + input.alphaDepth + input.subsurfaceBounces );
 
 					// the medium the path is in, which the bsdf sample may enter or exit
 					var medium = input.medium;
+					let segmentInMedium = medium.scatters != 0u;
 					var throughputColor = input.throughputColor;
 
 					// The vertex's next direction, its evaluation toward the light LogicKernel selected, and where the
-					// bounce and shadow rays start, from a surface or a scatter event in fog
+					// bounce and shadow rays start
 					var scatterRec: ${ scatterRecordStruct };
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
@@ -149,11 +150,11 @@ export class MaterialKernel extends ComputeKernel {
 
 						// A scatter event in fog, staged at "origin" by LogicKernel. The phase function is its own pdf, so a
 						// sample's weight is one. Out of fog bounces the path ends here, keeping the light sampled at it
+						lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, input.lightDirection ), medium.anisotropy );
+						lightEvalColor = vec3f( lightEvalPdf );
 						scatterRec.direction = ${ sampleHenyeyGreensteinFn }( input.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
 						scatterRec.pdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, scatterRec.direction ), medium.anisotropy );
 						scatterRec.color = vec3f( scatterRec.pdf );
-						lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, input.lightDirection ), medium.anisotropy );
-						lightEvalColor = vec3f( lightEvalPdf );
 						isTerminated = fogBounces >= maxFogBounces;
 						fogBounces ++;
 
@@ -188,9 +189,8 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
-						// a medium that only absorbs attenuates the segment to the hit. A segment in fog or a subsurface
-						// walk carries its own weight
-						if ( medium.scatters == 0u && any( medium.extinction > vec3f( 0.0 ) ) ) {
+						// a medium that only absorbs attenuates the segment to the hit
+						if ( ! segmentInMedium && any( medium.extinction > vec3f( 0.0 ) ) ) {
 
 							throughputColor *= exp( - medium.extinction * input.hit.dist );
 							rayDataStorage[ index ].throughputColor = throughputColor;
@@ -238,7 +238,7 @@ export class MaterialKernel extends ComputeKernel {
 							let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.hit.normal );
 							if ( medium.subsurface != 0u ) {
 
-								// inside a subsurface volume, SubsurfaceKernel walks on past the surface, from the surface
+								// inside a medium, SubsurfaceKernel walks on past the surface, from the surface
 								rayDataStorage[ index ].walkPending = 1u;
 								rayDataStorage[ index ].origin = alphaOrigin;
 								rayDataStorage[ index ].rayStart = 0.0;
@@ -284,6 +284,23 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
+						// emission, resolved by LogicKernel
+						emission = surface.emission;
+
+						// evaluate the bsdf toward the light LogicKernel selected. The light pdf is 0 if NEE is disabled
+						if ( input.lightPdf > 0.0 ) {
+
+							let evalRec = ${ bsdfEvalPdfFn }( input.hit, surface, view, input.lightDirection );
+							lightEvalColor = evalRec.color;
+							lightEvalPdf = evalRec.pdf;
+							shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+							shadowStack = ${ getShadowMediumStackFn }(
+								medium.stack, objectInfo.materialIndex, input.hit.side, surface.thinWall,
+								input.direction, input.lightDirection, input.hit.normal,
+							);
+
+						}
+
 						// sample the next bounce direction
 						scatterRec = ${ bsdfSampleFn }( input.hit, surface, view );
 
@@ -301,34 +318,32 @@ export class MaterialKernel extends ComputeKernel {
 
 						}
 
-						emission = surface.emission;
-						minPdf = min( input.minPdf, scatterRec.pdf );
-						isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
 						isTerminated = all( scatterRec.color == vec3f( 0.0 ) ) || ${ isTerminatingScatterFunc }( scatterRec );
+						isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
 
-						// Refracting through a volume's surface enters or exits it. A subsurface volume starts a walk
-						// rather than entering the stack, and leaving it returns to the media of the stack
-						let surfaceStack = medium.stack;
+						// track the smallest pdf seen along the path for the glossy filter
+						minPdf = min( input.minPdf, scatterRec.pdf );
+
+						// refracting through a volume's surface enters or exits it
 						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
 
 							var stack = medium.stack;
-							if ( input.hit.side > 0.0 && ${ isSubsurfaceMaterialFn }( objectInfo.materialIndex ) ) {
+							if ( input.hit.side > 0.0 ) {
 
-								medium = ${ getSubsurfaceMediumFn }( objectInfo.materialIndex, stack );
+								${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
 
 							} else {
 
-								if ( input.hit.side > 0.0 ) {
+								${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
 
-									${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
+							}
 
-								} else if ( medium.subsurface == 0u ) {
+							// a subsurface volume isn't on the stack, refracting into one starts a walk through it
+							medium = ${ getCombinedMediumFn }( stack );
+							if ( input.hit.side > 0.0 && ${ isSubsurfaceMaterialFn }( objectInfo.materialIndex ) ) {
 
-									${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
-
-								}
-
-								medium = ${ getCombinedMediumFn }( stack );
+								medium = ${ getSubsurfaceMediumFn }( objectInfo.materialIndex );
+								medium.stack = stack;
 
 							}
 
@@ -338,20 +353,6 @@ export class MaterialKernel extends ComputeKernel {
 						}
 
 						bounceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.hit.normal );
-
-						// evaluate the bsdf toward the light LogicKernel selected. The light pdf is 0 if NEE is disabled
-						if ( input.lightPdf > 0.0 ) {
-
-							let evalRec = ${ bsdfEvalPdfFn }( input.hit, surface, view, input.lightDirection );
-							lightEvalColor = evalRec.color;
-							lightEvalPdf = evalRec.pdf;
-							shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
-							shadowStack = ${ getShadowMediumStackFn }(
-								surfaceStack, objectInfo.materialIndex, input.hit.side, surface.thinWall,
-								input.direction, input.lightDirection, input.hit.normal,
-							);
-
-						}
 
 					}
 
@@ -391,7 +392,7 @@ export class MaterialKernel extends ComputeKernel {
 					rayDataStorage[ index ].fogScatter = 0u;
 
 					// the NEE shadow ray below still resolves the vertex's direct light, so only
-					// the bounce segment is skipped for finished paths. Inside a subsurface volume, SubsurfaceKernel walks it
+					// the bounce segment is skipped for finished paths. Inside a medium, SubsurfaceKernel walks it
 					if ( ! isTerminated ) {
 
 						rayDataStorage[ index ].origin = bounceOrigin;

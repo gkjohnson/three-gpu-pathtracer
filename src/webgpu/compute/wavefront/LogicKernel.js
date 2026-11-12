@@ -1,7 +1,7 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
-import { blendAuxFn, AUX_LAYERS } from '../../nodes/aux.wgsl.js';
+import { blendAuxFn, AUX_LAYERS } from '../../nodes/auxiliary.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.js';

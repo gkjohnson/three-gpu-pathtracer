@@ -29,7 +29,7 @@ export const mediumStackStruct = new StructTypeNode( {
 // shadow rays at least this long go to distant lights, whose distance is the far distance
 const MEDIUM_DISTANT_SHADOW_DISTANCE = 0.5 * LIGHT_FAR_DISTANCE;
 
-// The medium a path is in: the combined media of its stack of fog and absorbing volumes, or the material of a
+// The medium a path is in: the combined media of its stack of fog and absorbing volumes, or the volume of a
 // subsurface walk, which isn't on the stack. "scatters" and "subsurface" are uints so the struct can be held in a
 // storage buffer. A scatter event in fog is a path vertex, where a subsurface walk takes no light sample
 const mediumMembers = {
@@ -86,14 +86,48 @@ export const getMaterialExtinctionFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Adds the material's volume to an empty slot of the stack. A volume without extinction, one already on the stack,
-// or one past a full stack is not added
+// Returns whether the material's volume scatters, a subsurface volume a path walks through after refracting into it
+// rather than one on the stack
+export const isSubsurfaceMaterialFn = wgslTagFn/* wgsl */`
+
+	fn isSubsurfaceMaterial( materialIndex: u32 ) -> bool {
+
+		let material = ${ materialsStorage }[ materialIndex ];
+		return material.scatterStrength > 0.0 && any( material.multiscatterColor > vec3f( 0.0 ) ) &&
+			any( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) > vec3f( 0.0 ) );
+
+	}
+
+`;
+
+// Returns the medium of a subsurface walk through the material's volume
+export const getSubsurfaceMediumFn = wgslTagFn/* wgsl */`
+
+	fn getSubsurfaceMedium( materialIndex: u32 ) -> ${ mediumStruct } {
+
+		let material = ${ materialsStorage }[ materialIndex ];
+		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
+
+		var medium: ${ mediumStruct };
+		medium.extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+		medium.albedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, anisotropy );
+		medium.anisotropy = anisotropy;
+		medium.scatters = 1u;
+		medium.subsurface = 1u;
+		return medium;
+
+	}
+
+`;
+
+// Adds the material's volume to an empty slot of the stack. A volume without extinction, a subsurface volume, one
+// already on the stack, or one past a full stack is not added
 export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
 	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, materialIndex: u32 ) -> void {
 
 		let material = ${ materialsStorage }[ materialIndex ];
-		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) ) {
+		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) || ${ isSubsurfaceMaterialFn }( materialIndex ) ) {
 
 			return;
 
@@ -226,41 +260,6 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 		medium.anisotropy = select( 0.0, anisotropy / anisotropyWeight, anisotropyWeight > 0.0 );
 		medium.scatters = select( 0u, 1u, any( medium.albedo > vec3f( 0.0 ) ) && any( extinction > vec3f( 0.0 ) ) );
 		return medium;
-
-	}
-
-`;
-
-// Returns the medium of a subsurface walk through the material's volume. The walk isn't on the stack, which is
-// kept for the media the path is in once it leaves
-export const getSubsurfaceMediumFn = wgslTagFn/* wgsl */`
-
-	fn getSubsurfaceMedium( materialIndex: u32, stack: ${ mediumStackStruct } ) -> ${ mediumStruct } {
-
-		let material = ${ materialsStorage }[ materialIndex ];
-		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
-
-		var medium: ${ mediumStruct };
-		medium.stack = stack;
-		medium.subsurface = 1u;
-		medium.extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
-		medium.albedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, anisotropy );
-		medium.anisotropy = anisotropy;
-		medium.scatters = select( 0u, 1u, any( medium.albedo > vec3f( 0.0 ) ) && any( medium.extinction > vec3f( 0.0 ) ) );
-		return medium;
-
-	}
-
-`;
-
-// Returns whether refracting into the material's volume starts a subsurface walk rather than entering the stack
-export const isSubsurfaceMaterialFn = wgslTagFn/* wgsl */`
-
-	fn isSubsurfaceMaterial( materialIndex: u32 ) -> bool {
-
-		let material = ${ materialsStorage }[ materialIndex ];
-		return material.fogVolume == 0 && material.scatterStrength > 0.0 && any( material.multiscatterColor > vec3f( 0.0 ) ) &&
-			any( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) > vec3f( 0.0 ) );
 
 	}
 

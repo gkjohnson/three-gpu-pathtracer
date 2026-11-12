@@ -145,7 +145,7 @@ export const RAY_QUEUE_LENGTH = 0;
 export const SHADOW_RAY_QUEUE_LENGTH = 1;
 export const QUEUE_COUNTER_COUNT = 2;
 
-// The path slots walking through a subsurface volume this pass, for SubsurfaceKernel. Its length leads the same u32
+// The path slots walking through a medium this pass, for SubsurfaceKernel. Its length leads the same u32
 // array, ahead of the elements, as SubsurfaceKernel is at its storage buffer limit.
 export const MEDIUM_QUEUE_LENGTH = 0;
 export const MEDIUM_QUEUE_HEADER = 1;

@@ -11,9 +11,9 @@ import {
 } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER } from './structs.js';
 
-// Random walks through subsurface volumes, as in Cycles' subsurface kernel but capped per pass. A walk scatters
-// until it reaches a surface, without sampling light, and hands the hit to LogicKernel like a traced ray. One that
-// doesn't reach a surface resumes next pass. The walk's weight goes into the staged scatter color.
+// Random walks through scattering media, as in Cycles' subsurface kernel but capped per pass. A walk that
+// reaches a surface hands its hit to LogicKernel like a traced ray, one that doesn't resumes next pass. The
+// walk's weight goes into the staged scatter color.
 export class SubsurfaceKernel extends ComputeKernel {
 
 	constructor( ) {
