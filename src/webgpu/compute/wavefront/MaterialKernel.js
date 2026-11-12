@@ -180,8 +180,7 @@ export class MaterialKernel extends ComputeKernel {
 						let isMatte = surface.matte && input.hit.bounce == 0u;
 						if ( isMatte ) {
 
-							let lightHits = input.resultColor.rgb;
-							rayDataStorage[ index ].resultColor = vec4f( lightHits, select( 0.0, 1.0, any( lightHits > vec3f( 0.0 ) ) ) );
+							rayDataStorage[ index ].resultColor = vec4f( input.resultColor.rgb, select( 0.0, 1.0, input.cameraHitLight != 0u ) );
 							rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 							rayDataStorage[ index ].emission = vec3f( 0.0 );
 							rayDataStorage[ index ].lightPdf = 0.0;

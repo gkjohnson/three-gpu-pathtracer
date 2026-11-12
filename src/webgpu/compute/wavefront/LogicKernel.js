@@ -110,7 +110,7 @@ export class LogicKernel extends ComputeKernel {
 
 				// added last, since a camera ray miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
-				var cameraHitLight = false;
+				var cameraHitLight = input.cameraHitLight != 0u;
 
 				// resolve the previous surface's NEE shadow ray (pre-scatter throughput). The index
 				// is negative when no shadow ray was enqueued last frame
@@ -368,6 +368,7 @@ export class LogicKernel extends ComputeKernel {
 
 					rayDataStorage[ index ].resultColor = resultColor;
 					rayDataStorage[ index ].throughputColor = throughputColor;
+					rayDataStorage[ index ].cameraHitLight = select( 0u, 1u, cameraHitLight );
 
 				}
 
