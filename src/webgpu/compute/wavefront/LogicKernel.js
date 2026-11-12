@@ -109,7 +109,7 @@ export class LogicKernel extends ComputeKernel {
 				var throughputColor = input.throughputColor;
 
 				// added last, since a camera ray miss overwrites the pixel with the background
-				var lightHits = vec3f( 0.0 );
+				var lightHitColor = vec3f( 0.0 );
 				var cameraHitLight = input.cameraHitLight != 0u;
 
 				// resolve the previous surface's NEE shadow ray (pre-scatter throughput). The index
@@ -120,11 +120,11 @@ export class LogicKernel extends ComputeKernel {
 					let occluded = shadowHit.objectIndex >= 0;
 					if ( ! occluded ) {
 
-						let contribution = ${ getDirectLightFn }(
-							input.lightPdf, input.lightEmission, input.lightType, input.lightBsdf, input.lightBsdfPdf,
+						let directLight = ${ getDirectLightFn }(
+							input.lightPdf, input.lightEmission, input.lightType, input.lightEvalColor, input.lightEvalPdf,
 							shadowHit.transmittance, shadowHit.skippedOcclusion, throughputColor, input.hit.bounce, maxBounces,
 						);
-						resultColor += vec4f( contribution, 0.0 );
+						resultColor += vec4f( directLight, 0.0 );
 
 					}
 
@@ -166,13 +166,13 @@ export class LogicKernel extends ComputeKernel {
 
 					let hitResult = ${ params.rayIntersectionsStorage }[ u32( input.rayIntersectionIndex ) ];
 					let didHitSurface = hitResult.objectIndex >= 0;
-					var surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
+					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
 
 					// the segment's medium weight. In fog it scatters at its sampled distance unless a surface is nearer, a
 					// vertex staged like a surface hit
 					throughputColor *= ${ getMediumSegmentWeightFn }( input.medium, throughputColor, input.scatterDist, surfaceDist );
 					let isFogScatter = input.scatterDist > 0.0 && input.scatterDist < surfaceDist;
-					surfaceDist = select( surfaceDist, input.scatterDist, isFogScatter );
+					let segmentDist = select( surfaceDist, input.scatterDist, isFogScatter );
 
 					let didHit = didHitSurface || isFogScatter;
 
@@ -181,9 +181,9 @@ export class LogicKernel extends ComputeKernel {
 					let isMISWeighted = misEnabled != 0u && input.hit.bounce > 0u && input.mediumScattered == 0u;
 
 					// forward hits on area lights along the traced segment, which starts "rayStart" along the ray
-					let segmentLight = ${ getLightHitsFn }( input.origin, input.direction, input.rayStart, input.rayStart + surfaceDist, throughputColor, input.scatterPdf, isMISWeighted, input.hit.bounce );
-					lightHits += segmentLight.rgb;
-					cameraHitLight = cameraHitLight || ( input.hit.bounce == 0u && segmentLight.a > 0.0 );
+					let segmentLightHits = ${ getLightHitsFn }( input.origin, input.direction, input.rayStart, input.rayStart + segmentDist, throughputColor, input.scatterPdf, isMISWeighted, input.hit.bounce );
+					lightHitColor += segmentLightHits.rgb;
+					cameraHitLight = cameraHitLight || ( input.hit.bounce == 0u && segmentLightHits.a > 0.0 );
 
 					if ( didHit ) {
 
@@ -243,8 +243,8 @@ export class LogicKernel extends ComputeKernel {
 							}
 
 							let environment = ${ sampleEnvColor }( input.direction ).rgb * throughputColor * misWeight;
-							let contribution = ${ clampPathContributionFunc }( environment, input.hit.bounce );
-							resultColor += vec4f( contribution, 0.0 );
+							let environmentLight = ${ clampPathContributionFunc }( environment, input.hit.bounce );
+							resultColor += vec4f( environmentLight, 0.0 );
 
 						} else {
 
@@ -314,7 +314,7 @@ export class LogicKernel extends ComputeKernel {
 				}
 
 				// visible lights are opaque against a transparent background
-				resultColor += vec4f( lightHits, 0.0 );
+				resultColor += vec4f( lightHitColor, 0.0 );
 				if ( cameraHitLight ) {
 
 					resultColor.a = 1.0;
