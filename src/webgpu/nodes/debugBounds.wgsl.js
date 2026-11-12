@@ -26,8 +26,8 @@ const debugBoundsResultStruct = new StructTypeNode( {
 // driving it are attached as `.uniforms` so the caller can update them each frame.
 export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
-	const { transforms, index } = bvhData.storage;
-	const { getVertexPosition } = bvhData.fns;
+	const { transforms } = bvhData.storage;
+	const { getTriangleIndices, getVertexPosition } = bvhData.fns;
 	const { materials } = shadingModel.storage;
 
 	// uniforms
@@ -116,13 +116,10 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
 				for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
-					let i0 = ${ index }[ ti * 3u ];
-					let i1 = ${ index }[ ti * 3u + 1u ];
-					let i2 = ${ index }[ ti * 3u + 2u ];
-
-					let a = ${ getVertexPosition }( i0 );
-					let b = ${ getVertexPosition }( i1 );
-					let c = ${ getVertexPosition }( i2 );
+					let indices = ${ getTriangleIndices }( ti );
+					let a = ${ getVertexPosition }( indices.x );
+					let b = ${ getVertexPosition }( indices.y );
+					let c = ${ getVertexPosition }( indices.z );
 
 					var triResult = ${ intersectsTriangle }( ray, a, b, c );
 					triResult.dist *= ${ rayScalar };

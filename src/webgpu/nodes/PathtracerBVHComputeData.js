@@ -383,13 +383,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
-						let i0 = ${ storage.index }[ ti * 3u ];
-						let i1 = ${ storage.index }[ ti * 3u + 1u ];
-						let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-						let a = ${ fns.getVertexPosition }( i0 );
-						let b = ${ fns.getVertexPosition }( i1 );
-						let c = ${ fns.getVertexPosition }( i2 );
+						let indices = ${ fns.getTriangleIndices }( ti );
+						let a = ${ fns.getVertexPosition }( indices.x );
+						let b = ${ fns.getVertexPosition }( indices.y );
+						let c = ${ fns.getVertexPosition }( indices.z );
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
@@ -407,7 +404,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							// partial opacity is resolved at surface processing, but fully transparent and alpha
 							// tested surfaces are skipped here
-							let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+							let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
 							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 								continue;
@@ -419,7 +416,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							result.normal = triResult.normal;
 							result.side = triResult.side;
 							result.barycoord = triResult.barycoord;
-							result.indices = vec4u( i0, i1, i2, ti );
+							result.indices = vec4u( indices, ti );
 
 							didHit = true;
 
@@ -445,13 +442,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
-						let i0 = ${ storage.index }[ ti * 3u ];
-						let i1 = ${ storage.index }[ ti * 3u + 1u ];
-						let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-						let a = ${ fns.getVertexPosition }( i0 );
-						let b = ${ fns.getVertexPosition }( i1 );
-						let c = ${ fns.getVertexPosition }( i2 );
+						let indices = ${ fns.getTriangleIndices }( ti );
+						let a = ${ fns.getVertexPosition }( indices.x );
+						let b = ${ fns.getVertexPosition }( indices.y );
+						let c = ${ fns.getVertexPosition }( indices.z );
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
@@ -460,7 +454,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
 							let material = ${ materialsStorage }[ object.materialIndex ];
 
-							let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+							let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
 							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 								continue;
@@ -563,13 +557,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
-						let i0 = ${ storage.index }[ ti * 3u ];
-						let i1 = ${ storage.index }[ ti * 3u + 1u ];
-						let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-						let a = ${ fns.getVertexPosition }( i0 );
-						let b = ${ fns.getVertexPosition }( i1 );
-						let c = ${ fns.getVertexPosition }( i2 );
+						let indices = ${ fns.getTriangleIndices }( ti );
+						let a = ${ fns.getVertexPosition }( indices.x );
+						let b = ${ fns.getVertexPosition }( indices.y );
+						let c = ${ fns.getVertexPosition }( indices.z );
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
@@ -580,7 +571,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						}
 
 						// fully transparent and alpha tested surfaces are passed, as by the first hit traversal
-						let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+						let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
 						if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 							continue;
