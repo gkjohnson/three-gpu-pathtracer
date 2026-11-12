@@ -309,8 +309,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					lightHits += segmentLight.rgb;
 					cameraHitLight = cameraHitLight || ( bounce == 0u && segmentLight.a > 0.0 );
 
-					// next event estimation. The vertex below evaluates the bsdf or phase function toward the light
-					let position = traceOrigin + ray.direction * surfaceDist;
+					// next event estimation. The vertex below evaluates the bsdf or phase function toward the light. A fog
+					// scatter has no surface, its position is measured along the ray from the origin
+					var position = traceOrigin + ray.direction * surfaceDist;
+					if ( isFogScatter ) {
+
+						position = ray.origin + ray.direction * ( rayStart + scatterDist );
+
+					}
+
 					var lightRec: ${ lightRecordStruct };
 					if ( didHit ) {
 
