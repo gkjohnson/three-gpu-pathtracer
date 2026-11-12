@@ -45,8 +45,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
-			clampDirect: uniform( 0 ),
-			clampIndirect: uniform( 10 ),
 
 			backgroundInfo: { value: null },
 
@@ -81,13 +79,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
-		const lightsCountNode = proxy( 'lightsInfo.value.countNode', params );
-		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
-		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
-		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
+		const getLightHitsFn = proxyFn( 'lightsInfo.value.getLightHits', params );
 		const getEnvironmentPdfFn = proxyFn( 'lightsInfo.value.getEnvironmentPdf', params );
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
-		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
 		// Returns the light a light sample adds at a path vertex, given the vertex evaluated toward the light. The
 		// shadow ray starts at the origin in the given media, attenuated by the partially transparent surfaces and the
@@ -95,7 +89,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getLightContributionFn = wgslTagFn/* wgsl */`
 			fn getLightContribution(
 				lightRec: ${ lightRecordStruct }, evalColor: vec3f, evalPdf: f32, origin: vec3f, stack: ${ mediumStackStruct },
-				throughput: vec3f, bounce: u32, maxBounces: u32, clampDirect: f32, clampIndirect: f32,
+				throughput: vec3f, bounce: u32, maxBounces: u32,
 			) -> vec3f {
 
 				if ( evalPdf <= 0.0 ) {
@@ -126,7 +120,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				let isMISWeighted = ${ isMISWeightLightFn }( lightRec.lightType ) && bounce + 1u < maxBounces;
 				let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightRec.pdf, evalPdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
 				let directLight = throughput * lightRec.emission * lightTransmittance * evalColor * misWeight / lightRec.pdf;
-				return ${ clampPathContributionFunc }( directLight, bounce + 1u, clampDirect, clampIndirect );
+				return ${ clampPathContributionFunc }( directLight, bounce + 1u );
 
 			}
 		`;
@@ -152,8 +146,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				misEnabled: u32,
 				maxSamples: u32,
 				filterGlossy: f32,
-				clampDirect: f32,
-				clampIndirect: f32,
 
 				transmissiveBackground: u32,
 				accumulateAux: u32,
@@ -227,8 +219,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
-
-				let lightsCount = ${ lightsCountNode };
 
 				// added last, since a camera ray miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
@@ -316,43 +306,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// NEE's total weight at the vertex this ray left, for MIS. Camera rays have none, and
+					// MIS weights against the light sampling at the vertex this ray left. Camera rays have none, and
 					// neither do scatter events in a subsurface walk
 					let isMISWeighted = misEnabled != 0u && bounce > 0u && ! mediumScattered;
-					var lightTotalWeight = 0.0;
-					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( ray.origin );
-
-					}
-
-					// forward hits on area lights along the traced segment. Camera rays only see visibleToCameraRays
-					// lights, at full weight
-					for ( var li = 0u; li < lightsCount; li ++ ) {
-
-						if ( bounce == 0u && ! ${ isLightVisibleToCameraFn }( li ) ) {
-
-							continue;
-
-						}
-
-						var lightRec: ${ lightRecordStruct };
-						if ( ${ intersectLightAtIndexFn }( ray.origin, ray.direction, li, &lightRec ) && lightRec.dist > rayStart && lightRec.dist < rayStart + segmentEnd ) {
-
-							var misWeight = 1.0;
-							if ( isMISWeighted ) {
-
-								let selectionPdf = ${ getLightWeightFn }( li, ray.origin ) / lightTotalWeight;
-								misWeight = ${ misHeuristicFn }( bsdfPdf, lightRec.pdf * selectionPdf );
-
-							}
-
-							lightHits += ${ clampPathContributionFunc }( lightRec.emission * throughputColor * misWeight, bounce, clampDirect, clampIndirect );
-							cameraHitLight = cameraHitLight || bounce == 0u;
-
-						}
-
-					}
+					// forward hits on area lights along the traced segment, which starts "rayStart" along the ray
+					let segmentLight = ${ getLightHitsFn }( ray.origin, ray.direction, rayStart, rayStart + segmentEnd, throughputColor, bsdfPdf, isMISWeighted, bounce );
+					lightHits += segmentLight.rgb;
+					cameraHitLight = cameraHitLight || ( bounce == 0u && segmentLight.a > 0.0 );
 
 					// next event estimation: choose one light or the environment by its estimated
 					// contribution. The vertex below evaluates the bsdf, or the phase function at a scatter
@@ -486,7 +447,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						// emission, clamped at the depth of the segment that found it, as in Cycles
-						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce, clampDirect, clampIndirect );
+						let emission = ${ clampPathContributionFunc }( throughputColor * surface.emission, bounce );
 						resultColor += vec4f( emission, 0.0 );
 
 						// evaluate the bsdf toward the light sampled above. The light pdf is 0 if NEE is disabled
@@ -557,7 +518,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							}
 
 							let environment = ${ sampleEnvColor }( ray.direction ).rgb * throughputColor * misWeight;
-							let contribution = ${ clampPathContributionFunc }( environment, bounce, clampDirect, clampIndirect );
+							let contribution = ${ clampPathContributionFunc }( environment, bounce );
 							resultColor += vec4f( contribution, 0.0 );
 
 						} else {
@@ -569,7 +530,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							if ( bounce == 0u ) {
 
 								// sample the background directly if this is the primary ray
-								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb, bounce, clampDirect, clampIndirect );
+								let background = ${ clampPathContributionFunc }( bg.a * bg.rgb, bounce );
 								resultColor = vec4f( background, bg.a );
 
 							} else {
@@ -589,7 +550,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_ENVIRONMENT }u ) {
 
 									// display the env map through transmissive surfaces
-									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor * envMisWeight, bounce, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( env.rgb * throughputColor * envMisWeight, bounce );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0,
@@ -598,7 +559,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								} else if ( transmissiveBackground == ${ TRANSMISSIVE_BACKGROUND_TRANSPARENT }u ) {
 
 									// fade the background by the throughput color average
-									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor * envMisWeight, bounce, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( bg.a * bg.rgb * throughputColor * envMisWeight, bounce );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0 - transparency,
@@ -608,7 +569,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 									// fade the background by the throughput color average, mixing in env lighting
 									var light = mix( env.rgb, bg.rgb, bg.a ) * envMisWeight;
-									let background = ${ clampPathContributionFunc }( light * throughputColor, bounce, clampDirect, clampIndirect );
+									let background = ${ clampPathContributionFunc }( light * throughputColor, bounce );
 									resultColor = vec4f(
 										resultColor.rgb + background,
 										1.0 - transparency,
@@ -627,7 +588,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// the light sampled at the vertex, through its shadow ray. A finished path still gathers it
 					if ( lightRec.pdf > 0.0 ) {
 
-						let contribution = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces, clampDirect, clampIndirect );
+						let contribution = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
 						resultColor += vec4f( contribution, 0.0 );
 
 					}
