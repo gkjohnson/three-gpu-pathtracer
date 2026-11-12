@@ -303,7 +303,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let isFogScatter = scatterDist > 0.0 && scatterDist < surfaceDist;
 					let segmentDist = select( surfaceDist, scatterDist, isFogScatter );
 
-					let hasVertex = didHitSurface || isFogScatter;
+					let didHit = didHitSurface || isFogScatter;
 
 					// MIS against the light sampling at the previous vertex. None for camera segments or subsurface scatters
 					let isMISWeighted = misEnabled != 0u && bounce > 0u && ! mediumScattered;
@@ -323,7 +323,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					var lightRec: ${ lightRecordStruct };
-					if ( hasVertex ) {
+					if ( didHit ) {
 
 						if ( misEnabled != 0u ) {
 

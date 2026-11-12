@@ -174,7 +174,7 @@ export class LogicKernel extends ComputeKernel {
 					let isFogScatter = input.scatterDist > 0.0 && input.scatterDist < surfaceDist;
 					let segmentDist = select( surfaceDist, input.scatterDist, isFogScatter );
 
-					let hasVertex = didHitSurface || isFogScatter;
+					let didHit = didHitSurface || isFogScatter;
 
 					// MIS weights against the light sampling at the vertex this segment left. Camera segments have none,
 					// and neither do scatter events in a subsurface walk
@@ -185,7 +185,7 @@ export class LogicKernel extends ComputeKernel {
 					lightHitColor += segmentLightHits.rgb;
 					cameraHitLight = cameraHitLight || ( input.hit.bounce == 0u && segmentLightHits.a > 0.0 );
 
-					if ( hasVertex ) {
+					if ( didHit ) {
 
 						// stage the hit for MaterialKernel
 						rayDataStorage[ index ].hit.barycoord = hitResult.barycoord;
