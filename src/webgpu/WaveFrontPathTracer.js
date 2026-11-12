@@ -170,6 +170,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceRayKernel.context.random = random;
 		this.traceShadowRayKernel.context.random = random;
 		this.subsurfaceKernel.context.random = random;
+		this.cameraMediumKernel.context.random = random;
 		this.rebuild();
 
 	}
@@ -513,6 +514,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		traceRayKernel.globalSeed = this.globalSeed;
 		traceShadowRayKernel.globalSeed = this.globalSeed;
 		subsurfaceKernel.globalSeed = this.globalSeed;
+		cameraMediumKernel.globalSeed = this.globalSeed;
 
 		while ( true ) {
 
@@ -575,6 +577,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.maxBounces = this.maxBounces;
+				materialKernel.maxFogBounces = this.maxFogBounces;
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// spawn camera rays for the freed slots, then find the volumes they start inside of and queue them

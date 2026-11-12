@@ -15,6 +15,7 @@ import {
 import { LIGHT_FAR_DISTANCE, isMISWeightLightFn } from '../../nodes/lights.wgsl.js';
 import { lightRecordStruct, scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
+import { getFogSegmentWeightFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -133,7 +134,7 @@ export class LogicKernel extends ComputeKernel {
 						// find the light, so their share of the weight moves to the light sample
 						let isMISWeighted = ${ isMISWeightLightFn }( input.lightType ) && input.hit.bounce < maxBounces;
 						let misWeight = select( 1.0, mix( ${ misHeuristicFn }( input.lightPdf, input.lightBsdfPdf ), 1.0, shadowHit.skippedOcclusion ), isMISWeighted );
-						let directLight = throughputColor * input.lightEmission * input.lightBsdf * misWeight * ( 1.0 - shadowHit.occlusion ) / input.lightPdf;
+						let directLight = throughputColor * input.lightEmission * shadowHit.transmittance * input.lightBsdf * misWeight / input.lightPdf;
 						let contribution = ${ clampPathContributionFunc }( directLight, input.hit.bounce, clampDirect, clampIndirect );
 						resultColor += vec4f( contribution, 0.0 );
 
@@ -176,8 +177,21 @@ export class LogicKernel extends ComputeKernel {
 				} else if ( ! isTerminated ) {
 
 					let hitResult = ${ params.rayIntersectionsStorage }[ u32( input.rayIntersectionIndex ) ];
-					let didHit = hitResult.objectIndex >= 0;
-					let surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHit );
+					let didHitSurface = hitResult.objectIndex >= 0;
+					var surfaceDist = select( ${ LIGHT_FAR_DISTANCE }, hitResult.dist, didHitSurface );
+
+					// A segment in fog was traced up to its sampled scatter distance. Without a nearer surface it scatters
+					// there, a vertex staged like a surface hit
+					var isFogScatter = false;
+					if ( input.scatterDist > 0.0 ) {
+
+						throughputColor *= ${ getFogSegmentWeightFn }( input.medium, throughputColor, input.scatterDist, surfaceDist );
+						isFogScatter = input.scatterDist < surfaceDist;
+						surfaceDist = select( surfaceDist, input.scatterDist, isFogScatter );
+
+					}
+
+					let didHit = didHitSurface || isFogScatter;
 
 					// NEE's total weight at the vertex this segment left, for MIS. Camera segments have none,
 					// and neither do scatter events in a subsurface walk
@@ -224,15 +238,27 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.normal = hitResult.normal;
 						rayDataStorage[ index ].hit.side = hitResult.side;
 						rayDataStorage[ index ].hit.indices = hitResult.indices;
-						rayDataStorage[ index ].hit.objectIndex = hitResult.objectIndex;
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
+						rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
+
+						// a fog scatter has no object, and is staged at "origin". Any non-negative index keeps the slot from
+						// being respawned, and MaterialKernel handles the scatter before reading the object
+						var position = hitResult.position;
+						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
+						if ( isFogScatter ) {
+
+							position = input.origin + input.direction * ( input.rayStart + input.scatterDist );
+							rayDataStorage[ index ].origin = position;
+
+						}
 
 						// next event estimation: choose one light or the environment by its estimated
-						// contribution. MaterialKernel evaluates the bsdf and enqueues the shadow ray.
+						// contribution. MaterialKernel evaluates the bsdf, or the phase function at a scatter
+						// event in fog, and enqueues the shadow ray
 						var lightPdf = 0.0;
 						if ( misEnabled != 0u ) {
 
-							let lightRec = ${ sampleLightFn }( hitResult.position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							let lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 							if ( lightRec.pdf > 0.0 ) {
 
 								lightPdf = lightRec.pdf;

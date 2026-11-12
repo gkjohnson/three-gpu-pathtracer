@@ -20,6 +20,7 @@ export class PathTracerBackend {
 
 		this.maxTransparentBounces = 15;
 		this.maxSubsurfaceBounces = 256;
+		this.maxFogBounces = 0;
 		this.lowResMode = false;
 
 		// stop taking samples once a pixel reaches this count. zero means no limit.

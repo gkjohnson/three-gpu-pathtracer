@@ -314,6 +314,26 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Maximum number of times a path continues after scattering in fog. Light is still sampled at the
+	 * scatter that reaches it, so 0 renders single scattering, as Cycles' volume bounces do. Fog scatters
+	 * also count toward {@link WebGPUPathTracer#maxBounces}.
+	 * @type {number}
+	 * @default 0
+	 */
+	get maxFogBounces() {
+
+		return this._pathTracer.maxFogBounces;
+
+	}
+
+	set maxFogBounces( v ) {
+
+		this._pathTracer.maxFogBounces = v;
+		this.reset();
+
+	}
+
+	/**
 	 * Stops accumulating once every pixel reaches this many samples. A denoiser only runs once the
 	 * render has stopped, so it has no effect while this is `0`.
 	 * @type {number}
