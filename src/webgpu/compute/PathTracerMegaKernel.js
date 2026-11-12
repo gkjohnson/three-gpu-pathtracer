@@ -93,7 +93,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				throughput: vec3f, bounce: u32, maxBounces: u32, clampDirect: f32, clampIndirect: f32,
 			) -> vec3f {
 
-				if ( lightRec.pdf <= 0.0 || evalPdf <= 0.0 ) {
+				if ( evalPdf <= 0.0 ) {
 
 					return vec3f( 0.0 );
 
@@ -344,7 +344,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					// The vertex the segment reached: its light sample, and the next direction it sets for the bounce below
 					var scatterRec: ${ scatterRecordStruct };
-					var nextOrigin = vec3f( 0.0 );
+					var bounceOrigin = vec3f( 0.0 );
 					if ( didHit ) {
 
 						// the hit, recorded as in the wavefront ray data
@@ -432,10 +432,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( misEnabled != 0u ) {
 
 							let lightRec = ${ sampleLightFn }( vertexData.position.xyz, envWeight, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
-							let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
-							let shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
-							let contribution = ${ getLightContributionFn }( lightRec, evalRec.color, evalRec.pdf, shadowOrigin, throughputColor, bounce, maxBounces, clampDirect, clampIndirect );
-							resultColor += vec4f( contribution, 0.0 );
+							if ( lightRec.pdf > 0.0 ) {
+
+								let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
+								let shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
+								let contribution = ${ getLightContributionFn }( lightRec, evalRec.color, evalRec.pdf, shadowOrigin, throughputColor, bounce, maxBounces, clampDirect, clampIndirect );
+								resultColor += vec4f( contribution, 0.0 );
+
+							}
 
 						}
 
@@ -485,7 +489,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						}
 
-						nextOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hit.normal );
+						bounceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, hit.normal );
 
 					} else {
 
@@ -596,7 +600,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					ray.origin = nextOrigin;
+					ray.origin = bounceOrigin;
 					ray.direction = scatterRec.direction;
 					ray.maxDist = 0.0;
 					traceOrigin = ray.origin;

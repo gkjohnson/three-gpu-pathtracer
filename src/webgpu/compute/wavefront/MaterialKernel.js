@@ -230,6 +230,19 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
+					// emission, resolved by LogicKernel
+					emission = surface.emission;
+
+					// evaluate the bsdf toward the light LogicKernel selected. The light pdf is 0 if NEE is disabled
+					if ( input.lightPdf > 0.0 ) {
+
+						let evalRec = ${ bsdfEvalPdfFn }( input.hit, surface, view, input.lightDirection );
+						lightEvalColor = evalRec.color;
+						lightEvalPdf = evalRec.pdf;
+						shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+
+					}
+
 					// sample the next bounce direction
 					scatterRec = ${ bsdfSampleFn }( input.hit, surface, view );
 
@@ -247,10 +260,11 @@ export class MaterialKernel extends ComputeKernel {
 
 					}
 
-					emission = surface.emission;
-					minPdf = min( input.minPdf, scatterRec.pdf );
-					isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
 					isTerminated = all( scatterRec.color == vec3f( 0.0 ) ) || ${ isTerminatingScatterFunc }( scatterRec );
+					isFullyTransmissive = input.isFullyTransmissive & select( 0u, 1u, scatterRec.isTransmissive );
+
+					// track the smallest pdf seen along the path for the glossy filter
+					minPdf = min( input.minPdf, scatterRec.pdf );
 
 					// refracting through a volume's surface enters or exits it
 					if ( scatterRec.isTransmissive && ! surface.thinWall ) {
@@ -281,16 +295,6 @@ export class MaterialKernel extends ComputeKernel {
 					}
 
 					bounceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, scatterRec.direction, input.hit.normal );
-
-					// evaluate the bsdf toward the light LogicKernel selected. The light pdf is 0 if NEE is disabled
-					if ( input.lightPdf > 0.0 ) {
-
-						let evalRec = ${ bsdfEvalPdfFn }( input.hit, surface, view, input.lightDirection );
-						lightEvalColor = evalRec.color;
-						lightEvalPdf = evalRec.pdf;
-						shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
-
-					}
 
 					// decide termination now so finished paths skip the bounce trace entirely - a
 					// zeroed pdf reads as a terminating scatter in LogicKernel, which still resolves
