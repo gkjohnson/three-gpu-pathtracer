@@ -48,10 +48,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		super( bvh, {
 			attributes: {
 				position: 'vec3f',
-				normal: 'vec3f',
-				tangent: 'vec4f',
-				color: 'vec4f',
-				uv: 'vec2f',
+				normal: 'oct16',
+				tangent: 'oct16',
 			},
 			...options,
 		} );
@@ -84,7 +82,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					if ( keys.has( key ) ) {
 
-						attributes[ key ] = key === 'color' ? 'vec4f' : 'vec2f';
+						attributes[ key ] = key === 'color' ? '2x16float' : 'vec2f';
 
 					}
 

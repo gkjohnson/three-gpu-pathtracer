@@ -454,7 +454,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
 						var vertexData = ${ sampleTrianglePointFn }( hit.barycoord, hit.indices );
-						vertexData.normal = normalize( ( transpose( objectInfo.inverseMatrixWorld ) * vec4f( vertexData.normal, 0.0 ) ).xyz );
+						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vec4f( vertexData.normal.xyz, 0.0 ) );
 						vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 						vertexData.position = ( objectInfo.matrixWorld * vec4f( vertexData.position, 1.0 ) ).xyz;
 
