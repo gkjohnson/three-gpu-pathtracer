@@ -348,7 +348,7 @@ export const getSurfaceRecordFunc = ( {
 
 			let uvPrime = material.sheenRoughnessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.sheenRoughnessMap ), 1 );
 			let texColor = ${ sampleTexel }( uvPrime.xy,material.sheenRoughnessMap, 0 );
-			sheenRoughness *= texColor.r;
+			sheenRoughness *= texColor.a;
 
 		}
 
