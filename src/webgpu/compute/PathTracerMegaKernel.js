@@ -71,10 +71,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 		// environment resources
 		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
-		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
-		const getEnvWeight = proxy( 'envInfo.value.getWeight', params );
 		const sampleBackground = proxy( 'backgroundInfo.value.sampleColor', params );
 
 		// analytic scene lights pulled off the lightsInfo provider ( LightsInfoNode )
@@ -82,6 +80,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const intersectLightAtIndexFn = proxyFn( 'lightsInfo.value.intersectLightAtIndex', params );
 		const getLightWeightFn = proxyFn( 'lightsInfo.value.getLightWeight', params );
 		const getLightsWeightFn = proxyFn( 'lightsInfo.value.getLightsWeight', params );
+		const getEnvironmentPdfFn = proxyFn( 'lightsInfo.value.getEnvironmentPdf', params );
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 		const isLightVisibleToCameraFn = proxyFn( 'lightsInfo.value.isLightVisibleToCamera', params );
 
@@ -218,15 +217,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// A negative value marks a sampled wavelength whose RGB reconstruction weight has not been applied yet.
 				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
-				// one-sample NEE chooses between the analytic lights and the environment
-				let envActive = ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0;
 				let lightsCount = ${ lightsCountNode };
-				var envWeight = 0.0;
-				if ( envActive ) {
-
-					envWeight = ${ getEnvWeight }();
-
-				}
 
 				// added last, since a camera ray miss overwrites the pixel with the background
 				var lightHits = vec3f( 0.0 );
@@ -310,7 +301,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var lightTotalWeight = 0.0;
 					if ( isMISWeighted ) {
 
-						lightTotalWeight = ${ getLightsWeightFn }( ray.origin ) + envWeight;
+						lightTotalWeight = ${ getLightsWeightFn }( ray.origin );
 
 					}
 
@@ -431,7 +422,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						// contribution
 						if ( misEnabled != 0u ) {
 
-							let lightRec = ${ sampleLightFn }( vertexData.position.xyz, envWeight, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							let lightRec = ${ sampleLightFn }( vertexData.position.xyz, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 							if ( lightRec.pdf > 0.0 ) {
 
 								let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
@@ -496,11 +487,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						if ( bounce > 0u && ! isFullyTransmissive ) {
 
 							var misWeight = 1.0;
-							if ( isMISWeighted && envActive ) {
+							if ( isMISWeighted ) {
 
-								// match the env pdf scaling used by the NEE selection so the two estimators balance
-								let envPdf = ${ getEnvDirPdf }( ray.direction ) * envWeight / lightTotalWeight;
-								misWeight = ${ misHeuristicFn }( bsdfPdf, envPdf );
+								// weighted against the light sampling choosing the environment
+								let envPdf = ${ getEnvironmentPdfFn }( ray.origin, ray.direction );
+								misWeight = select( 1.0, ${ misHeuristicFn }( bsdfPdf, envPdf ), envPdf > 0.0 );
 
 							}
 
