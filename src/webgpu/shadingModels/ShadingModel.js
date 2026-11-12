@@ -101,6 +101,7 @@ export class ShadingModel {
 			sampleTexel: fns.sampleTexel,
 			getTextureSize: getTextureSizeFunc( textureInfo ),
 			getUvFromChannel: contextProxyFn( 'bvhData.fns.getUvFromChannel' ),
+			offsetUvChannel: contextProxyFn( 'bvhData.fns.offsetUvChannel' ),
 			getColor: contextProxyFn( 'bvhData.fns.getColor' ),
 		} );
 
@@ -484,10 +485,10 @@ export class ShadingModel {
 			floatArray[ index ++ ] = this.getField( m, 'anisotropyRotation', 0.0 );
 			intArray[ index ++ ] = this.getTextureDescriptor( m, 'anisotropyMap' );
 
-			// bumpMap, bumpScale - offset 69
+			// bumpMap, bumpScale, parallaxDepth - offset 69
 			intArray[ index ++ ] = this.getTextureDescriptor( m, 'bumpMap' );
 			floatArray[ index ++ ] = this.getField( m, 'bumpScale', 1.0 );
-			index ++; // padding for mat3 alignment
+			floatArray[ index ++ ] = this.getField( m, 'parallaxDepth', 0.0 );
 
 			// map transform - offset 72
 			index += this.writeTextureMatrixToArray( m, 'map', floatArray, index );

@@ -122,6 +122,8 @@ export const materialStruct = new StructTypeNode( {
 	anisotropyMap: 'int',
 	bumpMap: 'int',
 	bumpScale: 'float',
+	// experimental: parallax offset depth of the bump map, in world units, 0 is off
+	parallaxDepth: 'float',
 
 	// offset 72 floats
 	mapTransform: 'mat3',
