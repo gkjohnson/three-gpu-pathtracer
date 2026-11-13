@@ -199,8 +199,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// the opacity of a hit triangle at its barycentric coordinate, from the object's opacity, the vertex
 		// colors and the alpha of the map and alpha map
 		const getHitOpacity = wgslTagFn/* wgsl */`
-			fn getHitOpacity( material: ${ contextProxy( 'shadingModel.structs.material' ) }, i0: u32, i1: u32, i2: u32, barycoord: vec3f ) -> f32 {
+			fn getHitOpacity( materialIndex: u32, i0: u32, i1: u32, i2: u32, barycoord: vec3f ) -> f32 {
 
+				let material = &${ materialsStorage }[ materialIndex ];
 				var opacity = ${ baseOpacityScalar };
 				if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
@@ -346,7 +347,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					let object = ${ storage.transforms }[ objectIndex ];
 					${ currentObjectIndex } = objectIndex;
 
-					let material = ${ materialsStorage }[ object.materialIndex ];
+					let material = &${ materialsStorage }[ object.materialIndex ];
 					if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
 						${ baseOpacityScalar } = material.opacity * object.color.a;
@@ -401,7 +402,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
 							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
-							let material = ${ materialsStorage }[ object.materialIndex ];
+							let material = &${ materialsStorage }[ object.materialIndex ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
 							if ( material.side != 0 && triResult.side != material.side ) {
@@ -412,7 +413,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							// partial opacity is resolved at surface processing, but fully transparent and alpha
 							// tested surfaces are skipped here
-							let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+							let opacity = ${ getHitOpacity }( object.materialIndex, i0, i1, i2, triResult.barycoord );
 							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 								continue;
@@ -463,7 +464,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) ) {
 
 							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
-							let material = ${ materialsStorage }[ object.materialIndex ];
+							let material = &${ materialsStorage }[ object.materialIndex ];
 
 							// pass fog volume boundaries, in any order: entering adds the fog's optical depth back from
 							// the fog shadow distance, and leaving takes it away
@@ -476,7 +477,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+							let opacity = ${ getHitOpacity }( object.materialIndex, i0, i1, i2, triResult.barycoord );
 							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 								continue;
@@ -555,7 +556,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					}
 
 					let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
-					let material = ${ materialsStorage }[ object.materialIndex ];
+					let material = &${ materialsStorage }[ object.materialIndex ];
 
 					// the material's entry in the hits, or the next free one
 					var entry = result.count;
@@ -596,7 +597,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						}
 
 						// fully transparent and alpha tested surfaces are passed, as by the first hit traversal
-						let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+						let opacity = ${ getHitOpacity }( object.materialIndex, i0, i1, i2, triResult.barycoord );
 						if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 							continue;
@@ -621,7 +622,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					${ raycastOptions.transformShapeFn }( ray, objectIndex );
 
-					let material = ${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
+					let material = &${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
 					let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
 					${ skipObject } = select( 1u, 0u, isVolume );
 
