@@ -82,7 +82,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					if ( keys.has( key ) ) {
 
-						attributes[ key ] = key === 'color' ? '2x16float' : 'vec2f';
+						attributes[ key ] = key === 'color' ? '4x16float' : 'vec2f';
 
 					}
 
