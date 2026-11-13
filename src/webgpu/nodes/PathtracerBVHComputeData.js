@@ -31,14 +31,14 @@ const intersectionResultStruct = new StructTypeNode( {
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
-// the volumes a ray hits, by material index, with each one's nearest hit distance and side
-const VOLUME_HITS_SIZE = 32;
-const volumeHitsStruct = new StructTypeNode( {
-	ids: `array<u32, ${ VOLUME_HITS_SIZE }>`,
-	dist: `array<f32, ${ VOLUME_HITS_SIZE }>`,
-	side: `array<f32, ${ VOLUME_HITS_SIZE }>`,
-	count: 'uint',
-}, 'VolumeHits' );
+// the nearest volume hit past "minDist" along a ray, by material index
+const volumeHitStruct = new StructTypeNode( {
+	didHit: 'bool',
+	materialIndex: 'uint',
+	dist: 'float',
+	side: 'float',
+	minDist: 'float',
+}, 'VolumeHit' );
 
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
@@ -520,20 +520,19 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			`,
 		} );
 
-		// The nearest hit of every volume along the ray, skipping the objects that aren't volumes
-		// TODO: accumulating the volume hits through the shapecast hooks this way is a bit brittle
+		// The nearest hit past "minDist" on the objects that are volumes, for stepping through a ray's volume hits in order
 		// TODO: three-mesh-bvh has no clear way to skip an object during traversal, so a flag set when the ray is
 		// transformed is checked in both the bounds and range tests. A dedicated hook would be good
 		const skipObject = uint( 0 ).toVar( 'bvh_skipObject' );
 
-		fns.collectVolumeHits = this.getShapecastFn( {
-			name: 'collectVolumeHits',
+		fns.raycastVolumeHit = this.getShapecastFn( {
+			name: 'raycastVolumeHit',
 			shapeStruct: rayStruct,
-			resultStruct: volumeHitsStruct,
+			resultStruct: volumeHitStruct,
 
 			boundsOrderFn: raycastOptions.boundsOrderFn,
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
-				fn volumeRayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
+				fn volumeRayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ volumeHitStruct }> ) -> u32 {
 
 					if ( ${ skipObject } != 0u ) {
 
@@ -541,12 +540,19 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					}
 
-					return select( 0u, 1u, ${ rayBoundsDistance }( ray, bounds ) >= 0.0 );
+					let dist = ${ rayBoundsDistance }( ray, bounds );
+					if ( dist < 0.0 || ( result.didHit && dist >= result.dist ) ) {
+
+						return 0u;
+
+					}
+
+					return 1u;
 
 				}
 			`,
 			intersectRangeFn: wgslTagFn/* wgsl */`
-				fn intersectVolumeRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
+				fn intersectVolumeRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ volumeHitStruct }> ) -> u32 {
 
 					if ( ${ skipObject } != 0u ) {
 
@@ -556,25 +562,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
 					let material = ${ materialsStorage }[ object.materialIndex ];
-
-					// the material's entry in the hits, or the next free one
-					var entry = result.count;
-					for ( var i = 0u; i < result.count; i ++ ) {
-
-						if ( result.ids[ i ] == object.materialIndex ) {
-
-							entry = i;
-							break;
-
-						}
-
-					}
-
-					if ( entry == ${ VOLUME_HITS_SIZE }u ) {
-
-						return ${ NOT_INTERSECTED }u;
-
-					}
 
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
@@ -589,7 +576,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
-						if ( ! triResult.didHit || ( entry < result.count && triResult.dist >= result.dist[ entry ] ) ) {
+						if ( ! triResult.didHit || triResult.dist <= result.minDist || ( result.didHit && triResult.dist >= result.dist ) ) {
 
 							continue;
 
@@ -603,10 +590,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 						}
 
-						result.ids[ entry ] = object.materialIndex;
-						result.dist[ entry ] = triResult.dist;
-						result.side[ entry ] = triResult.side;
-						result.count = max( result.count, entry + 1u );
+						result.didHit = true;
+						result.materialIndex = object.materialIndex;
+						result.dist = triResult.dist;
+						result.side = triResult.side;
 
 						didHit = true;
 
