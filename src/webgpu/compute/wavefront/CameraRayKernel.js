@@ -67,21 +67,29 @@ export class CameraRayKernel extends ComputeKernel {
 
 				}
 
+				// Find a pixel for the slot that still needs samples, and a camera ray for it. With a queue the slot swaps
+				// its pixel for the next one, and tries the entries after one it can't render: a dropped entry, a pixel
+				// with all its samples, or one the camera declines. A pixel with all its samples leaves the queue as a
+				// dropped entry, and the dropped entries are counted for the compaction pass. Without a queue the slot
+				// keeps its pixel and tries it once
 				var pixelIndex = input.pixelIndex;
 				let elementCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ] );
-				if ( elementCount > 0u ) {
+				let attempts = select( 1u, ${ PIXEL_QUEUE_POP_ATTEMPTS }u, elementCount > 0u );
 
-					// Swap the slot's pixel for the next one in the queue. A pixel with all its samples leaves the
-					// queue as a dropped entry, and the slot tries the entries after a dropped or finished one. The
-					// dropped entries are counted for the compaction pass
-					var returnedPixelIndex = pixelIndex;
-					if ( pixelIndex == ${ PIXEL_QUEUE_DROPPED }u || ${ isPixelFinishedFn }( pixelIndex, maxSamples ) ) {
+				// what the slot hands back to the queue for the next pixel it takes
+				var returnedPixelIndex = pixelIndex;
+				if ( pixelIndex != ${ PIXEL_QUEUE_DROPPED }u && ${ isPixelFinishedFn }( pixelIndex, maxSamples ) ) {
 
-						returnedPixelIndex = ${ PIXEL_QUEUE_DROPPED }u;
+					returnedPixelIndex = ${ PIXEL_QUEUE_DROPPED }u;
 
-					}
+				}
 
-					for ( var attempt = 0u; attempt < ${ PIXEL_QUEUE_POP_ATTEMPTS }u; attempt ++ ) {
+				var ray: ${ rayStruct };
+				var samples = 0u;
+				var hasRay = false;
+				for ( var attempt = 0u; attempt < attempts; attempt ++ ) {
+
+					if ( elementCount > 0u ) {
 
 						let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ], 1u ) % elementCount;
 						pixelIndex = atomicExchange( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], returnedPixelIndex );
@@ -94,24 +102,59 @@ export class CameraRayKernel extends ComputeKernel {
 						if ( pixelIndex == ${ PIXEL_QUEUE_DROPPED }u ) {
 
 							atomicSub( &pixelQueue[ ${ PIXEL_QUEUE_DROPPED_COUNT }u ], 1u );
-
-						} else if ( ! ${ isPixelFinishedFn }( pixelIndex, maxSamples ) ) {
-
-							break;
+							returnedPixelIndex = ${ PIXEL_QUEUE_DROPPED }u;
+							continue;
 
 						}
 
-						// the entry taken is dropped or finished, so a dropped entry replaces the next one taken
+					}
+
+					// a slot without a queue and without a pixel waits
+					if ( pixelIndex == ${ PIXEL_QUEUE_DROPPED }u ) {
+
+						break;
+
+					}
+
+					// a pixel with all its samples is dropped
+					let indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
+					let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+					samples = ${ SAMPLE_COUNT_MASK }u & combinedField;
+					if ( maxSamples != 0u && samples >= maxSamples ) {
+
+						returnedPixelIndex = ${ PIXEL_QUEUE_DROPPED }u;
+						continue;
+
+					}
+
+					${ rngInit }( globalSeed, indexUV, samples, 0 );
+
+					let uv = vec2f( indexUV ) / vec2f( targetDimensions );
+					let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
+					if ( ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+
+						hasRay = true;
+						break;
+
+					}
+
+					// The camera declined the pixel. With a sample cap it counts as finished, since it will never take
+					// a sample, and is dropped. Otherwise it goes back to the queue
+					returnedPixelIndex = pixelIndex;
+					if ( maxSamples != 0u ) {
+
+						textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ( combinedField & ~${ SAMPLE_COUNT_MASK }u ) | maxSamples ) );
 						returnedPixelIndex = ${ PIXEL_QUEUE_DROPPED }u;
 
 					}
 
 				}
 
-				// every entry tried was dropped, so the slot waits for the next round
-				if ( pixelIndex == ${ PIXEL_QUEUE_DROPPED }u ) {
+				// every pixel tried can't be rendered, so the slot waits for the next round holding what it would
+				// hand back
+				if ( ! hasRay ) {
 
-					rayDataStorage[ index ].pixelIndex = pixelIndex;
+					rayDataStorage[ index ].pixelIndex = returnedPixelIndex;
 					rayDataStorage[ index ].rayIntersectionIndex = - 1;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 					return;
@@ -119,44 +162,6 @@ export class CameraRayKernel extends ComputeKernel {
 				}
 
 				let indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
-
-				// skip the pixel if it has hit the sample limit
-				let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
-				let samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
-				let isComplete = maxSamples != 0u && samples >= maxSamples;
-
-				if ( isComplete ) {
-
-					rayDataStorage[ index ].pixelIndex = pixelIndex;
-					rayDataStorage[ index ].rayIntersectionIndex = - 1;
-					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
-					return;
-
-				}
-
-				${ rngInit }( globalSeed, indexUV, samples, 0 );
-
-				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
-				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
-				var ray: ${ rayStruct };
-				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
-
-					// the camera declined the pixel, so leave the slot dormant for this round. With a
-					// sample cap the pixel counts as finished, since it will never take a sample
-					// TODO: same as above - this work is a bit wasteful and leaves slots empty for
-					// a frame. Is it possible to quickly skip rays outside the mask or are finished?
-					if ( maxSamples != 0u ) {
-
-						textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ( combinedField & ~${ SAMPLE_COUNT_MASK }u ) | maxSamples ) );
-
-					}
-
-					rayDataStorage[ index ].pixelIndex = pixelIndex;
-					rayDataStorage[ index ].rayIntersectionIndex = - 1;
-					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
-					return;
-
-				}
 
 				ray.direction = normalize( ray.direction );
 
