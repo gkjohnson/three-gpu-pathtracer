@@ -811,9 +811,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._shadingModel = new GLTFShadingModel();
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
-		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
-		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
-		this._invViewProjectionMatrix = uniform( new Matrix4() );
+		// data's fns so the kernels can proxy it
+		this._cameraWorldMatrix = uniform( new Matrix4() );
+		this._cameraProjectionInverse = uniform( new Matrix4() );
 		this._cameraRayFnHandle = null;
 		this._BVHWorker = null;
 
@@ -1174,7 +1174,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			// add a default camera ray getter. the update function is called when the camera is
 			// updated to trigger any necessary uniform updates.
-			const invViewProjectionMatrix = this._invViewProjectionMatrix;
+			const { _cameraWorldMatrix, _cameraProjectionInverse } = this;
 			this._cameraRayFnHandle = {
 				update: () => {
 
@@ -1187,7 +1187,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 					}
 
-					invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+					_cameraWorldMatrix.value.copy( camera.matrixWorld );
+					_cameraProjectionInverse.value.copy( camera.projectionMatrixInverse );
 					return false;
 
 				},
@@ -1195,7 +1196,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 					fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
 						let ndc = uv * 2.0 - vec2f( 1.0 );
-						*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						*ray = ${ ndcToCameraRay }( ndc, ${ _cameraWorldMatrix }, ${ _cameraProjectionInverse } );
 						return true;
 
 					}

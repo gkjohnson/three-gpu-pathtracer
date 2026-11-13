@@ -81,8 +81,8 @@ const rotateVector = wgslTagFn/* wgsl */`
 PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 	// camera transform fields
-	const invViewProjectionMatrix = uniform( new Matrix4() );
 	const cameraWorldMatrix = uniform( new Matrix4() );
+	const inverseProjectionMatrix = uniform( new Matrix4() );
 
 	// bokeh shape fields
 	const focusDistance = uniform( 0 );
@@ -96,7 +96,7 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 			// base ray
 			let ndc = uv * 2.0 - vec2f( 1.0 );
-			*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+			*ray = ${ ndcToCameraRay }( ndc, ${ cameraWorldMatrix }, ${ inverseProjectionMatrix } );
 
 			// camera state
 			let forward = normalize( ( ${ cameraWorldMatrix } * vec4f( 0.0, 0.0, - 1.0, 0.0 ) ).xyz );
@@ -134,8 +134,8 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 		this.updateMatrixWorld();
 		this.updateProjectionMatrix();
 
-		invViewProjectionMatrix.value.multiplyMatrices( this.matrixWorld, this.projectionMatrixInverse );
 		cameraWorldMatrix.value.copy( this.matrixWorld );
+		inverseProjectionMatrix.value.copy( this.projectionMatrixInverse );
 
 		focusDistance.value = this.focusDistance;
 		bokehSize.value = this.bokehSize;

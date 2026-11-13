@@ -45,14 +45,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	constructor( bvh, shadingModel, options = {} ) {
 
-		// TODO: once supported we should use the appropriately-sized member sizes
 		super( bvh, {
 			attributes: {
-				position: 'vec4f',
-				normal: 'vec4f',
-				tangent: 'vec4f',
-				color: 'vec4f',
-				uv: 'vec4f',
+				position: 'vec3f',
+				normal: 'oct16',
+				tangent: 'oct16',
 			},
 			...options,
 		} );
@@ -85,7 +82,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					if ( keys.has( key ) ) {
 
-						attributes[ key ] = 'vec4f';
+						attributes[ key ] = key === 'color' ? '4x16float' : 'vec2f';
 
 					}
 
@@ -207,9 +204,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					// add support for vertex color opacity
 					if ( material.vertexColors == 1 ) {
 
-						let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
-						let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
-						let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
+						let a = ${ fns.getColor }( ${ fns.getVertex }( i0 ) );
+						let b = ${ fns.getColor }( ${ fns.getVertex }( i1 ) );
+						let c = ${ fns.getColor }( ${ fns.getVertex }( i2 ) );
 						let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 
 						opacity *= col.a;
@@ -219,9 +216,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					// account for alpha component of albedo map
 					if ( material.map != - 1 ) {
 
-						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
-						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
-						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
+						let a = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i0 ), material.map );
+						let b = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i1 ), material.map );
+						let c = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i2 ), material.map );
 						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 						let uvPrime = material.mapTransform * vec3f( uv, 1 );
 
@@ -232,9 +229,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					// account for green component of alpha map
 					if ( material.alphaMap != - 1 ) {
 
-						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
-						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
-						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
+						let a = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i0 ), material.alphaMap );
+						let b = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i1 ), material.alphaMap );
+						let c = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i2 ), material.alphaMap );
 						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
 						let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
 
@@ -388,13 +385,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
-						let i0 = ${ storage.index }[ ti * 3u ];
-						let i1 = ${ storage.index }[ ti * 3u + 1u ];
-						let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
+						let indices = ${ fns.getTriangleIndices }( ti );
+						let a = ${ fns.getVertexPosition }( indices.x );
+						let b = ${ fns.getVertexPosition }( indices.y );
+						let c = ${ fns.getVertexPosition }( indices.z );
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
@@ -412,7 +406,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							// partial opacity is resolved at surface processing, but fully transparent and alpha
 							// tested surfaces are skipped here
-							let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+							let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
 							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 								continue;
@@ -424,7 +418,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							result.normal = triResult.normal;
 							result.side = triResult.side;
 							result.barycoord = triResult.barycoord;
-							result.indices = vec4u( i0, i1, i2, ti );
+							result.indices = vec4u( indices, ti );
 
 							didHit = true;
 
@@ -450,13 +444,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
-						let i0 = ${ storage.index }[ ti * 3u ];
-						let i1 = ${ storage.index }[ ti * 3u + 1u ];
-						let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
+						let indices = ${ fns.getTriangleIndices }( ti );
+						let a = ${ fns.getVertexPosition }( indices.x );
+						let b = ${ fns.getVertexPosition }( indices.y );
+						let c = ${ fns.getVertexPosition }( indices.z );
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
@@ -476,7 +467,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+							let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
 							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 								continue;
@@ -579,13 +570,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
-						let i0 = ${ storage.index }[ ti * 3u ];
-						let i1 = ${ storage.index }[ ti * 3u + 1u ];
-						let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
+						let indices = ${ fns.getTriangleIndices }( ti );
+						let a = ${ fns.getVertexPosition }( indices.x );
+						let b = ${ fns.getVertexPosition }( indices.y );
+						let c = ${ fns.getVertexPosition }( indices.z );
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
@@ -596,7 +584,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						}
 
 						// fully transparent and alpha tested surfaces are passed, as by the first hit traversal
-						let opacity = ${ getHitOpacity }( material, i0, i1, i2, triResult.barycoord );
+						let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
 						if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 							continue;

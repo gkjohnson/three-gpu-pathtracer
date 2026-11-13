@@ -96,7 +96,7 @@ export class ShadingModel {
 			materialStruct: structs.material,
 			surfaceRecordStruct: structs.surfaceRecord,
 			attributesStruct: contextProxy( 'bvhData.structs.attributes' ),
-			attributesStorage: contextProxy( 'bvhData.storage.attributes' ),
+			getVertex: contextProxyFn( 'bvhData.fns.getVertex' ),
 			transformsStorage: contextProxy( 'bvhData.storage.transforms' ),
 			sampleTexel: fns.sampleTexel,
 			getTextureSize: getTextureSizeFunc( textureInfo ),
