@@ -155,7 +155,10 @@ export const MEDIUM_QUEUE_HEADER = 1;
 
 // Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
 // the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its
-// counters lead the same u32 array, ahead of the elements.
+// counters lead the same u32 array, ahead of the elements. A pixel with all its samples leaves the
+// queue as a dropped entry, which the compaction pass removes once they pile up.
 export const PIXEL_QUEUE_CURRENT = 0;
 export const PIXEL_QUEUE_ELEMENT_COUNT = 1;
-export const PIXEL_QUEUE_HEADER = 2;
+export const PIXEL_QUEUE_DROPPED_COUNT = 2;
+export const PIXEL_QUEUE_HEADER = 3;
+export const PIXEL_QUEUE_DROPPED = 0xFFFFFFFF;

@@ -5,7 +5,11 @@ import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
-import { rayDataStruct, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
+import { rayDataStruct, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_DROPPED, PIXEL_QUEUE_DROPPED_COUNT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
+import { getPixelFinishedFn } from './CompactPixelQueueKernel.js';
+
+// queue entries a slot tries for a pixel that still needs samples before it waits for the next round
+const PIXEL_QUEUE_POP_ATTEMPTS = 4;
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 
@@ -30,6 +34,7 @@ export class CameraRayKernel extends ComputeKernel {
 		};
 
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
+		const isPixelFinishedFn = getPixelFinishedFn( params.sampleCountTarget );
 
 		const fn = wgslTagFn/* wgsl */`
 
@@ -66,11 +71,50 @@ export class CameraRayKernel extends ComputeKernel {
 				let elementCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ] );
 				if ( elementCount > 0u ) {
 
-					// TODO: If we've pulled off a pixel that's already finished we currently just
-					// write a no-op ray, wasting a frame. It may be better to iterate over a few
-					// points in the queue to see if we can find one we can use.
-					let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ], 1u ) % elementCount;
-					pixelIndex = atomicExchange( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], pixelIndex );
+					// Swap the slot's pixel for the next one in the queue. A pixel with all its samples leaves the
+					// queue as a dropped entry, and the slot tries the entries after a dropped or finished one. The
+					// dropped entries are counted for the compaction pass
+					var returnedPixelIndex = pixelIndex;
+					if ( pixelIndex == ${ PIXEL_QUEUE_DROPPED }u || ${ isPixelFinishedFn }( pixelIndex, maxSamples ) ) {
+
+						returnedPixelIndex = ${ PIXEL_QUEUE_DROPPED }u;
+
+					}
+
+					for ( var attempt = 0u; attempt < ${ PIXEL_QUEUE_POP_ATTEMPTS }u; attempt ++ ) {
+
+						let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ], 1u ) % elementCount;
+						pixelIndex = atomicExchange( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], returnedPixelIndex );
+						if ( returnedPixelIndex == ${ PIXEL_QUEUE_DROPPED }u ) {
+
+							atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_DROPPED_COUNT }u ], 1u );
+
+						}
+
+						if ( pixelIndex == ${ PIXEL_QUEUE_DROPPED }u ) {
+
+							atomicSub( &pixelQueue[ ${ PIXEL_QUEUE_DROPPED_COUNT }u ], 1u );
+
+						} else if ( ! ${ isPixelFinishedFn }( pixelIndex, maxSamples ) ) {
+
+							break;
+
+						}
+
+						// the entry taken is dropped or finished, so a dropped entry replaces the next one taken
+						returnedPixelIndex = ${ PIXEL_QUEUE_DROPPED }u;
+
+					}
+
+				}
+
+				// every entry tried was dropped, so the slot waits for the next round
+				if ( pixelIndex == ${ PIXEL_QUEUE_DROPPED }u ) {
+
+					rayDataStorage[ index ].pixelIndex = pixelIndex;
+					rayDataStorage[ index ].rayIntersectionIndex = - 1;
+					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
+					return;
 
 				}
 

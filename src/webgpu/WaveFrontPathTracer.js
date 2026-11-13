@@ -10,6 +10,7 @@ import { CameraRayKernel } from './compute/wavefront/CameraRayKernel.js';
 import { CameraMediumKernel } from './compute/wavefront/CameraMediumKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
 import { ResetSlotsKernel } from './compute/wavefront/ResetSlotsKernel.js';
+import { PixelQueueCompactionDispatchKernel, CompactPixelQueueKernel, CopyCompactedPixelQueueKernel } from './compute/wavefront/CompactPixelQueueKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { CopyBufferKernel } from './compute/CopyBufferKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
@@ -82,8 +83,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// the slots walking a medium this pass
 		this.mediumQueue = null;
 
-		// pixel indices waiting for a free path slot, sized to the resolution
+		// pixel indices waiting for a free path slot, sized to the resolution, and the compaction's copy of it
 		this.pixelQueue = null;
+		this.compactedPixelQueue = null;
 
 		// reduction target for the per pixel sample counts, read back asynchronously
 		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
@@ -121,6 +123,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
+
+		// pixel queue compaction: drops the pixels with all their samples once they pile up
+		this.pixelQueueCompactionDispatchKernel = new PixelQueueCompactionDispatchKernel().setWorkgroupSize( 1, 1, 1 );
+		this.compactPixelQueueKernel = new CompactPixelQueueKernel().setWorkgroupSize( 64, 1, 1 );
+		this.copyCompactedPixelQueueKernel = new CopyCompactedPixelQueueKernel().setWorkgroupSize( 64, 1, 1 );
 
 	}
 
@@ -278,8 +285,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.mediumQueue?.dispose();
 		this.sampleCountersStorage.dispose();
 		this.pixelQueue?.dispose();
+		this.compactedPixelQueue?.dispose();
 
 		// TODO: the dispatch converters own their indirect dispatch buffers, they should dispose of them themselves
+		this.pixelQueueCompactionDispatchKernel.outputDispatch.dispose();
 		this.rayDispatchConverter.outputDispatch.dispose();
 		this.shadowDispatchConverter.outputDispatch.dispose();
 		this.mediumDispatchConverter.outputDispatch.dispose();
@@ -301,6 +310,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.resetSlotsKernel.dispose();
 		this.copyRayDataKernel.dispose();
 		this.zeroDispatchKernel.dispose();
+		this.pixelQueueCompactionDispatchKernel.dispose();
+		this.compactPixelQueueKernel.dispose();
+		this.copyCompactedPixelQueueKernel.dispose();
 
 	}
 
@@ -315,10 +327,20 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
 			this.pixelQueue.name = 'Pixel Queue';
 
+			this.compactedPixelQueue?.dispose();
+			this.compactedPixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
+			this.compactedPixelQueue.name = 'Compacted Pixel Queue';
+
 			// three rebinds a swapped buffer, so the kernels keep their compiled pipelines
 			this.cameraRayKernel.pixelQueue = this.pixelQueue;
 			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 			this.resetSlotsKernel.pixelQueue = this.pixelQueue;
+			this.pixelQueueCompactionDispatchKernel.pixelQueue = this.pixelQueue;
+			this.pixelQueueCompactionDispatchKernel.compactedPixelQueue = this.compactedPixelQueue;
+			this.compactPixelQueueKernel.pixelQueue = this.pixelQueue;
+			this.compactPixelQueueKernel.compactedPixelQueue = this.compactedPixelQueue;
+			this.copyCompactedPixelQueueKernel.pixelQueue = this.pixelQueue;
+			this.copyCompactedPixelQueueKernel.compactedPixelQueue = this.compactedPixelQueue;
 
 		}
 
@@ -459,6 +481,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			populatePixelIndicesKernel,
 			resetSlotsKernel,
 			copyRayDataKernel,
+			pixelQueueCompactionDispatchKernel,
+			compactPixelQueueKernel,
+			copyCompactedPixelQueueKernel,
 		} = this;
 
 		// compile the kernels before their first dispatch, including the pool resize's below
@@ -478,6 +503,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			populatePixelIndicesKernel,
 			resetSlotsKernel,
 			copyRayDataKernel,
+			pixelQueueCompactionDispatchKernel,
+			compactPixelQueueKernel,
+			copyCompactedPixelQueueKernel,
 		] );
 
 		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
@@ -496,12 +524,20 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		zeroDispatchKernel.target = this.queueCounters;
 		this.dispatch( zeroDispatchKernel, [ QUEUE_COUNTER_COUNT ] );
 
-		// assign every path slot in use a pixel and park the overflow pixels in the pixel queue
-		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
-		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-		populatePixelIndicesKernel.frameBudget = Math.min( this.rayCount, pixelCount );
-		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
-		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
+		// assign every path slot in use a pixel and park the overflow pixels in the pixel queue. A higher sample cap
+		// needs the pixels the queue dropped back, so it is filled again then, dropping the paths in flight
+		const populatePixelQueue = () => {
+
+			populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
+			populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
+			populatePixelIndicesKernel.frameBudget = Math.min( this.rayCount, pixelCount );
+			populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
+			this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
+
+		};
+
+		populatePixelQueue();
+		let queueMaxSamples = this.maxSamples;
 
 		// the sample count indexes each pixel's sequence, and the global seed gives each render its own
 		logicKernel.globalSeed = this.globalSeed;
@@ -513,6 +549,34 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		cameraMediumKernel.globalSeed = this.globalSeed;
 
 		while ( true ) {
+
+			if ( this.maxSamples !== queueMaxSamples ) {
+
+				if ( this.maxSamples === 0 || this.maxSamples > queueMaxSamples ) {
+
+					populatePixelQueue();
+
+				}
+
+				queueMaxSamples = this.maxSamples;
+
+			}
+
+			// drop the pixels that have all their samples from the queue once they pile up, so slots don't idle on
+			// them. The pass is sized on the GPU, and dispatches nothing until then
+			pixelQueueCompactionDispatchKernel.pixelQueue = this.pixelQueue;
+			pixelQueueCompactionDispatchKernel.compactedPixelQueue = this.compactedPixelQueue;
+			this.dispatch( pixelQueueCompactionDispatchKernel, [ 1, 1, 1 ] );
+
+			compactPixelQueueKernel.pixelQueue = this.pixelQueue;
+			compactPixelQueueKernel.compactedPixelQueue = this.compactedPixelQueue;
+			compactPixelQueueKernel.sampleCountTarget = this.sampleCountTarget;
+			compactPixelQueueKernel.maxSamples = this.maxSamples;
+			this.dispatch( compactPixelQueueKernel, pixelQueueCompactionDispatchKernel.outputDispatch );
+
+			copyCompactedPixelQueueKernel.pixelQueue = this.pixelQueue;
+			copyCompactedPixelQueueKernel.compactedPixelQueue = this.compactedPixelQueue;
+			this.dispatch( copyCompactedPixelQueueKernel, pixelQueueCompactionDispatchKernel.outputDispatch );
 
 			// the iterations that spend the budget over the slots in use
 			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount );

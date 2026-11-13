@@ -3,7 +3,7 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rayDataStruct, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
+import { rayDataStruct, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_DROPPED_COUNT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
 
 // Runs once per reset: assigns each of the first rayData-pool-count pixels to a path slot and parks
 // the overflow pixel indices in the pixel queue. Slots are initialized so LogicKernel skips them and
@@ -39,6 +39,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 					pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ] = 0u;
 					pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ] = select( 0u, pixelCount - rayCount, pixelCount >= rayCount );
+					pixelQueue[ ${ PIXEL_QUEUE_DROPPED_COUNT }u ] = 0u;
 
 				}
 

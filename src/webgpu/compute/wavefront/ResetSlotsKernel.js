@@ -2,7 +2,7 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rayDataStruct, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
+import { rayDataStruct, PIXEL_QUEUE_DROPPED, PIXEL_QUEUE_DROPPED_COUNT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
 
 // Moves pixels between a range of path slots and the queue when the pool is resized. Slots added
 // by a grow take a pixel from the queue tail and start idle, as MaterialKernel expects. Slots
@@ -36,15 +36,39 @@ export class ResetSlotsKernel extends ComputeKernel {
 
 				if ( addingSlots == 0u ) {
 
-					// slots being removed hand their pixel back before the pool is discarded
+					// slots being removed hand their pixel back before the pool is discarded, or a dropped entry when
+					// they hold none
+					let pixelIndex = rayDataStorage[ index ].pixelIndex;
 					let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ], 1u );
-					atomicStore( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], rayDataStorage[ index ].pixelIndex );
+					atomicStore( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], pixelIndex );
+					if ( pixelIndex == ${ PIXEL_QUEUE_DROPPED }u ) {
+
+						atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_DROPPED_COUNT }u ], 1u );
+
+					}
 
 				} else {
 
-					// the pool never exceeds the pixel count, so the queue holds enough for every new slot
+					// The compaction may have left fewer entries than new slots, which then start without a pixel.
+					// Their subtractions below zero wrap, and are added back
 					let previousCount = atomicSub( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ], 1u );
-					rayDataStorage[ index ].pixelIndex = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + previousCount - 1u ] );
+					var pixelIndex = ${ PIXEL_QUEUE_DROPPED }u;
+					if ( previousCount == 0u || previousCount > arrayLength( pixelQueue ) ) {
+
+						atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ], 1u );
+
+					} else {
+
+						pixelIndex = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + previousCount - 1u ] );
+						if ( pixelIndex == ${ PIXEL_QUEUE_DROPPED }u ) {
+
+							atomicSub( &pixelQueue[ ${ PIXEL_QUEUE_DROPPED_COUNT }u ], 1u );
+
+						}
+
+					}
+
+					rayDataStorage[ index ].pixelIndex = pixelIndex;
 					rayDataStorage[ index ].resultColor = vec4f( 0.0 );
 					rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 					rayDataStorage[ index ].hit.objectIndex = - 1;
