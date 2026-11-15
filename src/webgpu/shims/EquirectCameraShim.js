@@ -34,7 +34,7 @@ EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 	};
 
-	// every ray starts at the camera's origin, the zero point in camera space
+	// every ray starts at the camera origin
 	const getRayOriginBounds = ( target, boundsToWorld ) => {
 
 		boundsToWorld.copy( this.matrixWorld );

@@ -204,8 +204,7 @@ export class ShadingModel {
 	}
 
 	/**
-	 * Returns whether paths enter and leave the material's volume: fog, and transmissive materials that aren't
-	 * thin walled.
+	 * Returns whether the material is a volume: fog, or transmissive and not thin walled.
 	 */
 	isVolumeMaterial( material ) {
 

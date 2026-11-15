@@ -28,7 +28,7 @@ export const mediumStackStruct = new StructTypeNode( {
 	ids: `array<u32, ${ MEDIUM_STACK_SIZE }>`,
 }, 'MediumStack' );
 
-// the most volume hits stepped through to find the volumes containing a point, as in Cycles
+// the most volume hits "getMediumStackAtPoint" steps through, as in Cycles
 const MEDIUM_STACK_INIT_STEPS = 2 * MEDIUM_STACK_SIZE;
 
 // shadow rays at least this long go to distant lights, whose distance is the far distance
@@ -207,9 +207,8 @@ export const getEmptyMediumStackFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Returns the stack of volumes containing the point, as in Cycles' integrator_volume_stack_init: stepping through
-// the volume hits along a ray from the point in order, a volume whose back face is hit before any of its front
-// faces contains it. Assumes closed volumes with outward facing normals
+// Returns the volumes containing the point, as in Cycles' integrator_volume_stack_init: stepping through the volume
+// hits along a ray, a volume exited before it's entered contains the point. Assumes closed volumes
 export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
 	fn getMediumStackAtPoint( point: vec3f ) -> ${ mediumStackStruct } {
@@ -221,7 +220,7 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
 		var stack = ${ getEmptyMediumStackFn }();
 
-		// the volumes whose front face was hit, which the point is outside of
+		// the volumes entered along the ray
 		var enclosed: ${ mediumStackStruct };
 		var enclosedCount = 0u;
 
@@ -241,7 +240,7 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
 			if ( hit.side < 0.0 ) {
 
-				// exiting a volume the ray never entered: the point is inside it
+				// exiting a volume that wasn't entered: the point is inside it
 				var wasEntered = false;
 				for ( var i = 0u; i < enclosedCount; i ++ ) {
 
