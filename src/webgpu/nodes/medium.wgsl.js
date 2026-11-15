@@ -114,7 +114,7 @@ export const getSubsurfaceMediumFn = wgslTagFn/* wgsl */`
 
 	fn getSubsurfaceMedium( materialIndex: u32 ) -> ${ mediumStruct } {
 
-		let material = ${ materialsStorage }[ materialIndex ];
+		let material = &${ materialsStorage }[ materialIndex ];
 		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 
 		var medium: ${ mediumStruct };
