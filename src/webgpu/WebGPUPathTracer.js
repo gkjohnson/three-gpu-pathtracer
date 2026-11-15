@@ -16,6 +16,7 @@ import { AuxDebugMaterial } from './materials/debug/AuxDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GLTFShadingModel } from './shadingModels/GLTFShadingModel.js';
+import { expandByNearPlane } from './shims/nearPlaneBounds.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
@@ -33,6 +34,8 @@ import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
+const _originBounds = /* @__PURE__ */ new Box3();
+const _originToWorld = /* @__PURE__ */ new Matrix4();
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -1158,7 +1161,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Replaces the camera the rays are generated from. Cameras with a `getCameraRayFn`, such as
-	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation.
+	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation, and optionally a
+	 * `getRayOriginBounds( box, boundsToWorld )` that bounds where their rays start in their own space,
+	 * setting the matrix from that space to world, so they can skip finding the volumes around them.
 	 *
 	 * @param {Camera} camera
 	 */
@@ -1200,12 +1205,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 					}
 				`,
+				getRayOriginBounds: camera.isPerspectiveCamera || camera.isOrthographicCamera ? ( target, boundsToWorld ) => {
+
+					boundsToWorld.copy( camera.matrixWorld );
+					return expandByNearPlane( camera, target );
+
+				} : null,
 			};
 
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
+		this._updateCameraInVolume();
 		this._pathTracer.rebuild();
 		this.reset();
 
@@ -1228,6 +1240,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._updateCameraInVolume();
 		this.reset();
 
 	}
@@ -1241,6 +1254,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this.scene.updateMatrixWorld( true );
 		this._bvhData.updateTransforms();
+		this._updateCameraInVolume();
 		this.reset();
 
 	}
@@ -1257,7 +1271,44 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._updateCameraInVolume();
 		this.reset();
+
+	}
+
+	// Sets whether a camera ray may start inside of a volume, when a volume contains any of the points the rays start
+	// from, as in Cycles' "is_inside_volume". Otherwise the rays skip finding the volumes around them
+	_updateCameraInVolume() {
+
+		const { _cameraRayFnHandle, _bvhData, _shadingModel, _pathTracer, scene } = this;
+
+		// cameras that can't bound their ray origins count as inside of any volume
+		const hasOriginBounds = Boolean( _cameraRayFnHandle.getRayOriginBounds );
+		if ( hasOriginBounds ) {
+
+			_cameraRayFnHandle.getRayOriginBounds( _originBounds.makeEmpty(), _originToWorld );
+
+		}
+
+		let cameraInVolume = false;
+		scene.traverse( child => {
+
+			if ( cameraInVolume || ! child.isMesh ) {
+
+				return;
+
+			}
+
+			const materials = Array.isArray( child.material ) ? child.material : [ child.material ];
+			if ( materials.some( material => _shadingModel.isVolumeMaterial( material ) ) ) {
+
+				cameraInVolume = ! hasOriginBounds || _bvhData.boxIntersectsMesh( _originBounds, _originToWorld, child );
+
+			}
+
+		} );
+
+		_pathTracer.cameraInVolume = cameraInVolume;
 
 	}
 

@@ -1,10 +1,25 @@
-import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix3, Matrix4, Raycaster, Vector3, MeshBasicMaterial, DoubleSide } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
-import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL } from 'three-mesh-bvh';
+import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
 import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.js';
+/** @import { Box3, Mesh } from 'three/webgpu' */
 
 const _colorVec = new Vector4();
+const _instanceMatrix = /* @__PURE__ */ new Matrix4();
+const _boxToMesh = /* @__PURE__ */ new Matrix4();
+const _orientedBox = /* @__PURE__ */ new OrientedBox();
+const _normalMatrix = /* @__PURE__ */ new Matrix3();
+const _rayOrigin = /* @__PURE__ */ new Vector3();
+const _rayDirection = /* @__PURE__ */ new Vector3( 0, 0, 1 );
+
+// the nearest hit on either side of a mesh instance's surface, placed by its world matrix
+const _raycaster = /* @__PURE__ */ new Raycaster();
+const _raycastTarget = {
+	matrixWorld: _instanceMatrix,
+	material: /* @__PURE__ */ new MeshBasicMaterial( { side: DoubleSide } ),
+};
+
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -61,6 +76,72 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.shadingModel = shadingModel;
 		this.structs.transform = transformStruct;
 		this.bvhMap = new Map();
+
+	}
+
+	/**
+	 * Returns whether the box intersects the mesh's closed volume, crossing its surface or inside of it. The box is in
+	 * the space the matrix maps to world. Uses the bvhs of each of the mesh's instances.
+	 *
+	 * @param {Box3} box
+	 * @param {Matrix4} boxToWorld
+	 * @param {Mesh} mesh
+	 * @returns {boolean}
+	 */
+	boxIntersectsMesh( box, boxToWorld, mesh ) {
+
+		const instanceBVHs = this.bvh.bvhMap.get( mesh ) || [];
+		for ( let instance = 0; instance < instanceBVHs.length; instance ++ ) {
+
+			const instanceBVH = instanceBVHs[ instance ];
+			if ( ! instanceBVH ) {
+
+				continue;
+
+			}
+
+			_instanceMatrix.copy( mesh.matrixWorld );
+			if ( mesh.isInstancedMesh || mesh.isBatchedMesh ) {
+
+				mesh.getMatrixAt( instance, _instanceMatrix ).premultiply( mesh.matrixWorld );
+
+			}
+
+			_boxToMesh.copy( _instanceMatrix ).invert().multiply( boxToWorld );
+			_orientedBox.set( box.min, box.max, _boxToMesh );
+			_orientedBox.needsUpdate = true;
+
+			// the volume's surface passes through the box
+			const crossesSurface = instanceBVH.shapecast( {
+				intersectsBounds: bounds => _orientedBox.intersectsBox( bounds ),
+				intersectsTriangle: triangle => _orientedBox.intersectsTriangle( triangle ),
+			} );
+
+			if ( crossesSurface ) {
+
+				return true;
+
+			}
+
+			// otherwise the box is all inside or all outside: from inside, the nearest hit is a back face
+			box.getCenter( _rayOrigin ).applyMatrix4( boxToWorld );
+			_raycaster.set( _rayOrigin, _rayDirection );
+			_raycaster.firstHitOnly = true;
+			const hit = instanceBVH.raycastObject3D( _raycastTarget, _raycaster )[ 0 ];
+			if ( hit ) {
+
+				_normalMatrix.getNormalMatrix( _instanceMatrix );
+				if ( hit.face.normal.applyMatrix3( _normalMatrix ).dot( _rayDirection ) > 0 ) {
+
+					return true;
+
+				}
+
+			}
+
+		}
+
+		return false;
 
 	}
 

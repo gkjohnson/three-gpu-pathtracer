@@ -204,6 +204,18 @@ export class ShadingModel {
 	}
 
 	/**
+	 * Returns whether paths enter and leave the material's volume: fog, and transmissive materials that aren't
+	 * thin walled.
+	 */
+	isVolumeMaterial( material ) {
+
+		const isFogVolume = Boolean( material.isFogVolumeMaterial );
+		const isThinWall = this.getField( material, 'thickness', 0.0 ) === 0.0 && this.getField( material, 'attenuationDistance', Infinity ) === Infinity;
+		return ( ! isThinWall && material.transmission > 0.0 ) || isFogVolume;
+
+	}
+
+	/**
 	 * Writes the uv transform of a material's texture as a padded mat3, returning the floats written. For
 	 * use in "writeMaterialsBuffer".
 	 */
@@ -425,7 +437,7 @@ export class ShadingModel {
 			floatArray[ index ++ ] = m.alphaTest;
 
 			// side & matte - offset 52. Volumes are entered and left through both faces
-			if ( ( ! isThinWall && m.transmission > 0.0 ) || isFogVolume ) {
+			if ( this.isVolumeMaterial( m ) ) {
 
 				floatArray[ index ++ ] = 0;
 

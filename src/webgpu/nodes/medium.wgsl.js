@@ -189,6 +189,24 @@ export const removeFromMediumStackFn = wgslTagFn/* wgsl */`
 
 `;
 
+// Returns a stack without any volumes
+export const getEmptyMediumStackFn = wgslTagFn/* wgsl */`
+
+	fn getEmptyMediumStack() -> ${ mediumStackStruct } {
+
+		var stack: ${ mediumStackStruct };
+		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
+
+			stack.ids[ i ] = ${ MEDIUM_STACK_EMPTY }u;
+
+		}
+
+		return stack;
+
+	}
+
+`;
+
 // Returns the stack of volumes containing the point, as in Cycles' integrator_volume_stack_init: stepping through
 // the volume hits along a ray from the point in order, a volume whose back face is hit before any of its front
 // faces contains it. Assumes closed volumes with outward facing normals
@@ -201,12 +219,7 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 		ray.direction = vec3f( 0.0, 0.0, 1.0 );
 		ray.maxDist = 0.0;
 
-		var stack: ${ mediumStackStruct };
-		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
-
-			stack.ids[ i ] = ${ MEDIUM_STACK_EMPTY }u;
-
-		}
+		var stack = ${ getEmptyMediumStackFn }();
 
 		// the volumes whose front face was hit, which the point is outside of
 		var enclosed: ${ mediumStackStruct };
