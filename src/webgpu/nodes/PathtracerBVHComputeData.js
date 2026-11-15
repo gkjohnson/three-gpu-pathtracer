@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix4, Ray, Vector3 } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix3, Matrix4, Raycaster, Vector3, MeshBasicMaterial, DoubleSide } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
@@ -8,9 +8,17 @@ const _colorVec = new Vector4();
 const _instanceMatrix = /* @__PURE__ */ new Matrix4();
 const _boxToMesh = /* @__PURE__ */ new Matrix4();
 const _orientedBox = /* @__PURE__ */ new OrientedBox();
-const _ray = /* @__PURE__ */ new Ray();
-const _hitPoint = /* @__PURE__ */ new Vector3();
-const _normal = /* @__PURE__ */ new Vector3();
+const _normalMatrix = /* @__PURE__ */ new Matrix3();
+const _rayOrigin = /* @__PURE__ */ new Vector3();
+const _rayDirection = /* @__PURE__ */ new Vector3( 0, 0, 1 );
+const _hits = [];
+
+// the nearest hit on either side of a mesh instance's surface, placed by its world matrix
+const _raycaster = /* @__PURE__ */ new Raycaster();
+const _raycastTarget = {
+	matrixWorld: _instanceMatrix,
+	material: /* @__PURE__ */ new MeshBasicMaterial( { side: DoubleSide } ),
+};
 
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
@@ -116,35 +124,19 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			}
 
 			// otherwise the box is all inside or all outside: from inside, the nearest hit is a back face
-			box.getCenter( _ray.origin ).applyMatrix4( _boxToMesh );
-			_ray.direction.set( 0, 0, 1 );
+			box.getCenter( _rayOrigin ).applyMatrix4( boxToWorld );
+			_raycaster.set( _rayOrigin, _rayDirection );
+			_raycaster.firstHitOnly = true;
+			_hits.length = 0;
+			instanceBVH.raycastObject3D( _raycastTarget, _raycaster, _hits );
+			if ( _hits.length > 0 ) {
 
-			let nearestDist = Infinity;
-			let nearestIsBackFace = false;
-			instanceBVH.shapecast( {
-				boundsTraverseOrder: bounds => bounds.distanceToPoint( _ray.origin ),
-				intersectsBounds: ( bounds, isLeaf, score ) => score < nearestDist && _ray.intersectsBox( bounds ),
-				intersectsTriangle: triangle => {
+				_normalMatrix.getNormalMatrix( _instanceMatrix );
+				if ( _hits[ 0 ].face.normal.applyMatrix3( _normalMatrix ).dot( _rayDirection ) > 0 ) {
 
-					const { a, b, c } = triangle;
-					if ( _ray.intersectTriangle( a, b, c, false, _hitPoint ) ) {
+					return true;
 
-						const dist = _hitPoint.distanceTo( _ray.origin );
-						if ( dist < nearestDist ) {
-
-							nearestDist = dist;
-							nearestIsBackFace = triangle.getNormal( _normal ).dot( _ray.direction ) > 0;
-
-						}
-
-					}
-
-				},
-			} );
-
-			if ( nearestIsBackFace ) {
-
-				return true;
+				}
 
 			}
 
