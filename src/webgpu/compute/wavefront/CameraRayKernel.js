@@ -5,9 +5,12 @@ import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
-import { rayDataStruct, pixelQueueInfoStruct, PIXEL_QUEUE_POP_ATTEMPTS, NO_PIXEL } from './structs.js';
+import { rayDataStruct, pixelQueueInfoStruct, NO_PIXEL } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
+
+// queue entries a free slot tries before waiting for the next round
+const PIXEL_QUEUE_POP_ATTEMPTS = 4;
 
 // Starts a new path in each slot whose path has ended: pops a pixel from the queue and writes a fresh camera
 // ray. CameraMediumKernel then finds the ray's medium and queues it.
@@ -113,6 +116,8 @@ export class CameraRayKernel extends ComputeKernel {
 
 					// the camera declined the pixel. With a sample cap the pixel counts as finished, since it
 					// will never take a sample
+					// TODO: mark declined pixels with their own flag rather than a fake sample count, and let the
+					// camera say whether a pixel is declined for good or only for this sample
 					if ( maxSamples != 0u ) {
 
 						textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ( combinedField & ~${ SAMPLE_COUNT_MASK }u ) | maxSamples ) );
