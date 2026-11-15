@@ -28,6 +28,9 @@ export const mediumStackStruct = new StructTypeNode( {
 	ids: `array<u32, ${ MEDIUM_STACK_SIZE }>`,
 }, 'MediumStack' );
 
+// the most volume hits stepped through to find the volumes containing a point, as in Cycles
+const MEDIUM_STACK_INIT_STEPS = 2 * MEDIUM_STACK_SIZE;
+
 // shadow rays at least this long go to distant lights, whose distance is the far distance
 const MEDIUM_DISTANT_SHADOW_DISTANCE = 0.5 * LIGHT_FAR_DISTANCE;
 
@@ -186,9 +189,9 @@ export const removeFromMediumStackFn = wgslTagFn/* wgsl */`
 
 `;
 
-// Returns the stack of volumes containing the point, as in Cycles' integrator_volume_stack_init: a volume whose
-// nearest hit along a ray from the point is a back face contains it. Assumes closed volumes with outward facing
-// normals
+// Returns the stack of volumes containing the point, as in Cycles' integrator_volume_stack_init: stepping through
+// the volume hits along a ray from the point in order, a volume whose back face is hit before any of its front
+// faces contains it. Assumes closed volumes with outward facing normals
 export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
 	fn getMediumStackAtPoint( point: vec3f ) -> ${ mediumStackStruct } {
@@ -198,9 +201,6 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 		ray.direction = vec3f( 0.0, 0.0, 1.0 );
 		ray.maxDist = 0.0;
 
-		var hits: ${ contextProxy( 'bvhData.fns.collectVolumeHits.outputType' ) };
-		${ contextProxy( 'bvhData.fns.collectVolumeHits' ) }( ray, &hits );
-
 		var stack: ${ mediumStackStruct };
 		for ( var i = 0u; i < ${ MEDIUM_STACK_SIZE }u; i ++ ) {
 
@@ -208,13 +208,48 @@ export const getMediumStackAtPointFn = wgslTagFn/* wgsl */`
 
 		}
 
-		for ( var i = 0u; i < hits.count; i ++ ) {
+		// the volumes whose front face was hit, which the point is outside of
+		var enclosed: ${ mediumStackStruct };
+		var enclosedCount = 0u;
 
-			if ( hits.side[ i ] < 0.0 ) {
+		// negative so a hit at the point itself counts
+		var minDist = - 1.0;
+		for ( var step = 0u; step < ${ MEDIUM_STACK_INIT_STEPS }u && enclosedCount < ${ MEDIUM_STACK_SIZE }u; step ++ ) {
 
-				${ addToMediumStackFn }( &stack, hits.ids[ i ] );
+			var hit: ${ contextProxy( 'bvhData.fns.raycastVolumeHit.outputType' ) };
+			hit.didHit = false;
+			hit.minDist = minDist;
+			${ contextProxy( 'bvhData.fns.raycastVolumeHit' ) }( ray, &hit );
+			if ( ! hit.didHit ) {
+
+				break;
 
 			}
+
+			if ( hit.side < 0.0 ) {
+
+				// exiting a volume the ray never entered: the point is inside it
+				var wasEntered = false;
+				for ( var i = 0u; i < enclosedCount; i ++ ) {
+
+					wasEntered = wasEntered || enclosed.ids[ i ] == hit.materialIndex;
+
+				}
+
+				if ( ! wasEntered ) {
+
+					${ addToMediumStackFn }( &stack, hit.materialIndex );
+
+				}
+
+			} else {
+
+				enclosed.ids[ enclosedCount ] = hit.materialIndex;
+				enclosedCount ++;
+
+			}
+
+			minDist = hit.dist;
 
 		}
 
