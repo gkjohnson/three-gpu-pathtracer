@@ -1,14 +1,16 @@
-import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Box3, Matrix4, Ray, DoubleSide } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix4, Ray, Vector3 } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
-import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL } from 'three-mesh-bvh';
+import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
 import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.js';
 
 const _colorVec = new Vector4();
-const _worldBox = /* @__PURE__ */ new Box3();
-const _meshBounds = /* @__PURE__ */ new Box3();
+const _instanceMatrix = /* @__PURE__ */ new Matrix4();
 const _boxToMesh = /* @__PURE__ */ new Matrix4();
+const _orientedBox = /* @__PURE__ */ new OrientedBox();
 const _ray = /* @__PURE__ */ new Ray();
+const _hitPoint = /* @__PURE__ */ new Vector3();
+const _normal = /* @__PURE__ */ new Vector3();
 
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
@@ -70,9 +72,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	}
 
 	/**
-	 * Returns whether the box intersects the mesh's closed volume, crossing its surface or inside of it. The box is in
-	 * the space the matrix maps to world. A mesh without a geometry bvh, such as a skinned or instanced one, counts as
-	 * intersecting when its bounds overlap the box.
+	 * Returns whether the box intersects the closed volume of any of the mesh's volume materials, crossing its surface
+	 * or inside of it. The box is in the space the matrix maps to world. Uses the bvhs of each of the mesh's instances.
 	 *
 	 * @param {Box3} box
 	 * @param {Matrix4} boxToWorld
@@ -81,33 +82,89 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	 */
 	boxIntersectsMesh( box, boxToWorld, mesh ) {
 
-		_worldBox.copy( box ).applyMatrix4( boxToWorld );
-		if ( ! _meshBounds.setFromObject( mesh ).intersectsBox( _worldBox ) ) {
+		const { bvh, shadingModel } = this;
+		const { material, geometry } = mesh;
 
-			return false;
+		// whether a triangle's material is a volume
+		const isVolumeTriangle = Array.isArray( material )
+			? triangleIndex => {
+
+				const vertexIndex = triangleIndex * 3;
+				const group = geometry.groups.find( g => vertexIndex >= g.start && vertexIndex < g.start + g.count );
+				return Boolean( group ) && shadingModel.isVolumeMaterial( material[ group.materialIndex ] );
+
+			}
+			: () => shadingModel.isVolumeMaterial( material );
+
+		const instanceBVHs = bvh.bvhMap.get( mesh ) || [];
+		for ( let instance = 0; instance < instanceBVHs.length; instance ++ ) {
+
+			const instanceBVH = instanceBVHs[ instance ];
+			if ( ! instanceBVH ) {
+
+				continue;
+
+			}
+
+			_instanceMatrix.copy( mesh.matrixWorld );
+			if ( mesh.isInstancedMesh || mesh.isBatchedMesh ) {
+
+				mesh.getMatrixAt( instance, _instanceMatrix ).premultiply( mesh.matrixWorld );
+
+			}
+
+			_boxToMesh.copy( _instanceMatrix ).invert().multiply( boxToWorld );
+			_orientedBox.set( box.min, box.max, _boxToMesh );
+			_orientedBox.needsUpdate = true;
+
+			// the volume's surface passes through the box
+			const crossesSurface = instanceBVH.shapecast( {
+				intersectsBounds: bounds => _orientedBox.intersectsBox( bounds ),
+				intersectsTriangle: ( triangle, triangleIndex ) => isVolumeTriangle( triangleIndex ) && _orientedBox.intersectsTriangle( triangle ),
+			} );
+
+			if ( crossesSurface ) {
+
+				return true;
+
+			}
+
+			// otherwise the box is all inside or all outside: from inside, the nearest volume hit is a back face
+			box.getCenter( _ray.origin ).applyMatrix4( _boxToMesh );
+			_ray.direction.set( 0, 0, 1 );
+
+			let nearestDist = Infinity;
+			let nearestIsBackFace = false;
+			instanceBVH.shapecast( {
+				boundsTraverseOrder: bounds => bounds.distanceToPoint( _ray.origin ),
+				intersectsBounds: ( bounds, isLeaf, score ) => score < nearestDist && _ray.intersectsBox( bounds ),
+				intersectsTriangle: ( triangle, triangleIndex ) => {
+
+					const { a, b, c } = triangle;
+					if ( isVolumeTriangle( triangleIndex ) && _ray.intersectTriangle( a, b, c, false, _hitPoint ) ) {
+
+						const dist = _hitPoint.distanceTo( _ray.origin );
+						if ( dist < nearestDist ) {
+
+							nearestDist = dist;
+							nearestIsBackFace = triangle.getNormal( _normal ).dot( _ray.direction ) > 0;
+
+						}
+
+					}
+
+				},
+			} );
+
+			if ( nearestIsBackFace ) {
+
+				return true;
+
+			}
 
 		}
 
-		const bvh = mesh.geometry.boundsTree;
-		if ( ! bvh || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.isBatchedMesh ) {
-
-			return true;
-
-		}
-
-		// the mesh's surface passes through the box
-		_boxToMesh.copy( mesh.matrixWorld ).invert().multiply( boxToWorld );
-		if ( bvh.intersectsBox( box, _boxToMesh ) ) {
-
-			return true;
-
-		}
-
-		// otherwise the box is all inside or all outside: from inside, the nearest hit is a back face
-		box.getCenter( _ray.origin ).applyMatrix4( _boxToMesh );
-		_ray.direction.set( 0, 0, 1 );
-		const hit = bvh.raycastFirst( _ray, DoubleSide );
-		return hit !== null && hit.face.normal.dot( _ray.direction ) > 0;
+		return false;
 
 	}
 
