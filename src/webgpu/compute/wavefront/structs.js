@@ -153,9 +153,18 @@ export const QUEUE_COUNTER_COUNT = 2;
 export const MEDIUM_QUEUE_LENGTH = 0;
 export const MEDIUM_QUEUE_HEADER = 1;
 
-// Round-robin queue of pixel indices waiting for a free path slot when the output resolution exceeds
-// the ray data pool, sized to the pixel count so retiring slots can always return their pixel. Its
-// counters lead the same u32 array, ahead of the elements.
-export const PIXEL_QUEUE_CURRENT = 0;
-export const PIXEL_QUEUE_ELEMENT_COUNT = 1;
-export const PIXEL_QUEUE_HEADER = 2;
+// The counters of the pixel queue, which is rebuilt after each pass. Pixels behind the rest fill it from the
+// front and the others from the back, split at the midpoint of the last rebuild's sample count range.
+// TODO: merge into the pixel queue buffer once three can bind a struct ending in a runtime-sized array
+export const pixelQueueInfoStruct = new StructTypeNode( {
+	frontCount: { type: 'uint', atomic: true },
+	backCount: { type: 'uint', atomic: true },
+	frontCursor: { type: 'uint', atomic: true },
+	backCursor: { type: 'uint', atomic: true },
+	minSamples: { type: 'uint', atomic: true },
+	maxSamples: { type: 'uint', atomic: true },
+	sampleCountMidpoint: { type: 'uint', atomic: true },
+}, 'PixelQueueInfo' );
+
+// the pixel index of an idle path slot
+export const NO_PIXEL = 0xFFFFFFFF;
