@@ -18,8 +18,8 @@ import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
 import {
-	rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, shadowTraceResultStruct,
-	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, QUEUE_COUNTER_COUNT, PIXEL_QUEUE_HEADER,
+	rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, shadowTraceResultStruct, pixelQueueInfoStruct,
+	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, QUEUE_COUNTER_COUNT,
 	MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER,
 } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
@@ -84,8 +84,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// the slots walking a medium this pass
 		this.mediumQueue = null;
 
-		// pixel indices waiting for a free path slot, sized to the resolution
+		// pixel indices waiting for a free path slot, sized to the resolution, and the queue's counters
 		this.pixelQueue = null;
+		this.pixelQueueInfo = new StorageBufferAttribute( new Uint32Array( pixelQueueInfoStruct.getLength() ), pixelQueueInfoStruct.getLength() );
+		this.pixelQueueInfo.name = 'Pixel Queue Info';
 
 		// reduction target for the per pixel sample counts, read back asynchronously
 		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
@@ -115,6 +117,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// rebuilds the pixel queue after each pass through it
 		this.pixelQueueRebuildDispatchKernel = new PixelQueueRebuildDispatchKernel( 8 ).setWorkgroupSize( 1, 1, 1 );
 		this.rebuildPixelQueueKernel = new RebuildPixelQueueKernel().setWorkgroupSize( 8, 8, 1 );
+
+		this.cameraRayKernel.pixelQueueInfo = this.pixelQueueInfo;
+		this.populatePixelIndicesKernel.pixelQueueInfo = this.pixelQueueInfo;
+		this.pixelQueueRebuildDispatchKernel.pixelQueueInfo = this.pixelQueueInfo;
+		this.rebuildPixelQueueKernel.pixelQueueInfo = this.pixelQueueInfo;
 
 		// the logic kernel clamps the light it gathers
 		this.logicKernel.context.clampDirect = this.clampDirect;
@@ -287,6 +294,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.mediumQueue?.dispose();
 		this.sampleCountersStorage.dispose();
 		this.pixelQueue?.dispose();
+		this.pixelQueueInfo.dispose();
 
 		// TODO: the dispatch converters own their indirect dispatch buffers, they should dispose of them themselves
 		this.rayDispatchConverter.outputDispatch.dispose();
@@ -319,7 +327,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	// The queue is sized to the full pixel count so it can hold every pixel
 	_updatePixelQueue( width, height ) {
 
-		const size = PIXEL_QUEUE_HEADER + Math.max( width * height, 1 );
+		const size = Math.max( width * height, 1 );
 		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
 
 			this.pixelQueue?.dispose();
@@ -329,7 +337,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			// three rebinds a swapped buffer, so the kernels keep their compiled pipelines
 			this.cameraRayKernel.pixelQueue = this.pixelQueue;
 			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-			this.pixelQueueRebuildDispatchKernel.pixelQueue = this.pixelQueue;
 			this.rebuildPixelQueueKernel.pixelQueue = this.pixelQueue;
 
 		}
@@ -512,8 +519,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		zeroDispatchKernel.target = this.queueCounters;
 		this.dispatch( zeroDispatchKernel, [ QUEUE_COUNTER_COUNT ] );
 
-		zeroDispatchKernel.target = this.pixelQueue;
-		this.dispatch( zeroDispatchKernel, [ PIXEL_QUEUE_HEADER ] );
+		zeroDispatchKernel.target = this.pixelQueueInfo;
+		this.dispatch( zeroDispatchKernel, [ pixelQueueInfoStruct.getLength() ] );
 
 		// start the path slots in use idle and queue every pixel
 		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
@@ -598,7 +605,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// rebuild the pixel queue once the slots have popped all of it
-				pixelQueueRebuildDispatchKernel.pixelQueue = this.pixelQueue;
 				pixelQueueRebuildDispatchKernel.targetDimensions.copy( targetDimensions );
 				this.dispatch( pixelQueueRebuildDispatchKernel, [ 1, 1, 1 ] );
 

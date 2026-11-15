@@ -153,16 +153,18 @@ export const QUEUE_COUNTER_COUNT = 2;
 export const MEDIUM_QUEUE_LENGTH = 0;
 export const MEDIUM_QUEUE_HEADER = 1;
 
-// Pixels waiting for a free path slot, rebuilt after each pass. Pixels behind the rest fill it from the front
-// and the others from the back. Its counters lead the same u32 array, ahead of the elements.
-export const PIXEL_QUEUE_FRONT_COUNT = 0;
-export const PIXEL_QUEUE_BACK_COUNT = 1;
-export const PIXEL_QUEUE_FRONT_CURSOR = 2;
-export const PIXEL_QUEUE_BACK_CURSOR = 3;
-export const PIXEL_QUEUE_MIN_SAMPLES = 4;
-export const PIXEL_QUEUE_MAX_SAMPLES = 5;
-export const PIXEL_QUEUE_SAMPLE_SPLIT = 6;
-export const PIXEL_QUEUE_HEADER = 7;
+// The counters of the pixel queue, which is rebuilt after each pass. Pixels behind the rest fill it from the
+// front and the others from the back. "sampleSplit" is the "min + max" of the last rebuild's sample range.
+// TODO: merge into the pixel queue buffer once three can bind a struct ending in a runtime-sized array
+export const pixelQueueInfoStruct = new StructTypeNode( {
+	frontCount: { type: 'uint', atomic: true },
+	backCount: { type: 'uint', atomic: true },
+	frontCursor: { type: 'uint', atomic: true },
+	backCursor: { type: 'uint', atomic: true },
+	minSamples: { type: 'uint', atomic: true },
+	maxSamples: { type: 'uint', atomic: true },
+	sampleSplit: { type: 'uint', atomic: true },
+}, 'PixelQueueInfo' );
 
 // queue entries a free slot tries before waiting for the next round
 export const PIXEL_QUEUE_POP_ATTEMPTS = 4;

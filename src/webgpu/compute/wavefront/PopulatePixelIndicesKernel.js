@@ -5,7 +5,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { createSampleCountTarget } from '../targets.js';
 import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
-import { rayDataStruct, PIXEL_QUEUE_FRONT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
+import { rayDataStruct, pixelQueueInfoStruct } from './structs.js';
 
 // Runs once per reset: starts the path slots in use idle and queues every pixel. With a sample limit, the
 // pixels the camera declines are marked finished instead.
@@ -15,7 +15,8 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 		const params = {
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
-			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
+			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			pixelQueueInfo: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueInfoStruct ),
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 			targetDimensions: uniform( new Vector2() ),
 			frameBudget: uniform( 0, 'uint' ),
@@ -64,8 +65,8 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 				}
 
-				let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_FRONT_COUNT }u ], 1u );
-				atomicStore( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], ( globalId.x << 16 ) | globalId.y );
+				let queueIndex = atomicAdd( &${ params.pixelQueueInfo }[ 0 ].frontCount, 1u );
+				pixelQueue[ queueIndex ] = ( globalId.x << 16 ) | globalId.y;
 
 			}
 		`;

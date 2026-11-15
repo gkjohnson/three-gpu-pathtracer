@@ -5,10 +5,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { createSampleCountTarget } from '../targets.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK } from '../../constants.js';
-import {
-	PIXEL_QUEUE_FRONT_COUNT, PIXEL_QUEUE_BACK_COUNT, PIXEL_QUEUE_MIN_SAMPLES, PIXEL_QUEUE_MAX_SAMPLES,
-	PIXEL_QUEUE_SAMPLE_SPLIT, PIXEL_QUEUE_HEADER,
-} from './structs.js';
+import { pixelQueueInfoStruct } from './structs.js';
 
 // Rebuilds the pixel queue, putting the pixels with fewer samples at the front
 export class RebuildPixelQueueKernel extends ComputeKernel {
@@ -19,14 +16,13 @@ export class RebuildPixelQueueKernel extends ComputeKernel {
 			maxSamples: uniform( 0, 'uint' ),
 			targetDimensions: uniform( new Vector2() ),
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadOnly(),
-			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
+			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			pixelQueueInfo: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueInfoStruct ),
 			globalId: globalId,
 		};
 
 		const fn = wgslTagFn/* wgsl */`
 			fn compute( maxSamples: u32, targetDimensions: vec2u, globalId: vec3u ) -> void {
-
-				let pixelQueue = &${ params.pixelQueue };
 
 				let uv = globalId.xy;
 				if ( uv.x >= targetDimensions.x || uv.y >= targetDimensions.y ) {
@@ -45,30 +41,29 @@ export class RebuildPixelQueueKernel extends ComputeKernel {
 
 				}
 
-				// the split is "min + max"
 				var queueIndex: u32;
-				if ( 2u * samples <= atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_SAMPLE_SPLIT }u ] ) ) {
+				if ( 2u * samples <= atomicLoad( &${ params.pixelQueueInfo }[ 0 ].sampleSplit ) ) {
 
-					queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_FRONT_COUNT }u ], 1u );
+					queueIndex = atomicAdd( &${ params.pixelQueueInfo }[ 0 ].frontCount, 1u );
 
 				} else {
 
-					queueIndex = targetDimensions.x * targetDimensions.y - 1u - atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_BACK_COUNT }u ], 1u );
+					queueIndex = targetDimensions.x * targetDimensions.y - 1u - atomicAdd( &${ params.pixelQueueInfo }[ 0 ].backCount, 1u );
 
 				}
 
-				atomicStore( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], ( uv.x << 16 ) | uv.y );
+				${ params.pixelQueue }[ queueIndex ] = ( uv.x << 16 ) | uv.y;
 
 				// checked first so most threads skip the atomics
-				if ( samples < atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_MIN_SAMPLES }u ] ) ) {
+				if ( samples < atomicLoad( &${ params.pixelQueueInfo }[ 0 ].minSamples ) ) {
 
-					atomicMin( &pixelQueue[ ${ PIXEL_QUEUE_MIN_SAMPLES }u ], samples );
+					atomicMin( &${ params.pixelQueueInfo }[ 0 ].minSamples, samples );
 
 				}
 
-				if ( samples > atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_MAX_SAMPLES }u ] ) ) {
+				if ( samples > atomicLoad( &${ params.pixelQueueInfo }[ 0 ].maxSamples ) ) {
 
-					atomicMax( &pixelQueue[ ${ PIXEL_QUEUE_MAX_SAMPLES }u ], samples );
+					atomicMax( &${ params.pixelQueueInfo }[ 0 ].maxSamples, samples );
 
 				}
 

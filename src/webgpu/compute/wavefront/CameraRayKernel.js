@@ -5,10 +5,7 @@ import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
-import {
-	rayDataStruct, PIXEL_QUEUE_FRONT_COUNT, PIXEL_QUEUE_BACK_COUNT, PIXEL_QUEUE_FRONT_CURSOR, PIXEL_QUEUE_BACK_CURSOR,
-	PIXEL_QUEUE_HEADER, PIXEL_QUEUE_POP_ATTEMPTS,
-} from './structs.js';
+import { rayDataStruct, pixelQueueInfoStruct, PIXEL_QUEUE_POP_ATTEMPTS } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 
@@ -27,7 +24,8 @@ export class CameraRayKernel extends ComputeKernel {
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
-			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
+			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			pixelQueueInfo: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueInfoStruct ),
 
 			globalId: globalId,
 		};
@@ -66,8 +64,8 @@ export class CameraRayKernel extends ComputeKernel {
 				}
 
 				// pop from the front of the queue, then the back, until a pixel takes a sample
-				let frontCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_FRONT_COUNT }u ] );
-				let backCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_BACK_COUNT }u ] );
+				let frontCount = atomicLoad( &${ params.pixelQueueInfo }[ 0 ].frontCount );
+				let backCount = atomicLoad( &${ params.pixelQueueInfo }[ 0 ].backCount );
 				let pixelCount = targetDimensions.x * targetDimensions.y;
 
 				var pixelIndex = 0u;
@@ -77,10 +75,10 @@ export class CameraRayKernel extends ComputeKernel {
 				var hasPixel = false;
 				for ( var attempt = 0u; attempt < ${ PIXEL_QUEUE_POP_ATTEMPTS }u; attempt ++ ) {
 
-					var queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_FRONT_CURSOR }u ], 1u );
+					var queueIndex = atomicAdd( &${ params.pixelQueueInfo }[ 0 ].frontCursor, 1u );
 					if ( queueIndex >= frontCount ) {
 
-						let backIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_BACK_CURSOR }u ], 1u );
+						let backIndex = atomicAdd( &${ params.pixelQueueInfo }[ 0 ].backCursor, 1u );
 						if ( backIndex >= backCount ) {
 
 							break;
@@ -91,7 +89,7 @@ export class CameraRayKernel extends ComputeKernel {
 
 					}
 
-					pixelIndex = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ] );
+					pixelIndex = pixelQueue[ queueIndex ];
 					indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
 
 					// skip the pixel if it has hit the sample limit
