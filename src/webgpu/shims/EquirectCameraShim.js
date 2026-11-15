@@ -34,11 +34,11 @@ EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 	};
 
-	// every ray starts at the camera's origin
-	const getRayOriginBounds = ( target, matrix ) => {
+	// every ray starts at the camera's origin, the zero point in camera space
+	const getRayOriginBounds = ( target, boundsToWorld ) => {
 
-		matrix.copy( this.matrixWorld );
-		return target.expandByPoint( _cameraOrigin );
+		boundsToWorld.copy( this.matrixWorld );
+		return target.set( _cameraOrigin.set( 0, 0, 0 ), _cameraOrigin );
 
 	};
 

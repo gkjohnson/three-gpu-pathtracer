@@ -74,9 +74,9 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	};
 
 	// the near planes of every camera, in the array camera's space
-	result.getRayOriginBounds = ( target, matrix ) => {
+	result.getRayOriginBounds = ( target, boundsToWorld ) => {
 
-		matrix.copy( this.matrixWorld );
+		boundsToWorld.copy( this.matrixWorld );
 		_worldToArrayCamera.copy( this.matrixWorld ).invert();
 		for ( const camera of this.cameras ) {
 

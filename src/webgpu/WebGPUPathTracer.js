@@ -35,7 +35,7 @@ import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 const _resolution = new Vector2();
 const _color = new Color();
 const _originBounds = /* @__PURE__ */ new Box3();
-const _originMatrix = /* @__PURE__ */ new Matrix4();
+const _originToWorld = /* @__PURE__ */ new Matrix4();
 const _originWorldBounds = /* @__PURE__ */ new Box3();
 const _originToMesh = /* @__PURE__ */ new Matrix4();
 const _volumeBounds = /* @__PURE__ */ new Box3();
@@ -59,7 +59,7 @@ function volumeMeshContainsOrigins( mesh ) {
 	}
 
 	// the volume's surface passes through the origins
-	_originToMesh.copy( mesh.matrixWorld ).invert().multiply( _originMatrix );
+	_originToMesh.copy( mesh.matrixWorld ).invert().multiply( _originToWorld );
 	if ( bvh.intersectsBox( _originBounds, _originToMesh ) ) {
 
 		return true;
@@ -1203,8 +1203,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 	/**
 	 * Replaces the camera the rays are generated from. Cameras with a `getCameraRayFn`, such as
 	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation, and optionally a
-	 * `getRayOriginBounds( box, matrix )` that bounds where their rays start, in the space of the matrix
-	 * it sets, so they can skip finding the volumes around them.
+	 * `getRayOriginBounds( box, boundsToWorld )` that bounds where their rays start in their own space,
+	 * setting the matrix from that space to world, so they can skip finding the volumes around them.
 	 *
 	 * @param {Camera} camera
 	 */
@@ -1246,9 +1246,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 					}
 				`,
-				getRayOriginBounds: camera.isPerspectiveCamera || camera.isOrthographicCamera ? ( target, matrix ) => {
+				getRayOriginBounds: camera.isPerspectiveCamera || camera.isOrthographicCamera ? ( target, boundsToWorld ) => {
 
-					matrix.copy( camera.matrixWorld );
+					boundsToWorld.copy( camera.matrixWorld );
 					return expandByNearPlane( camera, target );
 
 				} : null,
@@ -1349,8 +1349,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} else {
 
-			_cameraRayFnHandle.getRayOriginBounds( _originBounds.makeEmpty(), _originMatrix );
-			_originWorldBounds.copy( _originBounds ).applyMatrix4( _originMatrix );
+			_cameraRayFnHandle.getRayOriginBounds( _originBounds.makeEmpty(), _originToWorld );
+			_originWorldBounds.copy( _originBounds ).applyMatrix4( _originToWorld );
 			for ( const mesh of _volumeMeshes ) {
 
 				if ( volumeMeshContainsOrigins( mesh ) ) {
