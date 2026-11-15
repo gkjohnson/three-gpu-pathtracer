@@ -72,8 +72,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	}
 
 	/**
-	 * Returns whether the box intersects the closed volume of any of the mesh's volume materials, crossing its surface
-	 * or inside of it. The box is in the space the matrix maps to world. Uses the bvhs of each of the mesh's instances.
+	 * Returns whether the box intersects the mesh's closed volume, crossing its surface or inside of it. The box is in
+	 * the space the matrix maps to world. Uses the bvhs of each of the mesh's instances.
 	 *
 	 * @param {Box3} box
 	 * @param {Matrix4} boxToWorld
@@ -82,21 +82,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	 */
 	boxIntersectsMesh( box, boxToWorld, mesh ) {
 
-		const { bvh, shadingModel } = this;
-		const { material, geometry } = mesh;
-
-		// whether a triangle's material is a volume
-		const isVolumeTriangle = Array.isArray( material )
-			? triangleIndex => {
-
-				const vertexIndex = triangleIndex * 3;
-				const group = geometry.groups.find( g => vertexIndex >= g.start && vertexIndex < g.start + g.count );
-				return Boolean( group ) && shadingModel.isVolumeMaterial( material[ group.materialIndex ] );
-
-			}
-			: () => shadingModel.isVolumeMaterial( material );
-
-		const instanceBVHs = bvh.bvhMap.get( mesh ) || [];
+		const instanceBVHs = this.bvh.bvhMap.get( mesh ) || [];
 		for ( let instance = 0; instance < instanceBVHs.length; instance ++ ) {
 
 			const instanceBVH = instanceBVHs[ instance ];
@@ -120,7 +106,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			// the volume's surface passes through the box
 			const crossesSurface = instanceBVH.shapecast( {
 				intersectsBounds: bounds => _orientedBox.intersectsBox( bounds ),
-				intersectsTriangle: ( triangle, triangleIndex ) => isVolumeTriangle( triangleIndex ) && _orientedBox.intersectsTriangle( triangle ),
+				intersectsTriangle: triangle => _orientedBox.intersectsTriangle( triangle ),
 			} );
 
 			if ( crossesSurface ) {
@@ -129,7 +115,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			}
 
-			// otherwise the box is all inside or all outside: from inside, the nearest volume hit is a back face
+			// otherwise the box is all inside or all outside: from inside, the nearest hit is a back face
 			box.getCenter( _ray.origin ).applyMatrix4( _boxToMesh );
 			_ray.direction.set( 0, 0, 1 );
 
@@ -138,10 +124,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			instanceBVH.shapecast( {
 				boundsTraverseOrder: bounds => bounds.distanceToPoint( _ray.origin ),
 				intersectsBounds: ( bounds, isLeaf, score ) => score < nearestDist && _ray.intersectsBox( bounds ),
-				intersectsTriangle: ( triangle, triangleIndex ) => {
+				intersectsTriangle: triangle => {
 
 					const { a, b, c } = triangle;
-					if ( isVolumeTriangle( triangleIndex ) && _ray.intersectTriangle( a, b, c, false, _hitPoint ) ) {
+					if ( _ray.intersectTriangle( a, b, c, false, _hitPoint ) ) {
 
 						const dist = _hitPoint.distanceTo( _ray.origin );
 						if ( dist < nearestDist ) {
