@@ -104,7 +104,7 @@ export const isSubsurfaceMaterialFn = wgslTagFn/* wgsl */`
 
 	fn isSubsurfaceMaterial( materialIndex: u32 ) -> bool {
 
-		let material = ${ materialsStorage }[ materialIndex ];
+		let material = &${ materialsStorage }[ materialIndex ];
 		return material.scatterStrength > 0.0 && any( material.multiscatterColor > vec3f( 0.0 ) ) &&
 			any( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) > vec3f( 0.0 ) );
 
@@ -117,7 +117,7 @@ export const getSubsurfaceMediumFn = wgslTagFn/* wgsl */`
 
 	fn getSubsurfaceMedium( materialIndex: u32 ) -> ${ mediumStruct } {
 
-		let material = ${ materialsStorage }[ materialIndex ];
+		let material = &${ materialsStorage }[ materialIndex ];
 		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 
 		var medium: ${ mediumStruct };
@@ -138,7 +138,7 @@ export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
 	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, materialIndex: u32 ) -> void {
 
-		let material = ${ materialsStorage }[ materialIndex ];
+		let material = &${ materialsStorage }[ materialIndex ];
 		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) || ${ isSubsurfaceMaterialFn }( materialIndex ) ) {
 
 			return;
@@ -279,7 +279,7 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 
 			}
 
-			let material = ${ materialsStorage }[ ids[ i ] ];
+			let material = &${ materialsStorage }[ ids[ i ] ];
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 
