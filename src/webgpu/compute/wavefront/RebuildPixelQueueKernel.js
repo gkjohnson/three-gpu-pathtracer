@@ -41,6 +41,8 @@ export class RebuildPixelQueueKernel extends ComputeKernel {
 
 				}
 
+				// TODO: the midpoint comes from the previous rebuild's sample range, a pass late. Measuring the range
+				// before the rebuild needs another full resolution pass
 				var queueIndex: u32;
 				if ( samples <= atomicLoad( &${ params.pixelQueueInfo }[ 0 ].sampleCountMidpoint ) ) {
 
