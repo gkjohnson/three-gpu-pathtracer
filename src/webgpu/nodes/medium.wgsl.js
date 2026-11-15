@@ -101,7 +101,7 @@ export const isSubsurfaceMaterialFn = wgslTagFn/* wgsl */`
 
 	fn isSubsurfaceMaterial( materialIndex: u32 ) -> bool {
 
-		let material = ${ materialsStorage }[ materialIndex ];
+		let material = &${ materialsStorage }[ materialIndex ];
 		return material.scatterStrength > 0.0 && any( material.multiscatterColor > vec3f( 0.0 ) ) &&
 			any( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) > vec3f( 0.0 ) );
 
@@ -135,7 +135,7 @@ export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
 	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, materialIndex: u32 ) -> void {
 
-		let material = ${ materialsStorage }[ materialIndex ];
+		let material = &${ materialsStorage }[ materialIndex ];
 		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) || ${ isSubsurfaceMaterialFn }( materialIndex ) ) {
 
 			return;
