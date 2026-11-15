@@ -3,7 +3,7 @@ import { uniform, PI } from 'three/tsl';
 import { wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { EquirectCamera } from '../../objects/EquirectCamera.js';
 
-const _position = /* @__PURE__ */ new Vector3();
+const _cameraOrigin = /* @__PURE__ */ new Vector3();
 
 EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
@@ -34,8 +34,13 @@ EquirectCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 	};
 
-	// every ray starts at the camera position
-	const getRayOriginBounds = target => target.expandByPoint( _position.setFromMatrixPosition( this.matrixWorld ) );
+	// every ray starts at the camera's origin
+	const getRayOriginBounds = ( target, matrix ) => {
+
+		matrix.copy( this.matrixWorld );
+		return target.expandByPoint( _cameraOrigin );
+
+	};
 
 	return { fn, update, getRayOriginBounds };
 
