@@ -159,7 +159,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.subsurfaceKernel.context.bvhData = bvhData;
 		this.cameraRayKernel.context.bvhData = bvhData;
 		this.cameraMediumKernel.context.bvhData = bvhData;
-		this.populatePixelIndicesKernel.context.bvhData = bvhData;
 		this.rebuild();
 
 	}
@@ -176,7 +175,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.subsurfaceKernel.needsUpdate = true;
 		this.cameraRayKernel.needsUpdate = true;
 		this.cameraMediumKernel.needsUpdate = true;
-		this.populatePixelIndicesKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -190,7 +188,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel.context.random = random;
 		this.subsurfaceKernel.context.random = random;
 		this.cameraMediumKernel.context.random = random;
-		this.populatePixelIndicesKernel.context.random = random;
 		this.rebuild();
 
 	}
@@ -527,9 +524,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// start the path slots in use idle and queue every pixel
 		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-		populatePixelIndicesKernel.sampleCountTarget = this.sampleCountTarget;
 		populatePixelIndicesKernel.frameBudget = Math.min( this.rayCount, pixelCount );
-		populatePixelIndicesKernel.maxSamples = this.maxSamples;
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
 		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
