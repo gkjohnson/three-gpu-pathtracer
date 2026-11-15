@@ -66,7 +66,6 @@ export class CameraRayKernel extends ComputeKernel {
 				// pop from the front of the queue, then the back, until a pixel takes a sample
 				let frontCount = atomicLoad( &${ params.pixelQueueInfo }[ 0 ].frontCount );
 				let backCount = atomicLoad( &${ params.pixelQueueInfo }[ 0 ].backCount );
-				let pixelCount = targetDimensions.x * targetDimensions.y;
 
 				var pixelIndex = 0u;
 				var indexUV = vec2u( 0u );
@@ -85,7 +84,7 @@ export class CameraRayKernel extends ComputeKernel {
 
 						}
 
-						queueIndex = pixelCount - 1u - backIndex;
+						queueIndex = arrayLength( pixelQueue ) - 1u - backIndex;
 
 					}
 

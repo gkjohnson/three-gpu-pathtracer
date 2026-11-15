@@ -48,7 +48,7 @@ export class RebuildPixelQueueKernel extends ComputeKernel {
 
 				} else {
 
-					queueIndex = targetDimensions.x * targetDimensions.y - 1u - atomicAdd( &${ params.pixelQueueInfo }[ 0 ].backCount, 1u );
+					queueIndex = arrayLength( &${ params.pixelQueue } ) - 1u - atomicAdd( &${ params.pixelQueueInfo }[ 0 ].backCount, 1u );
 
 				}
 
