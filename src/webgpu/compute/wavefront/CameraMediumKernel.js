@@ -17,7 +17,7 @@ export class CameraMediumKernel extends ComputeKernel {
 			globalSeed: uniform( 0, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
 
-			// whether a volume may contain the camera rays' origins, otherwise they start outside of every volume
+			// whether camera rays may start inside a volume
 			cameraInVolume: uniform( 1, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
@@ -51,7 +51,7 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
-				// the medium the camera ray starts in, outside of every volume unless one may contain the camera
+				// the medium the camera ray starts in
 				var cameraStack = ${ getEmptyMediumStackFn }();
 				if ( cameraInVolume != 0u ) {
 

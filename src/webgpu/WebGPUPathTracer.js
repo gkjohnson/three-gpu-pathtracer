@@ -1161,9 +1161,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Replaces the camera the rays are generated from. Cameras with a `getCameraRayFn`, such as
-	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation, and optionally a
-	 * `getRayOriginBounds( box, boundsToWorld )` that bounds where their rays start in their own space,
-	 * setting the matrix from that space to world, so they can skip finding the volumes around them.
+	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation, and optionally
+	 * `getRayOriginBounds( box, boundsToWorld )`, the bounds of where their rays start in camera space.
 	 *
 	 * @param {Camera} camera
 	 */
@@ -1276,13 +1275,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// Sets whether a camera ray may start inside of a volume, when a volume contains any of the points the rays start
-	// from, as in Cycles' "is_inside_volume". Otherwise the rays skip finding the volumes around them
+	// Sets whether camera rays may start inside a volume, as in Cycles' "is_inside_volume"
 	_updateCameraInVolume() {
 
 		const { _cameraRayFnHandle, _bvhData, _shadingModel, _pathTracer, scene } = this;
 
-		// cameras that can't bound their ray origins count as inside of any volume
+		// cameras without origin bounds always count as inside
 		const hasOriginBounds = Boolean( _cameraRayFnHandle.getRayOriginBounds );
 		if ( hasOriginBounds ) {
 

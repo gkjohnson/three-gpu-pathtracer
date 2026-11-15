@@ -358,10 +358,8 @@ export class MaterialKernel extends ComputeKernel {
 					let newBounce = input.hit.bounce + 1u;
 					isTerminated = isTerminated || newBounce >= maxBounces;
 
-					// Russian roulette early out, from the fourth vertex on: "hit.bounce" is the vertex's index, zero at
-					// the camera ray's hit, in both backends. Matches Cycles path_state_continuation_probability in
-					// integrator/path_state.h
-					if ( ! isTerminated && input.hit.bounce >= 3u ) {
+					// Russian roulette from the second vertex on, as in Cycles' path_state_continuation_probability
+					if ( ! isTerminated && input.hit.bounce >= 1u ) {
 
 						let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
 						let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );

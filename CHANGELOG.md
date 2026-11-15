@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
 - WebGPUPathTracer: "setSize" updates the camera, so camera ray functions that depend on the render size follow it.
 - WebGPUPathTracer: Vertex colors are only stored on the GPU when the scene has them, reducing memory use.
+- WebGPUPathTracer: Russian roulette starts at the second vertex, as in Cycles, so paths end sooner and samples are cheaper.
 
 ### Fixed
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.

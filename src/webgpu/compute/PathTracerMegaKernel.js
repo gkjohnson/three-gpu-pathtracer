@@ -223,7 +223,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var mediumScattered = false;
 
 				// CameraMediumKernel
-				// the medium the camera ray starts in, outside of every volume unless one may contain the camera
+				// the medium the camera ray starts in
 				var cameraStack = ${ getEmptyMediumStackFn }();
 				if ( cameraInVolume != 0u ) {
 
@@ -607,9 +607,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let newBounce = hit.bounce + 1u;
 					isTerminated = isTerminated || newBounce >= maxBounces;
 
-					// russian roulette from the fourth vertex on, "hit.bounce" being zero at the camera hit in both
-					// backends. Matches Cycles path_state_continuation_probability
-					if ( ! isTerminated && hit.bounce >= 3u ) {
+					// Russian roulette from the second vertex on, as in Cycles' path_state_continuation_probability
+					if ( ! isTerminated && hit.bounce >= 1u ) {
 
 						let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
 						let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );

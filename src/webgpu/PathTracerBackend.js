@@ -24,7 +24,7 @@ export class PathTracerBackend {
 		this.maxFogBounces = 0;
 		this.lowResMode = false;
 
-		// whether a volume may contain the camera rays' origins, so each ray's starting medium has to be found
+		// whether camera rays may start inside a volume
 		this.cameraInVolume = true;
 
 		// the light clamping values, shared with the kernels through their context

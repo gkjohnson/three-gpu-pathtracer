@@ -13,7 +13,7 @@ const _normalMatrix = /* @__PURE__ */ new Matrix3();
 const _rayOrigin = /* @__PURE__ */ new Vector3();
 const _rayDirection = /* @__PURE__ */ new Vector3( 0, 0, 1 );
 
-// the nearest hit on either side of a mesh instance's surface, placed by its world matrix
+// raycasts a mesh instance from both sides
 const _raycaster = /* @__PURE__ */ new Raycaster();
 const _raycastTarget = {
 	matrixWorld: _instanceMatrix,
@@ -46,7 +46,7 @@ const intersectionResultStruct = new StructTypeNode( {
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
-// the nearest volume hit past "minDist" along a ray, by material index
+// a ray's nearest volume hit past "minDist"
 const volumeHitStruct = new StructTypeNode( {
 	didHit: 'bool',
 	materialIndex: 'uint',
@@ -80,8 +80,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	}
 
 	/**
-	 * Returns whether the box intersects the mesh's closed volume, crossing its surface or inside of it. The box is in
-	 * the space the matrix maps to world. Uses the bvhs of each of the mesh's instances.
+	 * Returns whether the box, in the space "boxToWorld" maps from, overlaps the mesh's closed volume.
 	 *
 	 * @param {Box3} box
 	 * @param {Matrix4} boxToWorld
@@ -123,7 +122,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			}
 
-			// otherwise the box is all inside or all outside: from inside, the nearest hit is a back face
+			// otherwise the box is inside if the nearest hit is a back face
 			box.getCenter( _rayOrigin ).applyMatrix4( boxToWorld );
 			_raycaster.set( _rayOrigin, _rayDirection );
 			_raycaster.firstHitOnly = true;
@@ -602,7 +601,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			`,
 		} );
 
-		// The nearest hit past "minDist" on the objects that are volumes, for stepping through a ray's volume hits in order
+		// The nearest volume hit past "minDist"
 		// TODO: three-mesh-bvh has no clear way to skip an object during traversal, so a flag set when the ray is
 		// transformed is checked in both the bounds and range tests. A dedicated hook would be good
 		const skipObject = uint( 0 ).toVar( 'bvh_skipObject' );

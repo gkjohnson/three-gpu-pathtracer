@@ -147,7 +147,7 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 	};
 
-	// the near plane in camera space, widened by the aperture sample offset
+	// the near plane, widened by the aperture
 	const getRayOriginBounds = ( target, boundsToWorld ) => {
 
 		const aperture = this.bokehSize * 0.5 * 1e-3 * Math.max( this.anamorphicRatio, 1 / this.anamorphicRatio );
