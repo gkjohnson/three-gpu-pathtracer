@@ -3,6 +3,7 @@ import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruc
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
 import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.js';
+/** @import { Box3, Mesh } from 'three/webgpu' */
 
 const _colorVec = new Vector4();
 const _instanceMatrix = /* @__PURE__ */ new Matrix4();
