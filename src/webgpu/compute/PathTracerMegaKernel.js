@@ -7,7 +7,7 @@ import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
 import {
 	mediumStackStruct, addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn,
-	getMediumStackAtPointFn, getShadowMediumStackFn, getShadowMediumDepthFn, getShadowTransmittanceFn, sampleFogDistanceFn,
+	getEmptyMediumStackFn, getMediumStackAtPointFn, getShadowMediumStackFn, getShadowMediumDepthFn, getShadowTransmittanceFn, sampleFogDistanceFn,
 	getMediumSegmentWeightFn, walkMediumStepFn, MEDIUM_WALK_SURFACE, MEDIUM_WALK_TERMINATED,
 } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
@@ -42,6 +42,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxSubsurfaceBounces: uniform( 256, 'uint' ),
 			maxFogBounces: uniform( 0, 'uint' ),
+			cameraInVolume: uniform( 1, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
@@ -142,6 +143,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				maxTransparentBounces: u32,
 				maxSubsurfaceBounces: u32,
 				maxFogBounces: u32,
+				cameraInVolume: u32,
 				misEnabled: u32,
 				maxSamples: u32,
 				filterGlossy: f32,
@@ -221,8 +223,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var mediumScattered = false;
 
 				// CameraMediumKernel
-				// the medium the camera ray starts in
-				var medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( ray.origin ) );
+				// the medium the camera ray starts in, outside of every volume unless one may contain the camera
+				var cameraStack = ${ getEmptyMediumStackFn }();
+				if ( cameraInVolume != 0u ) {
+
+					cameraStack = ${ getMediumStackAtPointFn }( ray.origin );
+
+				}
+
+				var medium = ${ getCombinedMediumFn }( cameraStack );
 
 				// added last, a camera miss overwrites the pixel with the background
 				var lightHitColor = vec3f( 0.0 );

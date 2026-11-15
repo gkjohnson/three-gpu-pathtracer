@@ -591,6 +591,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				cameraMediumKernel.rayQueue = rayQueue;
 				cameraMediumKernel.queueCounters = queueCounters;
 				cameraMediumKernel.rayCount = rayCount;
+				cameraMediumKernel.cameraInVolume = Number( this.cameraInVolume );
 				this.dispatch( cameraMediumKernel, cameraMediumKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// Step 4: convert the queue lengths into indirect dispatch sizes and trace

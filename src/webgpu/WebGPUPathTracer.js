@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Vector3, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -16,6 +16,7 @@ import { AuxDebugMaterial } from './materials/debug/AuxDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GLTFShadingModel } from './shadingModels/GLTFShadingModel.js';
+import { PhysicalCamera } from '../objects/PhysicalCamera.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
@@ -33,6 +34,67 @@ import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 
 const _resolution = new Vector2();
 const _color = new Color();
+const _cameraBounds = /* @__PURE__ */ new Box3();
+const _volumeBounds = /* @__PURE__ */ new Box3();
+const _corner = /* @__PURE__ */ new Vector3();
+
+// Expands the bounds by the points camera rays start from, returning false for a camera whose ray origins aren't
+// known: the near plane for perspective and orthographic cameras, offset across the aperture for a physical camera,
+// and the position for an equirect camera
+function expandByCameraRayOrigins( camera, target ) {
+
+	if ( camera.isArrayCamera ) {
+
+		for ( const subCamera of camera.cameras ) {
+
+			if ( ! expandByCameraRayOrigins( subCamera, target ) ) {
+
+				return false;
+
+			}
+
+		}
+
+		return true;
+
+	}
+
+	if ( camera.isEquirectCamera ) {
+
+		target.expandByPoint( _corner.setFromMatrixPosition( camera.matrixWorld ) );
+		return true;
+
+	}
+
+	const isPhysicalCamera = camera instanceof PhysicalCamera;
+	if ( ( camera.getCameraRayFn && ! isPhysicalCamera ) || ! ( camera.isPerspectiveCamera || camera.isOrthographicCamera ) ) {
+
+		return false;
+
+	}
+
+	const nearDepth = camera.coordinateSystem === WebGPUCoordinateSystem ? 0 : - 1;
+	for ( let x = - 1; x <= 1; x += 2 ) {
+
+		for ( let y = - 1; y <= 1; y += 2 ) {
+
+			target.expandByPoint( _corner.set( x, y, nearDepth ).unproject( camera ) );
+
+		}
+
+	}
+
+	// the aperture sample offset, as in PhysicalCameraShim
+	if ( isPhysicalCamera ) {
+
+		const { bokehSize, anamorphicRatio } = camera;
+		target.expandByScalar( bokehSize * 0.5 * 1e-3 * Math.max( anamorphicRatio, 1 / anamorphicRatio ) );
+
+	}
+
+	return true;
+
+}
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -817,6 +879,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._cameraRayFnHandle = null;
 		this._BVHWorker = null;
 
+		// the meshes with a volume material, whose bounds decide if a camera ray may start inside of a volume
+		this._volumeMeshes = [];
+
 		// the render time of the last check for the render having stopped
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
@@ -956,6 +1021,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.scene = scene;
 		this._bvhData = bvhData;
 		this._pathTracer.setBVHData( bvhData );
+		this._updateVolumeMeshes();
 		this.setCamera( camera );
 		this.updateEnvironment();
 		this.updateLights();
@@ -1206,6 +1272,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
+		this._updateCameraInVolume();
 		this._pathTracer.rebuild();
 		this.reset();
 
@@ -1228,6 +1295,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._updateVolumeMeshes();
+		this._updateCameraInVolume();
 		this.reset();
 
 	}
@@ -1241,6 +1310,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this.scene.updateMatrixWorld( true );
 		this._bvhData.updateTransforms();
+		this._updateCameraInVolume();
 		this.reset();
 
 	}
@@ -1257,7 +1327,57 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._updateCameraInVolume();
 		this.reset();
+
+	}
+
+	// Collects the meshes with a volume material
+	_updateVolumeMeshes() {
+
+		const { scene, _shadingModel, _volumeMeshes } = this;
+		_volumeMeshes.length = 0;
+		scene?.traverse( child => {
+
+			const materials = Array.isArray( child.material ) ? child.material : [ child.material ];
+			if ( child.isMesh && materials.some( material => _shadingModel.isVolumeMaterial( material ) ) ) {
+
+				_volumeMeshes.push( child );
+
+			}
+
+		} );
+
+	}
+
+	// Sets whether a camera ray may start inside of a volume, when a volume mesh's bounds overlap the points the
+	// rays start from, as in Cycles' "is_inside_volume". Otherwise the rays skip finding the volumes around them
+	_updateCameraInVolume() {
+
+		const { camera, _volumeMeshes, _pathTracer } = this;
+
+		let cameraInVolume = false;
+		_cameraBounds.makeEmpty();
+		if ( ! expandByCameraRayOrigins( camera, _cameraBounds ) ) {
+
+			cameraInVolume = _volumeMeshes.length > 0;
+
+		} else {
+
+			for ( const mesh of _volumeMeshes ) {
+
+				if ( _volumeBounds.setFromObject( mesh ).intersectsBox( _cameraBounds ) ) {
+
+					cameraInVolume = true;
+					break;
+
+				}
+
+			}
+
+		}
+
+		_pathTracer.cameraInVolume = cameraInVolume;
 
 	}
 
