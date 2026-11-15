@@ -1,4 +1,4 @@
-import { Box3, DataTexture, DoubleSide, EventDispatcher, LinearFilter, MathUtils, Ray, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -36,43 +36,6 @@ const _resolution = new Vector2();
 const _color = new Color();
 const _originBounds = /* @__PURE__ */ new Box3();
 const _originToWorld = /* @__PURE__ */ new Matrix4();
-const _originWorldBounds = /* @__PURE__ */ new Box3();
-const _originToMesh = /* @__PURE__ */ new Matrix4();
-const _volumeBounds = /* @__PURE__ */ new Box3();
-const _ray = /* @__PURE__ */ new Ray();
-
-// Returns whether the mesh's closed volume contains any of the camera ray origins in "_originBounds". A mesh without
-// a geometry bvh, such as a skinned or instanced one, counts as containing them when its bounds overlap
-function volumeMeshContainsOrigins( mesh ) {
-
-	if ( ! _volumeBounds.setFromObject( mesh ).intersectsBox( _originWorldBounds ) ) {
-
-		return false;
-
-	}
-
-	const bvh = mesh.geometry.boundsTree;
-	if ( ! bvh || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.isBatchedMesh ) {
-
-		return true;
-
-	}
-
-	// the volume's surface passes through the origins
-	_originToMesh.copy( mesh.matrixWorld ).invert().multiply( _originToWorld );
-	if ( bvh.intersectsBox( _originBounds, _originToMesh ) ) {
-
-		return true;
-
-	}
-
-	// otherwise the origins are all inside or all outside: from inside, the nearest hit is a back face
-	_originBounds.getCenter( _ray.origin ).applyMatrix4( _originToMesh );
-	_ray.direction.set( 0, 0, 1 );
-	const hit = bvh.raycastFirst( _ray, DoubleSide );
-	return hit !== null && hit.face.normal.dot( _ray.direction ) > 0;
-
-}
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -857,9 +820,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._cameraRayFnHandle = null;
 		this._BVHWorker = null;
 
-		// the meshes with a volume material, whose bounds decide if a camera ray may start inside of a volume
-		this._volumeMeshes = [];
-
 		// the render time of the last check for the render having stopped
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
@@ -999,7 +959,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.scene = scene;
 		this._bvhData = bvhData;
 		this._pathTracer.setBVHData( bvhData );
-		this._updateVolumeMeshes();
 		this.setCamera( camera );
 		this.updateEnvironment();
 		this.updateLights();
@@ -1281,7 +1240,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		this._updateVolumeMeshes();
 		this._updateCameraInVolume();
 		this.reset();
 
@@ -1318,53 +1276,21 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// Collects the meshes with a volume material
-	_updateVolumeMeshes() {
-
-		const { scene, _shadingModel, _volumeMeshes } = this;
-		_volumeMeshes.length = 0;
-		scene.traverse( child => {
-
-			const materials = Array.isArray( child.material ) ? child.material : [ child.material ];
-			if ( child.isMesh && materials.some( material => _shadingModel.isVolumeMaterial( material ) ) ) {
-
-				_volumeMeshes.push( child );
-
-			}
-
-		} );
-
-	}
-
-	// Sets whether a camera ray may start inside of a volume, when a volume mesh contains any of the points the rays
-	// start from, as in Cycles' "is_inside_volume". Otherwise the rays skip finding the volumes around them
+	// Sets whether a camera ray may start inside of a volume, when a volume contains any of the points the rays start
+	// from, as in Cycles' "is_inside_volume". Otherwise the rays skip finding the volumes around them
 	_updateCameraInVolume() {
 
-		const { _cameraRayFnHandle, _volumeMeshes, _pathTracer } = this;
+		const { _cameraRayFnHandle, _bvhData, _pathTracer } = this;
+		if ( _cameraRayFnHandle.getRayOriginBounds ) {
 
-		let cameraInVolume = false;
-		if ( ! _cameraRayFnHandle.getRayOriginBounds ) {
-
-			cameraInVolume = _volumeMeshes.length > 0;
+			_cameraRayFnHandle.getRayOriginBounds( _originBounds.makeEmpty(), _originToWorld );
+			_pathTracer.cameraInVolume = _bvhData.volumesContainBox( _originBounds, _originToWorld );
 
 		} else {
 
-			_cameraRayFnHandle.getRayOriginBounds( _originBounds.makeEmpty(), _originToWorld );
-			_originWorldBounds.copy( _originBounds ).applyMatrix4( _originToWorld );
-			for ( const mesh of _volumeMeshes ) {
-
-				if ( volumeMeshContainsOrigins( mesh ) ) {
-
-					cameraInVolume = true;
-					break;
-
-				}
-
-			}
+			_pathTracer.cameraInVolume = _bvhData.volumeMeshes.length > 0;
 
 		}
-
-		_pathTracer.cameraInVolume = cameraInVolume;
 
 	}
 
