@@ -324,11 +324,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// The queue is sized to the full pixel count so it can hold every pixel
+	// The queue is sized to the pixel count so it can hold every pixel. A low res preview keeps a larger
+	// queue rather than reallocate it on every switch to and from full resolution.
 	_updatePixelQueue( width, height ) {
 
 		const size = Math.max( width * height, 1 );
-		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
+		const length = this.pixelQueue ? this.pixelQueue.array.length : 0;
+		if ( length < size || ( length !== size && ! this.lowResMode ) ) {
 
 			this.pixelQueue?.dispose();
 			this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
