@@ -7,8 +7,8 @@ import { rayDataStruct, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QU
 
 // Runs once per reset: assigns each of the first rayData-pool-count pixels to a path slot and parks
 // the overflow pixel indices in the pixel queue. Slots are initialized so LogicKernel skips them and
-// MaterialKernel immediately generates fresh camera rays. Later budget changes are handled by
-// resizing the pool in the render loop, with ResetSlotsKernel returning retired slots' pixels.
+// MaterialKernel immediately generates fresh camera rays. Later budget changes are handled in the
+// render loop, with ResetSlotsKernel and LogicKernel moving pixels between slots and the queue.
 export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 	constructor( ) {

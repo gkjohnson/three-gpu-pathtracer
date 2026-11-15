@@ -159,3 +159,6 @@ export const MEDIUM_QUEUE_HEADER = 1;
 export const PIXEL_QUEUE_CURRENT = 0;
 export const PIXEL_QUEUE_ELEMENT_COUNT = 1;
 export const PIXEL_QUEUE_HEADER = 2;
+
+// The pixel index of a slot past the active count that has returned its pixel to the queue
+export const NO_PIXEL_INDEX = 0xFFFFFFFF;

@@ -20,6 +20,7 @@ export class CameraRayKernel extends ComputeKernel {
 			targetDimensions: uniform( new Vector2() ),
 			maxSamples: uniform( 0, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
+			activeSlotCount: uniform( 0, 'uint' ),
 
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
@@ -38,6 +39,7 @@ export class CameraRayKernel extends ComputeKernel {
 				targetDimensions: vec2u,
 				maxSamples: u32,
 				rayCount: u32,
+				activeSlotCount: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -58,6 +60,16 @@ export class CameraRayKernel extends ComputeKernel {
 				let input = ${ params.rayDataStorage }[ index ];
 				if ( input.hit.objectIndex >= 0 ) {
 
+					return;
+
+				}
+
+				// slots past the active count were left by a budget shrink and start no new paths.
+				// LogicKernel returns their pixel to the queue
+				if ( index >= activeSlotCount ) {
+
+					rayDataStorage[ index ].rayIntersectionIndex = - 1;
+					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 					return;
 
 				}

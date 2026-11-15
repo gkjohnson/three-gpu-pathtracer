@@ -14,7 +14,7 @@ import {
 } from '../../nodes/random.wgsl.js';
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, NO_PIXEL_INDEX, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
 import { getMediumSegmentWeightFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
@@ -43,6 +43,7 @@ export class LogicKernel extends ComputeKernel {
 			globalSeed: uniform( 0, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
+			activeSlotCount: uniform( 0, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 			accumulateAux: uniform( 0, 'uint' ),
@@ -50,6 +51,7 @@ export class LogicKernel extends ComputeKernel {
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
 			shadowRayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), shadowTraceResultStruct ),
+			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
 
 			globalId: globalId,
 		};
@@ -74,6 +76,7 @@ export class LogicKernel extends ComputeKernel {
 				globalSeed: u32,
 				misEnabled: u32,
 				rayCount: u32,
+				activeSlotCount: u32,
 				maxBounces: u32,
 				transmissiveBackground: u32,
 				accumulateAux: u32,
@@ -97,6 +100,17 @@ export class LogicKernel extends ComputeKernel {
 				// whole structs are read from the buffer, not the pointer alias, which Safari fails to compile
 				let input = ${ params.rayDataStorage }[ index ];
 				if ( input.rayIntersectionIndex < 0 ) {
+
+					// an idle slot past the active count returns its pixel to the queue. Nothing pops
+					// the queue in this kernel, so it can be appended to
+					if ( index >= activeSlotCount && input.pixelIndex != ${ NO_PIXEL_INDEX }u ) {
+
+						let pixelQueue = &${ params.pixelQueue };
+						let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ], 1u );
+						atomicStore( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], input.pixelIndex );
+						rayDataStorage[ index ].pixelIndex = ${ NO_PIXEL_INDEX }u;
+
+					}
 
 					return;
 

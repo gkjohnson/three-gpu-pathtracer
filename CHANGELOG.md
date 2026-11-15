@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer, WebGLPathTracer: Materials without a "color" field, such as NodeMaterial and ShaderMaterial, throwing an error.
 - WebGPUPathTracer: "sheenRoughnessMap" being read from the red channel instead of alpha.
 - WebGPUPathTracer: Dark background and clear colors rendering darker than set, quantized to 8 bits.
+- WebGPUPathTracer: A smaller adaptive frame budget discarding the paths in flight in the wavefront path tracer.
 
 ## [0.0.28] - 2026.11.02
 ### Added
