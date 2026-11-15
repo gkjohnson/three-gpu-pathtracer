@@ -7,9 +7,7 @@ import { rayDataStruct } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG } from '../../constants.js';
 
 // Prepares a range of path slots when the pool is resized. Slots added by a grow start idle, as
-// MaterialKernel expects, and pop a pixel in CameraRayKernel. Slots dropped by a shrink mid-path clear
-// their pixel's active flag before the pool is discarded, so the next queue rebuild picks it up. Runs
-// after LogicKernel, where a slot with a hit is still tracing.
+// MaterialKernel expects. Slots dropped by a shrink mid-path clear their pixel's active flag.
 export class ResetSlotsKernel extends ComputeKernel {
 
 	constructor( ) {

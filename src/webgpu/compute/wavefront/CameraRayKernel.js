@@ -12,8 +12,8 @@ import {
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 
-// Starts a new path in each slot whose path has ended: pops a pixel from the pixel queue and writes a fresh
-// camera ray. CameraMediumKernel then finds the ray's medium and queues it.
+// Starts a new path in each slot whose path has ended: pops a pixel from the queue and writes a fresh camera
+// ray. CameraMediumKernel then finds the ray's medium and queues it.
 export class CameraRayKernel extends ComputeKernel {
 
 	constructor( ) {
@@ -65,8 +65,7 @@ export class CameraRayKernel extends ComputeKernel {
 
 				}
 
-				// pop pixels until one takes a sample, from the front of the queue, which holds the pixels behind
-				// the rest, then the back. Popped entries past either side's count are out of range
+				// pop from the front of the queue, then the back, until a pixel takes a sample
 				let frontCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_FRONT_COUNT }u ] );
 				let backCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_BACK_COUNT }u ] );
 				let pixelCount = targetDimensions.x * targetDimensions.y;

@@ -10,10 +10,7 @@ import {
 	PIXEL_QUEUE_SAMPLE_SPLIT, PIXEL_QUEUE_HEADER,
 } from './structs.js';
 
-// Rebuilds the pixel queue from the sample counts, with every pixel that still needs samples and isn't being
-// traced. Pixels in the lower half of the sample count range go to the front so they are sampled first, which
-// keeps the counts even when the pixels still being traced at a rebuild skip a pass. Records the range of the
-// queued pixels' sample counts for the next rebuild.
+// Rebuilds the pixel queue, putting the pixels with fewer samples at the front
 export class RebuildPixelQueueKernel extends ComputeKernel {
 
 	constructor() {
@@ -48,7 +45,7 @@ export class RebuildPixelQueueKernel extends ComputeKernel {
 
 				}
 
-				// the split is "min + max", so this compares against the middle of the range
+				// the split is "min + max"
 				var queueIndex: u32;
 				if ( 2u * samples <= atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_SAMPLE_SPLIT }u ] ) ) {
 
@@ -62,7 +59,7 @@ export class RebuildPixelQueueKernel extends ComputeKernel {
 
 				atomicStore( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], ( uv.x << 16 ) | uv.y );
 
-				// checked first so most threads skip the contended atomics
+				// checked first so most threads skip the atomics
 				if ( samples < atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_MIN_SAMPLES }u ] ) ) {
 
 					atomicMin( &pixelQueue[ ${ PIXEL_QUEUE_MIN_SAMPLES }u ], samples );

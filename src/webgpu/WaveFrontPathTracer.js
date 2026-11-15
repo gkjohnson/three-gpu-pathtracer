@@ -84,7 +84,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// the slots walking a medium this pass
 		this.mediumQueue = null;
 
-		// pixel indices for free path slots to sample, sized to the resolution
+		// pixel indices waiting for a free path slot, sized to the resolution
 		this.pixelQueue = null;
 
 		// reduction target for the per pixel sample counts, read back asynchronously
@@ -112,7 +112,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.resetSlotsKernel = new ResetSlotsKernel().setWorkgroupSize( 64, 1, 1 );
 		this.copyRayDataKernel = new CopyBufferKernel( rayDataStruct ).setWorkgroupSize( 64, 1, 1 );
 
-		// pixel queue rebuild: after each pass through the queue, rebuilds it from the pixels still needing samples
+		// rebuilds the pixel queue after each pass through it
 		this.pixelQueueRebuildDispatchKernel = new PixelQueueRebuildDispatchKernel( 8 ).setWorkgroupSize( 1, 1, 1 );
 		this.rebuildPixelQueueKernel = new RebuildPixelQueueKernel().setWorkgroupSize( 8, 8, 1 );
 
@@ -152,8 +152,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.subsurfaceKernel.context.bvhData = bvhData;
 		this.cameraRayKernel.context.bvhData = bvhData;
 		this.cameraMediumKernel.context.bvhData = bvhData;
-
-		// the camera ray function marks the pixels the camera declines finished
 		this.populatePixelIndicesKernel.context.bvhData = bvhData;
 		this.rebuild();
 
@@ -318,7 +316,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// The queue is sized to the full pixel count, so a rebuild can always hold every pixel
+	// The queue is sized to the full pixel count so it can hold every pixel
 	_updatePixelQueue( width, height ) {
 
 		const size = PIXEL_QUEUE_HEADER + Math.max( width * height, 1 );
@@ -339,9 +337,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	}
 
 	// Reallocates the per slot buffers to "count" slots. Slots that survive carry their ray data
-	// over, dropped slots clear their pixel's active flag, and added slots start idle. Only the
-	// slots in use, up to the pixel count, run. The trace queues and results only live within a
-	// frame, so they start empty.
+	// over, dropped slots clear their pixel's active flag, and added slots start idle. Only
+	// the slots in use, up to the pixel count, hold pixels. The trace queues and results only live
+	// within a frame, so they start empty.
 	_resizePool( count, pixelCount ) {
 
 		const { resetSlotsKernel, copyRayDataKernel } = this;
@@ -510,14 +508,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const pixelCount = targetDimensions.x * targetDimensions.y;
 		this._applyBudget( pixelCount );
 
-		// reset the trace queues and the pixel queue's counters — only their lengths need zeroing
+		// reset the trace queues — only their lengths need zeroing
 		zeroDispatchKernel.target = this.queueCounters;
 		this.dispatch( zeroDispatchKernel, [ QUEUE_COUNTER_COUNT ] );
 
 		zeroDispatchKernel.target = this.pixelQueue;
 		this.dispatch( zeroDispatchKernel, [ PIXEL_QUEUE_HEADER ] );
 
-		// start the path slots in use idle and queue every pixel to sample
+		// start the path slots in use idle and queue every pixel
 		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 		populatePixelIndicesKernel.sampleCountTarget = this.sampleCountTarget;
@@ -599,8 +597,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.maxFogBounces = this.maxFogBounces;
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
 
-				// once the slots have popped the whole pixel queue, rebuild it from the pixels that still need
-				// samples and aren't being traced. The GPU sizes the rebuild, to nothing until then
+				// rebuild the pixel queue once the slots have popped all of it
 				pixelQueueRebuildDispatchKernel.pixelQueue = this.pixelQueue;
 				pixelQueueRebuildDispatchKernel.targetDimensions.copy( targetDimensions );
 				this.dispatch( pixelQueueRebuildDispatchKernel, [ 1, 1, 1 ] );

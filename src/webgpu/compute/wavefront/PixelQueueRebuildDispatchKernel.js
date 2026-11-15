@@ -8,8 +8,8 @@ import {
 	PIXEL_QUEUE_MIN_SAMPLES, PIXEL_QUEUE_MAX_SAMPLES, PIXEL_QUEUE_SAMPLE_SPLIT,
 } from './structs.js';
 
-// Once slots have popped every entry of the pixel queue, empties it and writes the dispatch size of its rebuild,
-// a thread per pixel in square workgroups. Until then the rebuild is dispatched with no threads.
+// Once the pixel queue is used up, empties it and writes the dispatch size of its rebuild. Otherwise the
+// rebuild is dispatched with no threads.
 export class PixelQueueRebuildDispatchKernel extends ComputeKernel {
 
 	constructor( workgroupSize = 8 ) {
@@ -39,7 +39,7 @@ export class PixelQueueRebuildDispatchKernel extends ComputeKernel {
 
 				if ( isPassComplete ) {
 
-					// the rebuild splits the pixels at the middle of the range the last one recorded, if it queued any
+					// split at the middle of the sample range the last rebuild recorded, if any
 					let minSamples = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_MIN_SAMPLES }u ] );
 					let maxSamples = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_MAX_SAMPLES }u ] );
 					atomicStore( &pixelQueue[ ${ PIXEL_QUEUE_SAMPLE_SPLIT }u ], select( minSamples + maxSamples, 0u, minSamples > maxSamples ) );

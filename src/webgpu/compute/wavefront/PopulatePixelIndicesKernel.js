@@ -7,11 +7,8 @@ import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, PIXEL_QUEUE_FRONT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
 
-// Runs once per reset, after the queue counters are zeroed: starts the path slots in use idle, so LogicKernel
-// skips them and CameraRayKernel pops them a pixel, and fills the pixel queue from the front. With a sample
-// limit, the pixels the camera declines through their center, like the empty texels of a light map atlas, are
-// marked finished instead so no rebuild queues them. Later budget changes are handled by resizing the pool in
-// the render loop.
+// Runs once per reset: starts the path slots in use idle and queues every pixel. With a sample limit, the
+// pixels the camera declines are marked finished instead.
 export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 	constructor( ) {

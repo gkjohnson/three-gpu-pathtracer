@@ -153,11 +153,8 @@ export const QUEUE_COUNTER_COUNT = 2;
 export const MEDIUM_QUEUE_LENGTH = 0;
 export const MEDIUM_QUEUE_HEADER = 1;
 
-// The pixels for free path slots to sample, sized to the pixel count and rebuilt after each pass through it from
-// the pixels that still need samples and aren't being traced. Pixels behind the rest fill it from the front and
-// the others from the back, and slots pop the front before the back. Its counters lead the same u32 array, ahead
-// of the elements: the entries on each side, the pops from each side, the sample count range the rebuild
-// records for the next one, and the "min + max" sum the current one splits the pixels at.
+// Pixels waiting for a free path slot, rebuilt after each pass. Pixels behind the rest fill it from the front
+// and the others from the back. Its counters lead the same u32 array, ahead of the elements.
 export const PIXEL_QUEUE_FRONT_COUNT = 0;
 export const PIXEL_QUEUE_BACK_COUNT = 1;
 export const PIXEL_QUEUE_FRONT_CURSOR = 2;
@@ -167,5 +164,5 @@ export const PIXEL_QUEUE_MAX_SAMPLES = 5;
 export const PIXEL_QUEUE_SAMPLE_SPLIT = 6;
 export const PIXEL_QUEUE_HEADER = 7;
 
-// queue entries a free slot pops looking for a pixel to sample before it waits for the next round
+// queue entries a free slot tries before waiting for the next round
 export const PIXEL_QUEUE_POP_ATTEMPTS = 4;
