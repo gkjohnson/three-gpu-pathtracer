@@ -1,28 +1,35 @@
 import { Vector2 } from 'three';
 import { StorageBufferAttribute } from 'three/webgpu';
-import { uniform, storage, globalId } from 'three/tsl';
+import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rayDataStruct, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
+import { createSampleCountTarget } from '../targets.js';
+import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { rngInit } from '../../nodes/random.wgsl.js';
+import { rayDataStruct, PIXEL_QUEUE_FRONT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
 
-// Runs once per reset: assigns each of the first rayData-pool-count pixels to a path slot and parks
-// the overflow pixel indices in the pixel queue. Slots are initialized so LogicKernel skips them and
-// MaterialKernel immediately generates fresh camera rays. Later budget changes are handled by
-// resizing the pool in the render loop, with ResetSlotsKernel returning retired slots' pixels.
+// Runs once per reset, after the queue counters are zeroed: starts the path slots in use idle, so LogicKernel
+// skips them and CameraRayKernel pops them a pixel, and fills the pixel queue from the front. With a sample
+// limit, the pixels the camera declines through their center, like the empty texels of a light map atlas, are
+// marked finished instead so no rebuild queues them. Later budget changes are handled by resizing the pool in
+// the render loop.
 export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 	constructor( ) {
 
 		const params = {
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
-			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
+			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 			targetDimensions: uniform( new Vector2() ),
 			frameBudget: uniform( 0, 'uint' ),
+			maxSamples: uniform( 0, 'uint' ),
 			globalId: globalId,
 		};
 
+		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
+
 		const fn = wgslTagFn/* wgsl */`
-			fn compute( targetDimensions: vec2u, frameBudget: u32, globalId: vec3u ) -> void {
+			fn compute( targetDimensions: vec2u, frameBudget: u32, maxSamples: u32, globalId: vec3u ) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 				let pixelQueue = &${ params.pixelQueue };
@@ -34,19 +41,9 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 				}
 
 				let rayCount = min( frameBudget, arrayLength( rayDataStorage ) );
-				let pixelCount = targetDimensions.x * targetDimensions.y;
-				if ( globalId.x == 0u && globalId.y == 0u ) {
-
-					pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ] = 0u;
-					pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ] = select( 0u, pixelCount - rayCount, pixelCount >= rayCount );
-
-				}
-
-				let pixelHash = ( globalId.x << 16 ) | globalId.y;
 				let pixelIndex = globalId.x + globalId.y * targetDimensions.x;
 				if ( pixelIndex < rayCount ) {
 
-					rayDataStorage[ pixelIndex ].pixelIndex = pixelHash;
 					rayDataStorage[ pixelIndex ].resultColor = vec4f( 0.0 );
 					rayDataStorage[ pixelIndex ].throughputColor = vec3f( 0.0 );
 					rayDataStorage[ pixelIndex ].hit.objectIndex = - 1;
@@ -54,11 +51,24 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 					rayDataStorage[ pixelIndex ].rayIntersectionIndex = - 1;
 					rayDataStorage[ pixelIndex ].shadowRayIntersectionIndex = - 1;
 
-				} else {
+				}
 
-					pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + pixelIndex - rayCount ] = pixelHash;
+				if ( maxSamples != 0u ) {
+
+					${ rngInit }( 0u, globalId.xy, 0u, 0u );
+					var ray: ${ rayStruct };
+					let center = ( vec2f( globalId.xy ) + 0.5 ) / vec2f( targetDimensions );
+					if ( ! ${ getCameraRayFn }( center, vec2f( targetDimensions ), &ray ) ) {
+
+						textureStore( ${ params.sampleCountTarget }, globalId.xy, vec4( maxSamples ) );
+						return;
+
+					}
 
 				}
+
+				let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_FRONT_COUNT }u ], 1u );
+				atomicStore( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], ( globalId.x << 16 ) | globalId.y );
 
 			}
 		`;

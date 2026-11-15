@@ -10,6 +10,8 @@ import { CameraRayKernel } from './compute/wavefront/CameraRayKernel.js';
 import { CameraMediumKernel } from './compute/wavefront/CameraMediumKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
 import { ResetSlotsKernel } from './compute/wavefront/ResetSlotsKernel.js';
+import { PixelQueueRebuildDispatchKernel } from './compute/wavefront/PixelQueueRebuildDispatchKernel.js';
+import { RebuildPixelQueueKernel } from './compute/wavefront/RebuildPixelQueueKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { CopyBufferKernel } from './compute/CopyBufferKernel.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
@@ -82,7 +84,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// the slots walking a medium this pass
 		this.mediumQueue = null;
 
-		// pixel indices waiting for a free path slot, sized to the resolution
+		// pixel indices for free path slots to sample, sized to the resolution
 		this.pixelQueue = null;
 
 		// reduction target for the per pixel sample counts, read back asynchronously
@@ -109,6 +111,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// pool resizing: carry live slots into a reallocated pool and idle the rest
 		this.resetSlotsKernel = new ResetSlotsKernel().setWorkgroupSize( 64, 1, 1 );
 		this.copyRayDataKernel = new CopyBufferKernel( rayDataStruct ).setWorkgroupSize( 64, 1, 1 );
+
+		// pixel queue rebuild: after each pass through the queue, rebuilds it from the pixels still needing samples
+		this.pixelQueueRebuildDispatchKernel = new PixelQueueRebuildDispatchKernel( 8 ).setWorkgroupSize( 1, 1, 1 );
+		this.rebuildPixelQueueKernel = new RebuildPixelQueueKernel().setWorkgroupSize( 8, 8, 1 );
 
 		// the logic kernel clamps the light it gathers
 		this.logicKernel.context.clampDirect = this.clampDirect;
@@ -146,6 +152,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.subsurfaceKernel.context.bvhData = bvhData;
 		this.cameraRayKernel.context.bvhData = bvhData;
 		this.cameraMediumKernel.context.bvhData = bvhData;
+
+		// the camera ray function marks the pixels the camera declines finished
+		this.populatePixelIndicesKernel.context.bvhData = bvhData;
 		this.rebuild();
 
 	}
@@ -162,6 +171,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.subsurfaceKernel.needsUpdate = true;
 		this.cameraRayKernel.needsUpdate = true;
 		this.cameraMediumKernel.needsUpdate = true;
+		this.populatePixelIndicesKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -175,6 +185,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel.context.random = random;
 		this.subsurfaceKernel.context.random = random;
 		this.cameraMediumKernel.context.random = random;
+		this.populatePixelIndicesKernel.context.random = random;
 		this.rebuild();
 
 	}
@@ -283,6 +294,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayDispatchConverter.outputDispatch.dispose();
 		this.shadowDispatchConverter.outputDispatch.dispose();
 		this.mediumDispatchConverter.outputDispatch.dispose();
+		this.pixelQueueRebuildDispatchKernel.outputDispatch.dispose();
 
 		this.populatePixelIndicesKernel.dispose();
 		this.logicKernel.dispose();
@@ -301,11 +313,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.resetSlotsKernel.dispose();
 		this.copyRayDataKernel.dispose();
 		this.zeroDispatchKernel.dispose();
+		this.pixelQueueRebuildDispatchKernel.dispose();
+		this.rebuildPixelQueueKernel.dispose();
 
 	}
 
-	// The queue holds every pixel not owned by a slot. It is sized to the full pixel count so slots
-	// retired by a shrink can always return theirs.
+	// The queue is sized to the full pixel count, so a rebuild can always hold every pixel
 	_updatePixelQueue( width, height ) {
 
 		const size = PIXEL_QUEUE_HEADER + Math.max( width * height, 1 );
@@ -318,16 +331,17 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			// three rebinds a swapped buffer, so the kernels keep their compiled pipelines
 			this.cameraRayKernel.pixelQueue = this.pixelQueue;
 			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-			this.resetSlotsKernel.pixelQueue = this.pixelQueue;
+			this.pixelQueueRebuildDispatchKernel.pixelQueue = this.pixelQueue;
+			this.rebuildPixelQueueKernel.pixelQueue = this.pixelQueue;
 
 		}
 
 	}
 
 	// Reallocates the per slot buffers to "count" slots. Slots that survive carry their ray data
-	// over, dropped slots return their pixel to the queue, and added slots take one from it. Only
-	// the slots in use, up to the pixel count, hold pixels. The trace queues and results only live
-	// within a frame, so they start empty.
+	// over, dropped slots clear their pixel's active flag, and added slots start idle. Only the
+	// slots in use, up to the pixel count, run. The trace queues and results only live within a
+	// frame, so they start empty.
 	_resizePool( count, pixelCount ) {
 
 		const { resetSlotsKernel, copyRayDataKernel } = this;
@@ -335,7 +349,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const previousActive = Math.min( previousCount, pixelCount );
 		const active = Math.min( count, pixelCount );
 
-		resetSlotsKernel.pixelQueue = this.pixelQueue;
 		resetSlotsKernel.sampleCountTarget = this.sampleCountTarget;
 		if ( active < previousActive ) {
 
@@ -460,6 +473,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			populatePixelIndicesKernel,
 			resetSlotsKernel,
 			copyRayDataKernel,
+			pixelQueueRebuildDispatchKernel,
+			rebuildPixelQueueKernel,
 		} = this;
 
 		// compile the kernels before their first dispatch, including the pool resize's below
@@ -479,6 +494,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			populatePixelIndicesKernel,
 			resetSlotsKernel,
 			copyRayDataKernel,
+			pixelQueueRebuildDispatchKernel,
+			rebuildPixelQueueKernel,
 		] );
 
 		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
@@ -493,14 +510,19 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const pixelCount = targetDimensions.x * targetDimensions.y;
 		this._applyBudget( pixelCount );
 
-		// reset the trace queues — only their lengths need zeroing
+		// reset the trace queues and the pixel queue's counters — only their lengths need zeroing
 		zeroDispatchKernel.target = this.queueCounters;
 		this.dispatch( zeroDispatchKernel, [ QUEUE_COUNTER_COUNT ] );
 
-		// assign every path slot in use a pixel and park the overflow pixels in the pixel queue
+		zeroDispatchKernel.target = this.pixelQueue;
+		this.dispatch( zeroDispatchKernel, [ PIXEL_QUEUE_HEADER ] );
+
+		// start the path slots in use idle and queue every pixel to sample
 		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
+		populatePixelIndicesKernel.sampleCountTarget = this.sampleCountTarget;
 		populatePixelIndicesKernel.frameBudget = Math.min( this.rayCount, pixelCount );
+		populatePixelIndicesKernel.maxSamples = this.maxSamples;
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
 		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
@@ -576,6 +598,18 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				materialKernel.maxBounces = this.maxBounces;
 				materialKernel.maxFogBounces = this.maxFogBounces;
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
+
+				// once the slots have popped the whole pixel queue, rebuild it from the pixels that still need
+				// samples and aren't being traced. The GPU sizes the rebuild, to nothing until then
+				pixelQueueRebuildDispatchKernel.pixelQueue = this.pixelQueue;
+				pixelQueueRebuildDispatchKernel.targetDimensions.copy( targetDimensions );
+				this.dispatch( pixelQueueRebuildDispatchKernel, [ 1, 1, 1 ] );
+
+				rebuildPixelQueueKernel.pixelQueue = this.pixelQueue;
+				rebuildPixelQueueKernel.sampleCountTarget = this.sampleCountTarget;
+				rebuildPixelQueueKernel.maxSamples = this.maxSamples;
+				rebuildPixelQueueKernel.targetDimensions.copy( targetDimensions );
+				this.dispatch( rebuildPixelQueueKernel, pixelQueueRebuildDispatchKernel.outputDispatch );
 
 				// spawn camera rays for the freed slots, then find the volumes they start inside of and queue them
 				// TODO: merge these two kernels, which needs one more storage buffer than the limit allows until the

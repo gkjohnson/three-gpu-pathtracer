@@ -5,12 +5,15 @@ import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
-import { rayDataStruct, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
+import {
+	rayDataStruct, PIXEL_QUEUE_FRONT_COUNT, PIXEL_QUEUE_BACK_COUNT, PIXEL_QUEUE_FRONT_CURSOR, PIXEL_QUEUE_BACK_CURSOR,
+	PIXEL_QUEUE_HEADER, PIXEL_QUEUE_POP_ATTEMPTS,
+} from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 
-// Starts a new path in each slot whose path has ended: recycles the pixel through the overflow queue and writes
-// a fresh camera ray. CameraMediumKernel then finds the ray's medium and queues it.
+// Starts a new path in each slot whose path has ended: pops a pixel from the pixel queue and writes a fresh
+// camera ray. CameraMediumKernel then finds the ray's medium and queues it.
 export class CameraRayKernel extends ComputeKernel {
 
 	constructor( ) {
@@ -62,52 +65,69 @@ export class CameraRayKernel extends ComputeKernel {
 
 				}
 
-				var pixelIndex = input.pixelIndex;
-				let elementCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ] );
-				if ( elementCount > 0u ) {
+				// pop pixels until one takes a sample, from the front of the queue, which holds the pixels behind
+				// the rest, then the back. Popped entries past either side's count are out of range
+				let frontCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_FRONT_COUNT }u ] );
+				let backCount = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_BACK_COUNT }u ] );
+				let pixelCount = targetDimensions.x * targetDimensions.y;
 
-					// TODO: If we've pulled off a pixel that's already finished we currently just
-					// write a no-op ray, wasting a frame. It may be better to iterate over a few
-					// points in the queue to see if we can find one we can use.
-					let queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ], 1u ) % elementCount;
-					pixelIndex = atomicExchange( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ], pixelIndex );
-
-				}
-
-				let indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
-
-				// skip the pixel if it has hit the sample limit
-				let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
-				let samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
-				let isComplete = maxSamples != 0u && samples >= maxSamples;
-
-				if ( isComplete ) {
-
-					rayDataStorage[ index ].pixelIndex = pixelIndex;
-					rayDataStorage[ index ].rayIntersectionIndex = - 1;
-					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
-					return;
-
-				}
-
-				${ rngInit }( globalSeed, indexUV, samples, 0 );
-
-				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
-				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
+				var pixelIndex = 0u;
+				var indexUV = vec2u( 0u );
+				var samples = 0u;
 				var ray: ${ rayStruct };
-				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+				var hasPixel = false;
+				for ( var attempt = 0u; attempt < ${ PIXEL_QUEUE_POP_ATTEMPTS }u; attempt ++ ) {
 
-					// the camera declined the pixel, so leave the slot dormant for this round. With a
-					// sample cap the pixel counts as finished, since it will never take a sample
-					// TODO: same as above - this work is a bit wasteful and leaves slots empty for
-					// a frame. Is it possible to quickly skip rays outside the mask or are finished?
+					var queueIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_FRONT_CURSOR }u ], 1u );
+					if ( queueIndex >= frontCount ) {
+
+						let backIndex = atomicAdd( &pixelQueue[ ${ PIXEL_QUEUE_BACK_CURSOR }u ], 1u );
+						if ( backIndex >= backCount ) {
+
+							break;
+
+						}
+
+						queueIndex = pixelCount - 1u - backIndex;
+
+					}
+
+					pixelIndex = atomicLoad( &pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + queueIndex ] );
+					indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
+
+					// skip the pixel if it has hit the sample limit
+					let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+					samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
+					if ( maxSamples != 0u && samples >= maxSamples ) {
+
+						continue;
+
+					}
+
+					${ rngInit }( globalSeed, indexUV, samples, 0 );
+
+					let uv = vec2f( indexUV ) / vec2f( targetDimensions );
+					let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
+					if ( ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+
+						hasPixel = true;
+						break;
+
+					}
+
+					// the camera declined the pixel. With a sample cap the pixel counts as finished, since it
+					// will never take a sample
 					if ( maxSamples != 0u ) {
 
 						textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ( combinedField & ~${ SAMPLE_COUNT_MASK }u ) | maxSamples ) );
 
 					}
 
-					rayDataStorage[ index ].pixelIndex = pixelIndex;
+				}
+
+				// nothing to sample this round, so the slot stays idle
+				if ( ! hasPixel ) {
+
 					rayDataStorage[ index ].rayIntersectionIndex = - 1;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 					return;
