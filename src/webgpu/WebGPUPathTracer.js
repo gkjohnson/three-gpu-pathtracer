@@ -1281,7 +1281,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		const { scene, _shadingModel, _volumeMeshes } = this;
 		_volumeMeshes.length = 0;
-		scene?.traverse( child => {
+		scene.traverse( child => {
 
 			const materials = Array.isArray( child.material ) ? child.material : [ child.material ];
 			if ( child.isMesh && materials.some( material => _shadingModel.isVolumeMaterial( material ) ) ) {
