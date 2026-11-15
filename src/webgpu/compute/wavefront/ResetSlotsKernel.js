@@ -3,7 +3,7 @@ import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createSampleCountTarget } from '../targets.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rayDataStruct } from './structs.js';
+import { rayDataStruct, NO_PIXEL } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG } from '../../constants.js';
 
 // Prepares a range of path slots when the pool is resized. Slots added by a grow start idle, as
@@ -36,9 +36,9 @@ export class ResetSlotsKernel extends ComputeKernel {
 				if ( addingSlots == 0u ) {
 
 					// the path is discarded, so the pixel is no longer active
-					if ( rayDataStorage[ index ].hit.objectIndex >= 0 ) {
+					let pixelIndex = rayDataStorage[ index ].pixelIndex;
+					if ( pixelIndex != ${ NO_PIXEL }u ) {
 
-						let pixelIndex = rayDataStorage[ index ].pixelIndex;
 						let indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
 						let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
 						textureStore( ${ params.sampleCountTarget }, indexUV, vec4( combinedField & ~${ SAMPLE_ACTIVE_FLAG }u ) );
@@ -47,6 +47,7 @@ export class ResetSlotsKernel extends ComputeKernel {
 
 				} else {
 
+					rayDataStorage[ index ].pixelIndex = ${ NO_PIXEL }u;
 					rayDataStorage[ index ].resultColor = vec4f( 0.0 );
 					rayDataStorage[ index ].throughputColor = vec3f( 0.0 );
 					rayDataStorage[ index ].hit.objectIndex = - 1;

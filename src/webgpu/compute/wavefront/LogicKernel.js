@@ -14,7 +14,7 @@ import {
 } from '../../nodes/random.wgsl.js';
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, NO_PIXEL } from './structs.js';
 import { getMediumSegmentWeightFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
@@ -356,6 +356,7 @@ export class LogicKernel extends ComputeKernel {
 					}
 
 					rayDataStorage[ index ].hit.objectIndex = - 1;
+					rayDataStorage[ index ].pixelIndex = ${ NO_PIXEL }u;
 
 				} else {
 

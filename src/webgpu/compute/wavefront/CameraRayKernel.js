@@ -5,7 +5,7 @@ import { createSampleCountTarget } from '../targets.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
-import { rayDataStruct, pixelQueueInfoStruct, PIXEL_QUEUE_POP_ATTEMPTS } from './structs.js';
+import { rayDataStruct, pixelQueueInfoStruct, PIXEL_QUEUE_POP_ATTEMPTS, NO_PIXEL } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 
@@ -124,6 +124,7 @@ export class CameraRayKernel extends ComputeKernel {
 				// nothing to sample this round, so the slot stays idle
 				if ( ! hasPixel ) {
 
+					rayDataStorage[ index ].pixelIndex = ${ NO_PIXEL }u;
 					rayDataStorage[ index ].rayIntersectionIndex = - 1;
 					rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
 					return;

@@ -168,3 +168,6 @@ export const pixelQueueInfoStruct = new StructTypeNode( {
 
 // queue entries a free slot tries before waiting for the next round
 export const PIXEL_QUEUE_POP_ATTEMPTS = 4;
+
+// the pixel index of an idle path slot
+export const NO_PIXEL = 0xFFFFFFFF;

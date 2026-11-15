@@ -5,7 +5,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { createSampleCountTarget } from '../targets.js';
 import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit } from '../../nodes/random.wgsl.js';
-import { rayDataStruct, pixelQueueInfoStruct } from './structs.js';
+import { rayDataStruct, pixelQueueInfoStruct, NO_PIXEL } from './structs.js';
 
 // Runs once per reset: starts the path slots in use idle and queues every pixel. With a sample limit, the
 // pixels the camera declines are marked finished instead.
@@ -42,6 +42,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 				let pixelIndex = globalId.x + globalId.y * targetDimensions.x;
 				if ( pixelIndex < rayCount ) {
 
+					rayDataStorage[ pixelIndex ].pixelIndex = ${ NO_PIXEL }u;
 					rayDataStorage[ pixelIndex ].resultColor = vec4f( 0.0 );
 					rayDataStorage[ pixelIndex ].throughputColor = vec3f( 0.0 );
 					rayDataStorage[ pixelIndex ].hit.objectIndex = - 1;
