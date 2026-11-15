@@ -3,6 +3,7 @@ import { uniform, PI } from 'three/tsl';
 import { wgslTagFn, rayStruct, ndcToCameraRay } from 'three-mesh-bvh/webgpu';
 import { rand3, RNG_INDEX_APERTURE_SAMPLE } from '../nodes/random.wgsl.js';
 import { PhysicalCamera } from '../../objects/PhysicalCamera.js';
+import { expandByNearPlane } from './nearPlaneBounds.js';
 
 // aperture sampling helpers
 const sampleCircle = wgslTagFn/* wgsl */`
@@ -146,6 +147,14 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
 	};
 
-	return { fn, update };
+	// the near plane, widened by the aperture sample offset
+	const getRayOriginBounds = target => {
+
+		const aperture = this.bokehSize * 0.5 * 1e-3 * Math.max( this.anamorphicRatio, 1 / this.anamorphicRatio );
+		return expandByNearPlane( this, target ).expandByScalar( aperture );
+
+	};
+
+	return { fn, update, getRayOriginBounds };
 
 };
