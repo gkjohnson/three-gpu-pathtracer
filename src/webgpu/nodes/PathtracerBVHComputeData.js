@@ -11,7 +11,6 @@ const _orientedBox = /* @__PURE__ */ new OrientedBox();
 const _normalMatrix = /* @__PURE__ */ new Matrix3();
 const _rayOrigin = /* @__PURE__ */ new Vector3();
 const _rayDirection = /* @__PURE__ */ new Vector3( 0, 0, 1 );
-const _hits = [];
 
 // the nearest hit on either side of a mesh instance's surface, placed by its world matrix
 const _raycaster = /* @__PURE__ */ new Raycaster();
@@ -127,12 +126,11 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			box.getCenter( _rayOrigin ).applyMatrix4( boxToWorld );
 			_raycaster.set( _rayOrigin, _rayDirection );
 			_raycaster.firstHitOnly = true;
-			_hits.length = 0;
-			instanceBVH.raycastObject3D( _raycastTarget, _raycaster, _hits );
-			if ( _hits.length > 0 ) {
+			const hit = instanceBVH.raycastObject3D( _raycastTarget, _raycaster )[ 0 ];
+			if ( hit ) {
 
 				_normalMatrix.getNormalMatrix( _instanceMatrix );
-				if ( _hits[ 0 ].face.normal.applyMatrix3( _normalMatrix ).dot( _rayDirection ) > 0 ) {
+				if ( hit.face.normal.applyMatrix3( _normalMatrix ).dot( _rayDirection ) > 0 ) {
 
 					return true;
 
