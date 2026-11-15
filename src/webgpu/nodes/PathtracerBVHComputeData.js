@@ -10,40 +10,6 @@ const _meshBounds = /* @__PURE__ */ new Box3();
 const _boxToMesh = /* @__PURE__ */ new Matrix4();
 const _ray = /* @__PURE__ */ new Ray();
 
-// Returns whether the mesh's closed volume contains any point of the box, given in the space "boxToWorld" maps to world
-// and as "worldBox" around it in world space. A mesh without a geometry bvh, such as a skinned or instanced one, counts
-// as containing the box when its bounds overlap it
-function meshVolumeContainsBox( mesh, box, boxToWorld, worldBox ) {
-
-	if ( ! _meshBounds.setFromObject( mesh ).intersectsBox( worldBox ) ) {
-
-		return false;
-
-	}
-
-	const bvh = mesh.geometry.boundsTree;
-	if ( ! bvh || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.isBatchedMesh ) {
-
-		return true;
-
-	}
-
-	// the volume's surface passes through the box
-	_boxToMesh.copy( mesh.matrixWorld ).invert().multiply( boxToWorld );
-	if ( bvh.intersectsBox( box, _boxToMesh ) ) {
-
-		return true;
-
-	}
-
-	// otherwise the box is all inside or all outside: from inside, the nearest hit is a back face
-	box.getCenter( _ray.origin ).applyMatrix4( _boxToMesh );
-	_ray.direction.set( 0, 0, 1 );
-	const hit = bvh.raycastFirst( _ray, DoubleSide );
-	return hit !== null && hit.face.normal.dot( _ray.direction ) > 0;
-
-}
-
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -101,51 +67,47 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.structs.transform = transformStruct;
 		this.bvhMap = new Map();
 
-		// the meshes with a volume material
-		this.volumeMeshes = [];
-
 	}
 
 	/**
-	 * Returns whether any of the scene's closed volumes contains a point of the box, given in the space the matrix
-	 * maps to world.
+	 * Returns whether the box intersects the mesh's closed volume, crossing its surface or inside of it. The box is in
+	 * the space the matrix maps to world. A mesh without a geometry bvh, such as a skinned or instanced one, counts as
+	 * intersecting when its bounds overlap the box.
 	 *
 	 * @param {Box3} box
 	 * @param {Matrix4} boxToWorld
+	 * @param {Mesh} mesh
 	 * @returns {boolean}
 	 */
-	volumesContainBox( box, boxToWorld ) {
+	boxIntersectsMesh( box, boxToWorld, mesh ) {
 
 		_worldBox.copy( box ).applyMatrix4( boxToWorld );
-		for ( const mesh of this.volumeMeshes ) {
+		if ( ! _meshBounds.setFromObject( mesh ).intersectsBox( _worldBox ) ) {
 
-			if ( meshVolumeContainsBox( mesh, box, boxToWorld, _worldBox ) ) {
-
-				return true;
-
-			}
+			return false;
 
 		}
 
-		return false;
+		const bvh = mesh.geometry.boundsTree;
+		if ( ! bvh || mesh.isSkinnedMesh || mesh.isInstancedMesh || mesh.isBatchedMesh ) {
 
-	}
-
-	// Collects the meshes with a volume material
-	_updateVolumeMeshes() {
-
-		const { bvh, shadingModel, volumeMeshes } = this;
-		volumeMeshes.length = 0;
-		for ( const object of bvh.objects ) {
-
-			const materials = Array.isArray( object.material ) ? object.material : [ object.material ];
-			if ( materials.some( material => shadingModel.isVolumeMaterial( material ) ) ) {
-
-				volumeMeshes.push( object );
-
-			}
+			return true;
 
 		}
+
+		// the mesh's surface passes through the box
+		_boxToMesh.copy( mesh.matrixWorld ).invert().multiply( boxToWorld );
+		if ( bvh.intersectsBox( box, _boxToMesh ) ) {
+
+			return true;
+
+		}
+
+		// otherwise the box is all inside or all outside: from inside, the nearest hit is a back face
+		box.getCenter( _ray.origin ).applyMatrix4( _boxToMesh );
+		_ray.direction.set( 0, 0, 1 );
+		const hit = bvh.raycastFirst( _ray, DoubleSide );
+		return hit !== null && hit.face.normal.dot( _ray.direction ) > 0;
 
 	}
 
@@ -726,7 +688,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		this.bvhMap.clear();
 		this.useTransparencyRaycastFn();
-		this._updateVolumeMeshes();
 
 	}
 
@@ -747,7 +708,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		} );
 		transformsStorage.value.needsUpdate = true;
-		this._updateVolumeMeshes();
 
 	}
 

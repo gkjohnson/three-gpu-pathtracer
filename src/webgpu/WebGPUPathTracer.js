@@ -1280,17 +1280,35 @@ export class WebGPUPathTracer extends EventDispatcher {
 	// from, as in Cycles' "is_inside_volume". Otherwise the rays skip finding the volumes around them
 	_updateCameraInVolume() {
 
-		const { _cameraRayFnHandle, _bvhData, _pathTracer } = this;
-		if ( _cameraRayFnHandle.getRayOriginBounds ) {
+		const { _cameraRayFnHandle, _bvhData, _shadingModel, _pathTracer, scene } = this;
+
+		// cameras that can't bound their ray origins count as inside of any volume
+		const hasOriginBounds = Boolean( _cameraRayFnHandle.getRayOriginBounds );
+		if ( hasOriginBounds ) {
 
 			_cameraRayFnHandle.getRayOriginBounds( _originBounds.makeEmpty(), _originToWorld );
-			_pathTracer.cameraInVolume = _bvhData.volumesContainBox( _originBounds, _originToWorld );
-
-		} else {
-
-			_pathTracer.cameraInVolume = _bvhData.volumeMeshes.length > 0;
 
 		}
+
+		let cameraInVolume = false;
+		scene.traverse( child => {
+
+			if ( cameraInVolume || ! child.isMesh ) {
+
+				return;
+
+			}
+
+			const materials = Array.isArray( child.material ) ? child.material : [ child.material ];
+			if ( materials.some( material => _shadingModel.isVolumeMaterial( material ) ) ) {
+
+				cameraInVolume = ! hasOriginBounds || _bvhData.boxIntersectsMesh( _originBounds, _originToWorld, child );
+
+			}
+
+		} );
+
+		_pathTracer.cameraInVolume = cameraInVolume;
 
 	}
 
