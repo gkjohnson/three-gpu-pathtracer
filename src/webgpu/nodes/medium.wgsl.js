@@ -244,7 +244,7 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 
 			}
 
-			let material = ${ materialsStorage }[ ids[ i ] ];
+			let material = &${ materialsStorage }[ ids[ i ] ];
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 			let entryExtinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
 
