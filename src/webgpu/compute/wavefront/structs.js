@@ -154,7 +154,7 @@ export const MEDIUM_QUEUE_LENGTH = 0;
 export const MEDIUM_QUEUE_HEADER = 1;
 
 // The counters of the pixel queue, which is rebuilt after each pass. Pixels behind the rest fill it from the
-// front and the others from the back. "sampleSplit" is the "min + max" of the last rebuild's sample range.
+// front and the others from the back, split at the midpoint of the last rebuild's sample count range.
 // TODO: merge into the pixel queue buffer once three can bind a struct ending in a runtime-sized array
 export const pixelQueueInfoStruct = new StructTypeNode( {
 	frontCount: { type: 'uint', atomic: true },
@@ -163,7 +163,7 @@ export const pixelQueueInfoStruct = new StructTypeNode( {
 	backCursor: { type: 'uint', atomic: true },
 	minSamples: { type: 'uint', atomic: true },
 	maxSamples: { type: 'uint', atomic: true },
-	sampleSplit: { type: 'uint', atomic: true },
+	sampleCountMidpoint: { type: 'uint', atomic: true },
 }, 'PixelQueueInfo' );
 
 // queue entries a free slot tries before waiting for the next round

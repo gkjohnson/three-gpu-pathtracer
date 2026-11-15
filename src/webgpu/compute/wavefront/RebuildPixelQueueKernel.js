@@ -42,7 +42,7 @@ export class RebuildPixelQueueKernel extends ComputeKernel {
 				}
 
 				var queueIndex: u32;
-				if ( 2u * samples <= atomicLoad( &${ params.pixelQueueInfo }[ 0 ].sampleSplit ) ) {
+				if ( samples <= atomicLoad( &${ params.pixelQueueInfo }[ 0 ].sampleCountMidpoint ) ) {
 
 					queueIndex = atomicAdd( &${ params.pixelQueueInfo }[ 0 ].frontCount, 1u );
 

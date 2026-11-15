@@ -38,7 +38,7 @@ export class PixelQueueRebuildDispatchKernel extends ComputeKernel {
 					// split at the middle of the sample range the last rebuild recorded, if any
 					let minSamples = atomicLoad( &${ params.pixelQueueInfo }[ 0 ].minSamples );
 					let maxSamples = atomicLoad( &${ params.pixelQueueInfo }[ 0 ].maxSamples );
-					atomicStore( &${ params.pixelQueueInfo }[ 0 ].sampleSplit, select( minSamples + maxSamples, 0u, minSamples > maxSamples ) );
+					atomicStore( &${ params.pixelQueueInfo }[ 0 ].sampleCountMidpoint, select( ( minSamples + maxSamples ) / 2u, 0u, minSamples > maxSamples ) );
 
 					atomicStore( &${ params.pixelQueueInfo }[ 0 ].frontCount, 0u );
 					atomicStore( &${ params.pixelQueueInfo }[ 0 ].backCount, 0u );
