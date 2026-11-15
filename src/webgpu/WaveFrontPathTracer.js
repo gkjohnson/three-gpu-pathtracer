@@ -336,6 +336,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const active = Math.min( count, pixelCount );
 
 		resetSlotsKernel.pixelQueue = this.pixelQueue;
+		resetSlotsKernel.sampleCountTarget = this.sampleCountTarget;
 		if ( active < previousActive ) {
 
 			resetSlotsKernel.rayDataStorage = this.rayDataStorage;
