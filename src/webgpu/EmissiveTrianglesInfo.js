@@ -1,5 +1,5 @@
 import { texture, uniform } from 'three/tsl';
-import { Matrix4, Vector3, RGBAFormat, RGIntegerFormat, RGBAIntegerFormat, FloatType, UnsignedIntType, BackSide, DoubleSide } from 'three/webgpu';
+import { Matrix4, Vector3, RGBAFormat, RGIntegerFormat, RGBAIntegerFormat, FloatType, UnsignedIntType } from 'three/webgpu';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { LinearDataTexture } from './LinearDataTexture.js';
 import { lightRecordStruct } from './nodes/structs.wgsl.js';
@@ -9,14 +9,13 @@ import { EMISSIVE_TRIANGLE_LIGHT_TYPE } from './nodes/lights.wgsl.js';
 const TRANSFORM_VISIBLE_WORD = 32;
 const TRANSFORM_MATERIAL_WORD = 33;
 
-// The floats of a light tree node, three texels:
+// The floats of a light tree node, two texels:
 // - its bounds' min and its power
-// - its bounds' max and the cosine of its emission cone's spread, -1 when it emits in every direction
-// - its emission cone's axis, and its second child's node index, or -( triangle index + 1 ) for a leaf
+// - its bounds' max and its second child's node index, or -( triangle index + 1 ) for a leaf
 // The first child follows its node. Indices are stored as floats, exact up to 2^24
-const NODE_FLOATS = 12;
+const NODE_FLOATS = 8;
 
-// the smallest squared distance the importance measures the direction to a node with
+// the smallest squared distance the importance divides a node's power by
 const IMPORTANCE_DISTANCE_EPSILON = 1e-20;
 
 const _matrix = /* @__PURE__ */ new Matrix4();
@@ -25,63 +24,13 @@ const _b = /* @__PURE__ */ new Vector3();
 const _c = /* @__PURE__ */ new Vector3();
 const _edge1 = /* @__PURE__ */ new Vector3();
 const _edge2 = /* @__PURE__ */ new Vector3();
-const _axis = /* @__PURE__ */ new Vector3();
-const _otherAxis = /* @__PURE__ */ new Vector3();
-const _rotationAxis = /* @__PURE__ */ new Vector3();
-
-// Grows the cone around "axis" with spread cosine "cos" to also hold the other cone, writing the new axis to "axis"
-// and returning the new spread cosine. See DirectionCone's Union in pbrt-v4
-function unionCone( axis, cos, otherAxis, otherCos ) {
-
-	if ( cos <= - 1 || otherCos <= - 1 ) {
-
-		return - 1;
-
-	}
-
-	const theta = Math.acos( Math.min( cos, 1 ) );
-	const otherTheta = Math.acos( Math.min( otherCos, 1 ) );
-	const between = axis.angleTo( otherAxis );
-
-	// one cone already holds the other
-	if ( Math.min( between + otherTheta, Math.PI ) <= theta ) {
-
-		return cos;
-
-	}
-
-	if ( Math.min( between + theta, Math.PI ) <= otherTheta ) {
-
-		axis.copy( otherAxis );
-		return otherCos;
-
-	}
-
-	// the smallest cone around both, its axis rotated from this one's toward the other's
-	const spread = ( theta + between + otherTheta ) / 2;
-	if ( spread >= Math.PI ) {
-
-		return - 1;
-
-	}
-
-	_rotationAxis.crossVectors( axis, otherAxis );
-	if ( _rotationAxis.lengthSq() === 0 ) {
-
-		return - 1;
-
-	}
-
-	axis.applyAxisAngle( _rotationAxis.normalize(), spread - theta );
-	return Math.cos( spread );
-
-}
+const _cross = /* @__PURE__ */ new Vector3();
 
 // The scene's emissive triangles, sampled as a light. A light tree picks a triangle for a point: each node holds
-// the bounds, total power and emission directions of the triangles under it, and the walk from the root picks
-// each child by how much light it could send to the point, see LightBounds in pbrt-v4. Emissive maps color the
-// sampled point but don't change which triangle is picked. Three textures hold the triangles:
-// - "emissiveTree": the tree's nodes, three texels each, one leaf per triangle.
+// the bounds and total power of the triangles under it, and the walk from the root picks each child by its power
+// over its squared distance to the point, see LightBounds in pbrt-v4. Emissive maps color the sampled point but don't
+// change which triangle is picked. Three textures hold the triangles:
+// - "emissiveTree": the tree's nodes, two texels each, one leaf per triangle.
 // - "emissiveTriangles": each triangle's object index, triangle index, leaf node and area.
 // - "emissiveObjects": each object's first triangle in that list and its first triangle in the bvh, to find a
 //   hit triangle's leaf.
@@ -149,24 +98,14 @@ export class EmissiveTrianglesInfo {
 				_a.fromArray( attributes, index[ t * 3 ] * attributeStride + positionOffset ).applyMatrix4( _matrix );
 				_b.fromArray( attributes, index[ t * 3 + 1 ] * attributeStride + positionOffset ).applyMatrix4( _matrix );
 				_c.fromArray( attributes, index[ t * 3 + 2 ] * attributeStride + positionOffset ).applyMatrix4( _matrix );
-				_axis.crossVectors( _edge1.subVectors( _b, _a ), _edge2.subVectors( _c, _a ) );
-				const area = 0.5 * _axis.length();
-
-				// a single sided triangle emits around its normal, flipped for the back side
-				const cone = material.side === DoubleSide || area === 0 ? - 1 : 1;
-				_axis.normalize();
-				if ( material.side === BackSide ) {
-
-					_axis.negate();
-
-				}
+				_cross.crossVectors( _edge1.subVectors( _b, _a ), _edge2.subVectors( _c, _a ) );
+				const area = 0.5 * _cross.length();
 
 				// the triangle's leaf node, in the node layout
 				const triangleIndex = areas.length;
 				leafNodes.push(
 					Math.min( _a.x, _b.x, _c.x ), Math.min( _a.y, _b.y, _c.y ), Math.min( _a.z, _b.z, _c.z ), area * luminance,
-					Math.max( _a.x, _b.x, _c.x ), Math.max( _a.y, _b.y, _c.y ), Math.max( _a.z, _b.z, _c.z ), cone,
-					_axis.x || 0, _axis.y || 0, _axis.z || 1, - ( triangleIndex + 1 ),
+					Math.max( _a.x, _b.x, _c.x ), Math.max( _a.y, _b.y, _c.y ), Math.max( _a.z, _b.z, _c.z ), - ( triangleIndex + 1 ),
 				);
 				triangles.push( objectIndex, t );
 				areas.push( area );
@@ -285,7 +224,7 @@ export class EmissiveTrianglesInfo {
 			const second = nodeCount;
 			build( split, end );
 
-			// the node holds both children: their bounds, total power and a cone around both their cones
+			// the node holds both children: their bounds and total power
 			const firstBase = base + NODE_FLOATS;
 			const secondBase = second * NODE_FLOATS;
 			for ( let k = 0; k < 3; k ++ ) {
@@ -296,14 +235,7 @@ export class EmissiveTrianglesInfo {
 			}
 
 			nodes[ base + 3 ] = nodes[ firstBase + 3 ] + nodes[ secondBase + 3 ];
-
-			_axis.fromArray( nodes, firstBase + 8 );
-			_otherAxis.fromArray( nodes, secondBase + 8 );
-			nodes[ base + 7 ] = unionCone( _axis, nodes[ firstBase + 7 ], _otherAxis, nodes[ secondBase + 7 ] );
-			nodes[ base + 8 ] = _axis.x;
-			nodes[ base + 9 ] = _axis.y;
-			nodes[ base + 10 ] = _axis.z;
-			nodes[ base + 11 ] = second;
+			nodes[ base + 7 ] = second;
 
 		};
 
@@ -327,72 +259,32 @@ export class EmissiveTrianglesInfo {
 		const getUvFromChannel = contextProxyFn( 'bvhData.fns.getUvFromChannel' );
 		const sampleTexel = contextProxyFn( 'shadingModel.fns.sampleTexel' );
 
-		// texel "texel", 0 to 2, of node "node"
+		// texel "texel", 0 or 1, of node "node"
 		const readNodeFn = wgslTagFn/* wgsl */`
 			fn readEmissiveNode( node: u32, texel: u32 ) -> vec4f {
 
-				let i = node * 3u + texel;
+				let i = node * 2u + texel;
 				let width = textureDimensions( ${ treeTextureNode } ).x;
 				return textureLoad( ${ treeTextureNode }, vec2u( i % width, i / width ), 0 );
 
 			}
 		`;
 
-		// The cosine of angle "a" less angle "b", given their sines and cosines, one when "b" is the larger
-		const cosSubClampedFn = wgslTagFn/* wgsl */`
-			fn cosSubClamped( sinA: f32, cosA: f32, sinB: f32, cosB: f32 ) -> f32 {
-
-				return select( cosA * cosB + sinA * sinB, 1.0, cosA > cosB );
-
-			}
-		`;
-
-		// How much light a node could send to "position": its power over the squared distance to its center, at least
-		// its radius, times the cosine of the smallest angle between the directions it emits to and the direction to
-		// the position. See LightBounds::Importance() in pbrt-v4
+		// How much light a node could send to "position": its power over the squared distance to its center, held at
+		// least its radius squared so positions near or inside it don't dominate. See LightBounds::Importance() in pbrt-v4
 		const getImportanceFn = wgslTagFn/* wgsl */`
 			fn getEmissiveNodeImportance( node: u32, position: vec3f ) -> f32 {
 
 				let boundsMinPower = ${ readNodeFn }( node, 0u );
-				let boundsMaxCos = ${ readNodeFn }( node, 1u );
-				let axis = ${ readNodeFn }( node, 2u ).xyz;
+				let boundsMaxLink = ${ readNodeFn }( node, 1u );
 				let boundsMin = boundsMinPower.xyz;
-				let boundsMax = boundsMaxCos.xyz;
+				let boundsMax = boundsMaxLink.xyz;
 				let power = boundsMinPower.w;
-				let cosEmit = boundsMaxCos.w;
 
-				let center = ( boundsMin + boundsMax ) * 0.5;
-				let offset = position - center;
+				let offset = position - ( boundsMin + boundsMax ) * 0.5;
 				let distSq = dot( offset, offset );
 				let radiusSq = dot( boundsMax - boundsMin, boundsMax - boundsMin ) * 0.25;
-				let toPosition = offset * inverseSqrt( max( distSq, ${ IMPORTANCE_DISTANCE_EPSILON } ) );
-
-				// the angle the bounds cover as seen from the position, all of it from inside them
-				var cosBounds = - 1.0;
-				if ( distSq > radiusSq ) {
-
-					cosBounds = sqrt( 1.0 - radiusSq / distSq );
-
-				}
-
-				let sinBounds = sqrt( max( 1.0 - cosBounds * cosBounds, 0.0 ) );
-
-				// the angle from the cone's axis to the position, less the cone's spread and the bounds' angle
-				let cosToPosition = dot( axis, toPosition );
-				let sinToPosition = sqrt( max( 1.0 - cosToPosition * cosToPosition, 0.0 ) );
-				let sinEmit = sqrt( max( 1.0 - cosEmit * cosEmit, 0.0 ) );
-				let cosAngle = ${ cosSubClampedFn }( sinToPosition, cosToPosition, sinEmit, cosEmit );
-				let sinAngle = select( sinToPosition * cosEmit - cosToPosition * sinEmit, 0.0, cosToPosition > cosEmit );
-				let cosClosest = ${ cosSubClampedFn }( sinAngle, cosAngle, sinBounds, cosBounds );
-
-				// the triangles emit over the hemisphere around their normal
-				if ( cosClosest <= 0.0 ) {
-
-					return 0.0;
-
-				}
-
-				return power * cosClosest / max( distSq, radiusSq );
+				return power / max( max( distSq, radiusSq ), ${ IMPORTANCE_DISTANCE_EPSILON } );
 
 			}
 		`;
@@ -427,7 +319,7 @@ export class EmissiveTrianglesInfo {
 				var node = 0u;
 				var pickPdf = 1.0;
 				var r = ruv.x;
-				var link = ${ readNodeFn }( 0u, 2u ).w;
+				var link = ${ readNodeFn }( 0u, 1u ).w;
 				while ( link >= 0.0 ) {
 
 					let secondChild = u32( link );
@@ -452,7 +344,7 @@ export class EmissiveTrianglesInfo {
 
 					}
 
-					link = ${ readNodeFn }( node, 2u ).w;
+					link = ${ readNodeFn }( node, 1u ).w;
 
 				}
 
@@ -559,7 +451,7 @@ export class EmissiveTrianglesInfo {
 				var pickPdf = 1.0;
 				while ( node != leaf ) {
 
-					let secondChild = u32( ${ readNodeFn }( node, 2u ).w );
+					let secondChild = u32( ${ readNodeFn }( node, 1u ).w );
 					let firstChance = ${ getFirstChildChanceFn }( node, secondChild, origin );
 					if ( firstChance < 0.0 ) {
 
