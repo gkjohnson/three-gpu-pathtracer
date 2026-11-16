@@ -34,6 +34,9 @@ const rayDataMembers = {
 	lightEmission: 'vec3f',
 	lightDist: 'float',
 
+	// where the light was sampled from, to aim the shadow ray
+	lightOrigin: 'vec3f',
+
 	lightEvalColor: 'vec3f',
 	lightEvalPdf: 'float',
 

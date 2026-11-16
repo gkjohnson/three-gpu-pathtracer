@@ -12,7 +12,7 @@ import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sam
 import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
-import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
+import { aimShadowRayFn } from '../../nodes/lights.wgsl.js';
 import { isAuxSurfaceFn } from '../../nodes/auxiliary.wgsl.js';
 
 // Pure material evaluation: live slots evaluate the vertex staged by LogicKernel, a surface or a scatter event in
@@ -50,13 +50,14 @@ export class MaterialKernel extends ComputeKernel {
 		const queueShadowRayFn = wgslTagFn/* wgsl */`
 			fn queueShadowRay( input: ${ rayDataStruct }, origin: vec3f, stack: ${ mediumStackStruct } ) -> i32 {
 
+				let aimed = ${ aimShadowRayFn }( input.lightOrigin, input.lightDirection, input.lightDist, origin );
 				var queuedRay: ${ traceQueuedRayStruct };
 				queuedRay.origin = origin;
-				queuedRay.direction = input.lightDirection;
+				queuedRay.direction = aimed.xyz;
 				queuedRay.pixelIndex = input.pixelIndex;
 				queuedRay.rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
 				queuedRay.sampleIndex = input.sampleIndex;
-				queuedRay.maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
+				queuedRay.maxDist = aimed.w;
 				queuedRay.mediumDepth = ${ getShadowMediumDepthFn }( stack, queuedRay.maxDist );
 
 				let shadowIndex = atomicAdd( &${ params.queueCounters }[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );

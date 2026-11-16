@@ -13,7 +13,7 @@ import {
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
-import { LIGHT_FAR_DISTANCE, LIGHT_EPSILON } from '../nodes/lights.wgsl.js';
+import { LIGHT_FAR_DISTANCE, aimShadowRayFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
@@ -90,7 +90,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		// shadow ray the wavefront queues, traces and resolves, starting at the origin in the given media
 		const getLightContributionFn = wgslTagFn/* wgsl */`
 			fn getLightContribution(
-				lightRec: ${ lightRecordStruct }, evalColor: vec3f, evalPdf: f32, origin: vec3f, stack: ${ mediumStackStruct },
+				lightRec: ${ lightRecordStruct }, evalColor: vec3f, evalPdf: f32, position: vec3f, origin: vec3f, stack: ${ mediumStackStruct },
 				throughput: vec3f, bounce: u32, maxBounces: u32,
 			) -> vec3f {
 
@@ -101,10 +101,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				// the shadow ray toward the light, up to the light distance
+				let aimed = ${ aimShadowRayFn }( position, lightRec.direction, lightRec.dist, origin );
 				var shadowRay: ${ rayStruct };
 				shadowRay.origin = origin;
-				shadowRay.direction = lightRec.direction;
-				shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
+				shadowRay.direction = aimed.xyz;
+				shadowRay.maxDist = aimed.w;
 				let mediumDepth = ${ getShadowMediumDepthFn }( stack, shadowRay.maxDist );
 
 				// opaque occlusion, and the light let through by the partially transparent surfaces and the volumes passed
@@ -626,7 +627,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// the vertex's light sample and emission, with the pre-scatter throughput, clamped at the segment's depth
 					if ( lightRec.pdf > 0.0 ) {
 
-						let directLight = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
+						let directLight = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, position, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
 						resultColor += vec4f( directLight, 0.0 );
 
 					}
