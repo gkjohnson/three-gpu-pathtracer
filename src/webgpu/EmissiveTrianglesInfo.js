@@ -115,7 +115,7 @@ export class EmissiveTrianglesInfo {
 		} );
 
 		const count = areas.length;
-		const { nodes, leaves } = this._buildTree( count, new Float32Array( leafNodes ) );
+		const { nodes, leafIndices } = this._buildTree( count, new Float32Array( leafNodes ) );
 
 		// each triangle's object index, triangle index, leaf node and area bits
 		const triangleData = new Uint32Array( Math.max( count, 1 ) * 4 );
@@ -124,7 +124,7 @@ export class EmissiveTrianglesInfo {
 
 			triangleData[ i * 4 ] = triangles[ i * 2 ];
 			triangleData[ i * 4 + 1 ] = triangles[ i * 2 + 1 ];
-			triangleData[ i * 4 + 2 ] = leaves[ i ];
+			triangleData[ i * 4 + 2 ] = leafIndices[ i ];
 			triangleData[ i * 4 + 3 ] = areaBits[ i ];
 
 		}
@@ -147,7 +147,7 @@ export class EmissiveTrianglesInfo {
 	_buildTree( count, leafNodes ) {
 
 		const nodes = new Float32Array( Math.max( 2 * count - 1, 1 ) * NODE_FLOATS );
-		const leaves = new Uint32Array( count );
+		const leafIndices = new Uint32Array( count );
 		const order = new Uint32Array( count );
 		for ( let i = 0; i < count; i ++ ) {
 
@@ -167,7 +167,7 @@ export class EmissiveTrianglesInfo {
 
 				const i = order[ start ];
 				nodes.set( leafNodes.subarray( i * NODE_FLOATS, ( i + 1 ) * NODE_FLOATS ), base );
-				leaves[ i ] = node;
+				leafIndices[ i ] = node;
 				return;
 
 			}
@@ -245,7 +245,7 @@ export class EmissiveTrianglesInfo {
 
 		}
 
-		return { nodes, leaves };
+		return { nodes, leafIndices };
 
 	}
 
@@ -270,8 +270,19 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
+		// the info of triangle "listIndex" in the list: its object index, triangle index, leaf node and area bits
+		const readTriangleInfoFn = wgslTagFn/* wgsl */`
+			fn readEmissiveTriangleInfo( listIndex: u32 ) -> vec4u {
+
+				let width = textureDimensions( ${ trianglesTextureNode } ).x;
+				return textureLoad( ${ trianglesTextureNode }, vec2u( listIndex % width, listIndex / width ), 0 );
+
+			}
+		`;
+
 		// How much light a node could send to "position": its power over the squared distance to its center, held at
-		// least its radius squared so positions near or inside it don't dominate. See LightBounds::Importance() in pbrt-v4
+		// least its radius squared so positions near or inside it don't dominate. See LightBounds::Importance() in
+		// pbrt-v4
 		const getImportanceFn = wgslTagFn/* wgsl */`
 			fn getEmissiveNodeImportance( node: u32, position: vec3f ) -> f32 {
 
@@ -349,15 +360,16 @@ export class EmissiveTrianglesInfo {
 				}
 
 				// the picked triangle's object, material and world space vertices
-				let entry = u32( - link - 1.0 );
-				let width = textureDimensions( ${ trianglesTextureNode } ).x;
-				let ids = textureLoad( ${ trianglesTextureNode }, vec2u( entry % width, entry / width ), 0 );
-				let objectInfo = &${ transformsStorage }[ ids.x ];
+				let triangleInfo = ${ readTriangleInfoFn }( u32( - link - 1.0 ) );
+				let objectIndex = triangleInfo.x;
+				let triangleIndex = triangleInfo.y;
+				let area = bitcast<f32>( triangleInfo.w );
+				let objectInfo = &${ transformsStorage }[ objectIndex ];
 				let materialInfo = &${ materialsStorage }[ objectInfo.materialIndex ];
 
-				let i0 = ${ indexStorage }[ ids.y * 3u ];
-				let i1 = ${ indexStorage }[ ids.y * 3u + 1u ];
-				let i2 = ${ indexStorage }[ ids.y * 3u + 2u ];
+				let i0 = ${ indexStorage }[ triangleIndex * 3u ];
+				let i1 = ${ indexStorage }[ triangleIndex * 3u + 1u ];
+				let i2 = ${ indexStorage }[ triangleIndex * 3u + 2u ];
 				let p0 = ( objectInfo.matrixWorld * vec4f( ${ attributesStorage }[ i0 ].position.xyz, 1.0 ) ).xyz;
 				let p1 = ( objectInfo.matrixWorld * vec4f( ${ attributesStorage }[ i1 ].position.xyz, 1.0 ) ).xyz;
 				let p2 = ( objectInfo.matrixWorld * vec4f( ${ attributesStorage }[ i2 ].position.xyz, 1.0 ) ).xyz;
@@ -377,7 +389,6 @@ export class EmissiveTrianglesInfo {
 				// whether the side facing "position" emits: front, back or both, by the material's side
 				let cosLight = - dot( triangleNormal, direction );
 				let facing = select( cosLight * materialInfo.side, abs( cosLight ), materialInfo.side == 0.0 );
-				let area = bitcast<f32>( ids.w );
 				if ( distSq <= 0.0 || facing <= 0.0 || area <= 0.0 ) {
 
 					return lightRec;
@@ -421,20 +432,21 @@ export class EmissiveTrianglesInfo {
 
 				}
 
-				// the triangle's place in the list, from its object's first triangle
+				// the triangle's place in the list, from where its object's triangles start in the list, plus one, and in
+				// the bvh
 				let objectsWidth = textureDimensions( ${ objectsTextureNode } ).x;
-				let objectEntry = textureLoad( ${ objectsTextureNode }, vec2u( objectIndex % objectsWidth, objectIndex / objectsWidth ), 0 ).xy;
-				if ( objectEntry.x == 0u ) {
+				let objectRange = textureLoad( ${ objectsTextureNode }, vec2u( objectIndex % objectsWidth, objectIndex / objectsWidth ), 0 ).xy;
+				let firstInList = objectRange.x;
+				let firstInBvh = objectRange.y;
+				if ( firstInList == 0u ) {
 
 					return 0.0;
 
 				}
 
-				let entry = objectEntry.x - 1u + triangleIndex - objectEntry.y;
-				let width = textureDimensions( ${ trianglesTextureNode } ).x;
-				let ids = textureLoad( ${ trianglesTextureNode }, vec2u( entry % width, entry / width ), 0 );
-				let leaf = ids.z;
-				let area = bitcast<f32>( ids.w );
+				let triangleInfo = ${ readTriangleInfoFn }( firstInList - 1u + triangleIndex - firstInBvh );
+				let leaf = triangleInfo.z;
+				let area = bitcast<f32>( triangleInfo.w );
 
 				let toHit = position - origin;
 				let distSq = dot( toHit, toHit );
