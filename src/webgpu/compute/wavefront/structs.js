@@ -127,6 +127,7 @@ export const intersectionResultStruct = new StructTypeNode( {
 	side: 'float',
 
 	indices: 'vec3u',
+	triangleIndex: 'uint',
 
 }, 'TraceResult' );
 

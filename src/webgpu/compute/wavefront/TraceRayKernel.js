@@ -55,6 +55,7 @@ export class TraceRayKernel extends ComputeKernel {
 					rayIntersectionsStorage[ index ].normal = hitResult.normal.xyz;
 					rayIntersectionsStorage[ index ].side = hitResult.side;
 					rayIntersectionsStorage[ index ].indices = hitResult.indices.xyz;
+					rayIntersectionsStorage[ index ].triangleIndex = hitResult.indices.w;
 
 				} else {
 
