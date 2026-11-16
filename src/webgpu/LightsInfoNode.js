@@ -26,9 +26,8 @@ import {
 	isMISWeightLightFn,
 } from './nodes/lights.wgsl.js';
 
-// the share of light samples given to the emissive triangles when there are other lights to sample, so many
-// emissive triangles don't crowd out the rest, as in vk_gltf_renderer
-const EMISSIVE_TRIANGLES_SHARE = 0.5;
+// the smallest total weight the emissive triangles' share of light samples divides by
+const EMISSIVE_SHARE_EPSILON = 1e-20;
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
 
@@ -189,10 +188,10 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// The share of light samples the emissive triangles take, given the lights' and environment's total weight at
-		// the position: a fixed share, all of them where nothing else lights the position, and none without any
+		// The share of light samples the emissive triangles take at the position: their estimated light there, the
+		// light tree root's importance, against the lights' and environment's total weight "lightsWeight"
 		this.getEmissiveShare = wgslTagFn/* wgsl */`
-			fn getEmissiveShare( lightsWeight: f32 ) -> f32 {
+			fn getEmissiveShare( position: vec3f, lightsWeight: f32 ) -> f32 {
 
 				if ( ${ emissiveTriangles.countNode } == 0u ) {
 
@@ -200,7 +199,8 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
-				return select( ${ EMISSIVE_TRIANGLES_SHARE }, 1.0, lightsWeight <= 0.0 );
+				let emissiveWeight = ${ emissiveTriangles.getImportance }( 0u, position );
+				return emissiveWeight / max( emissiveWeight + lightsWeight, ${ EMISSIVE_SHARE_EPSILON } );
 
 			}
 		`;
@@ -218,7 +218,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				}
 
 				let lightsWeight = ${ this.getLightsWeight }( position );
-				return ${ envInfo.getDirPdf }( direction ) * envWeight / lightsWeight * ( 1.0 - ${ this.getEmissiveShare }( lightsWeight ) );
+				return ${ envInfo.getDirPdf }( direction ) * envWeight / lightsWeight * ( 1.0 - ${ this.getEmissiveShare }( position, lightsWeight ) );
 
 			}
 		`;
@@ -363,7 +363,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				var lightRec: ${ lightRecordStruct };
 				let lightsWeight = ${ this.getLightsWeight }( position );
-				let emissiveShare = ${ this.getEmissiveShare }( lightsWeight );
+				let emissiveShare = ${ this.getEmissiveShare }( position, lightsWeight );
 				if ( ruv.x < emissiveShare ) {
 
 					lightRec = ${ emissiveTriangles.sample }( position, vec3f( ruv.x / emissiveShare, ruv.yz ) );
@@ -486,7 +486,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				if ( isMISWeighted ) {
 
 					lightTotalWeight = ${ this.getLightsWeight }( origin );
-					lightsShare = 1.0 - ${ this.getEmissiveShare }( lightTotalWeight );
+					lightsShare = 1.0 - ${ this.getEmissiveShare }( origin, lightTotalWeight );
 
 				}
 
@@ -537,7 +537,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
-				let emissiveShare = ${ this.getEmissiveShare }( ${ this.getLightsWeight }( origin ) );
+				let emissiveShare = ${ this.getEmissiveShare }( origin, ${ this.getLightsWeight }( origin ) );
 				return ${ misHeuristicFn }( scatterPdf, trianglePdf * emissiveShare );
 
 			}

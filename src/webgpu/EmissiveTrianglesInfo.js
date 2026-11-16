@@ -281,9 +281,9 @@ export class EmissiveTrianglesInfo {
 		`;
 
 		// How much light a node could send to "position": its power over the squared distance to its center, held at
-		// least its radius squared so positions near or inside it don't dominate. See LightBounds::Importance() in
-		// pbrt-v4
-		const getImportanceFn = wgslTagFn/* wgsl */`
+		// least its radius squared so positions near or inside it don't dominate. A simpler LightBounds::Importance()
+		// from pbrt-v4, without its emission cones
+		this.getImportance = wgslTagFn/* wgsl */`
 			fn getEmissiveNodeImportance( node: u32, position: vec3f ) -> f32 {
 
 				let boundsMinPower = ${ readNodeFn }( node, 0u );
@@ -305,8 +305,8 @@ export class EmissiveTrianglesInfo {
 		const getFirstChildChanceFn = wgslTagFn/* wgsl */`
 			fn getEmissiveFirstChildChance( node: u32, secondChild: u32, position: vec3f ) -> f32 {
 
-				let firstImportance = ${ getImportanceFn }( node + 1u, position );
-				let secondImportance = ${ getImportanceFn }( secondChild, position );
+				let firstImportance = ${ this.getImportance }( node + 1u, position );
+				let secondImportance = ${ this.getImportance }( secondChild, position );
 				let total = firstImportance + secondImportance;
 				if ( total <= 0.0 ) {
 
