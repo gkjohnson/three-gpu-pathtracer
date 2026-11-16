@@ -1,7 +1,7 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { uniform, storage, globalId } from 'three/tsl';
-import { contextProxy, contextProxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_ALPHA_TEST, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_MEDIUM_DIRECTION, RNG_INDEX_MEDIUM_DISTANCE } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH } from './structs.js';
 import {
@@ -12,7 +12,7 @@ import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sam
 import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
-import { LIGHT_EPSILON } from '../../nodes/lights.wgsl.js';
+import { getShadowRayFn } from '../../nodes/lights.wgsl.js';
 import { isAuxSurfaceFn } from '../../nodes/auxiliary.wgsl.js';
 
 // Pure material evaluation: live slots evaluate the vertex staged by LogicKernel, a surface or a scatter event in
@@ -45,18 +45,22 @@ export class MaterialKernel extends ComputeKernel {
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
-		// Queues the NEE shadow ray from the origin toward the light LogicKernel selected, starting in the given media,
-		// and returns its index in the queue. A whole struct is written to the buffer, which Safari needs
+		// Queues the NEE shadow ray toward the light LogicKernel selected, from the hit point and its normal ( zero in
+		// fog ), starting in the given media, and returns its index in the queue. A whole struct is written to the
+		// buffer, which Safari needs
 		const queueShadowRayFn = wgslTagFn/* wgsl */`
-			fn queueShadowRay( input: ${ rayDataStruct }, origin: vec3f, stack: ${ mediumStackStruct } ) -> i32 {
+			fn queueShadowRay( input: ${ rayDataStruct }, hitPoint: vec3f, hitNormal: vec3f, stack: ${ mediumStackStruct } ) -> i32 {
+
+				var shadowRay: ${ rayStruct };
+				${ getShadowRayFn }( hitPoint, hitNormal, input.lightDirection, input.lightDist, &shadowRay );
 
 				var queuedRay: ${ traceQueuedRayStruct };
-				queuedRay.origin = origin;
-				queuedRay.direction = input.lightDirection;
+				queuedRay.origin = shadowRay.origin;
+				queuedRay.direction = shadowRay.direction;
+				queuedRay.maxDist = shadowRay.maxDist;
 				queuedRay.pixelIndex = input.pixelIndex;
 				queuedRay.rngIndex = input.hit.bounce + input.alphaDepth + input.subsurfaceBounces;
 				queuedRay.sampleIndex = input.sampleIndex;
-				queuedRay.maxDist = input.lightDist * ( 1.0 - ${ LIGHT_EPSILON } );
 				queuedRay.mediumDepth = ${ getShadowMediumDepthFn }( stack, queuedRay.maxDist );
 
 				let shadowIndex = atomicAdd( &${ params.queueCounters }[ ${ SHADOW_RAY_QUEUE_LENGTH }u ], 1u );
@@ -132,12 +136,14 @@ export class MaterialKernel extends ComputeKernel {
 					var throughputColor = input.throughputColor;
 
 					// The vertex's next direction, its evaluation toward the light LogicKernel selected, and where the
-					// bounce and shadow rays start
+					// bounce and shadow rays start. The shadow ray leaves the hit point, offset off the surface along its
+					// normal, which stays zero in fog
 					var scatterRec: ${ scatterRecordStruct };
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
 					var bounceOrigin = input.origin;
-					var shadowOrigin = input.origin;
+					var shadowHitPoint = input.origin;
+					var shadowHitNormal = vec3f( 0.0 );
 					var shadowStack = medium.stack;
 					var emission = vec3f( 0.0 );
 					var minPdf = input.minPdf;
@@ -289,7 +295,8 @@ export class MaterialKernel extends ComputeKernel {
 							let evalRec = ${ bsdfEvalPdfFn }( input.hit, surface, view, input.lightDirection );
 							lightEvalColor = evalRec.color;
 							lightEvalPdf = evalRec.pdf;
-							shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+							shadowHitPoint = vertexData.position.xyz;
+							shadowHitNormal = input.hit.normal;
 							shadowStack = ${ getShadowMediumStackFn }(
 								medium.stack, objectInfo.materialIndex, input.hit.side, surface.thinWall,
 								input.direction, input.lightDirection, input.hit.normal,
@@ -416,7 +423,7 @@ export class MaterialKernel extends ComputeKernel {
 
 						rayDataStorage[ index ].lightEvalColor = lightEvalColor;
 						rayDataStorage[ index ].lightEvalPdf = lightEvalPdf;
-						rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowOrigin, shadowStack );
+						rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowHitPoint, shadowHitNormal, shadowStack );
 
 					} else {
 
