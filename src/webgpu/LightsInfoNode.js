@@ -40,6 +40,9 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		// TODO: own the environment's escape radiance here too
 		this.envInfo = new EquirectHdrInfoNode();
 
+		// the scene's emissive triangles, sampled as one more light
+		this.emissiveTriangles = new EmissiveTrianglesInfo();
+
 		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
 		this.buffer = new StorageBufferAttribute( new Float32Array( 2 * lightStruct.getLength() ), lightStruct.getLength() );
@@ -49,9 +52,6 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.iesAtlas = new AtlasTexture( { type: HalfFloatType } );
 		this.iesProfilesNode = texture( this.iesAtlas.texture );
 		this.iesInfoNode = uniformArray( this.iesAtlas.textureInfo, 'uvec4' ).setName( 'iesInfo' );
-
-		// the scene's emissive triangles, sampled as one more light
-		this.emissiveTriangles = new EmissiveTrianglesInfo();
 
 		this._initFns();
 
