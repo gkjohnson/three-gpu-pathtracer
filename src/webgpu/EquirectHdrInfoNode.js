@@ -16,7 +16,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		// environment map with a sampler, and the importance sampling CDFs for the default 1x1 map
 		this.mapNode = texture( this.map );
 		this.mapSampler = sampler( this.mapNode );
-		this.cdfNode = texture( new LinearDataTexture( new Float32Array( [ 0, 1, 0, 1 ] ), 1, RedFormat, FloatType ) ).setName( 'envCdf' );
+		this.cdfTextureNode = texture( new LinearDataTexture( new Float32Array( [ 0, 1, 0, 1 ] ), 1, RedFormat, FloatType ) ).setName( 'envCdf' );
 
 		// scalar parameters that assemble into the EnvironmentInfo struct in the shader
 		this.rotationNode = uniform( new Matrix3() );
@@ -41,7 +41,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 		const {
 			mapNode,
-			cdfNode,
+			cdfTextureNode,
 			totalSumNode,
 		} = this;
 
@@ -61,15 +61,15 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 		}
 
-		cdfNode.value.dispose();
-		cdfNode.value = new LinearDataTexture( cdf, 1, RedFormat, FloatType );
+		cdfTextureNode.value.dispose();
+		cdfTextureNode.value = new LinearDataTexture( cdf, 1, RedFormat, FloatType );
 
 	}
 
 	dispose() {
 
 		super.dispose();
-		this.cdfNode.value.dispose();
+		this.cdfTextureNode.value.dispose();
 
 	}
 
@@ -78,7 +78,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		const {
 			mapNode,
 			mapSampler,
-			cdfNode,
+			cdfTextureNode,
 			totalSumNode,
 			rotationNode,
 			intensityNode,
@@ -90,8 +90,8 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 				let resolution = textureDimensions( ${ mapNode } );
 				let rowOffset = resolution.y + 1u + texel.y * ( resolution.x + 1u );
-				let rowPdf = ${ readCdfFn }( ${ cdfNode }, texel.y + 1u ) - ${ readCdfFn }( ${ cdfNode }, texel.y );
-				let pixelPdf = ${ readCdfFn }( ${ cdfNode }, rowOffset + texel.x + 1u ) - ${ readCdfFn }( ${ cdfNode }, rowOffset + texel.x );
+				let rowPdf = ${ readCdfFn }( ${ cdfTextureNode }, texel.y + 1u ) - ${ readCdfFn }( ${ cdfTextureNode }, texel.y );
+				let pixelPdf = ${ readCdfFn }( ${ cdfTextureNode }, rowOffset + texel.x + 1u ) - ${ readCdfFn }( ${ cdfTextureNode }, rowOffset + texel.x );
 
 				// the equirect projection stretches each pixel by 1 / sin( theta ) over the sphere
 				let sinTheta = sin( ${ PI } * v );
@@ -122,8 +122,8 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 				let resolution = textureDimensions( ${ mapNode } );
 				var rowFraction = 0.0;
 				var columnFraction = 0.0;
-				let row = ${ searchCdfFn }( ${ cdfNode }, r.x, 0u, resolution.y, &rowFraction );
-				let column = ${ searchCdfFn }( ${ cdfNode }, r.y, resolution.y + 1u + row * ( resolution.x + 1u ), resolution.x, &columnFraction );
+				let row = ${ searchCdfFn }( ${ cdfTextureNode }, r.x, 0u, resolution.y, &rowFraction );
+				let column = ${ searchCdfFn }( ${ cdfTextureNode }, r.y, resolution.y + 1u + row * ( resolution.x + 1u ), resolution.x, &columnFraction );
 				let texel = vec2u( column, row );
 				let uv = ( vec2f( texel ) + vec2f( columnFraction, rowFraction ) ) / vec2f( resolution );
 
