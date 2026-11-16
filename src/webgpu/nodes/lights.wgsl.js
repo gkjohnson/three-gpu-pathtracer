@@ -1,4 +1,5 @@
 import { wgslFn } from 'three/tsl';
+import { rayStruct } from 'three-mesh-bvh/webgpu';
 import { constants, lightStruct, lightRecordStruct } from './structs.wgsl.js';
 import { offsetRayOriginFunc } from './utils.wgsl.js';
 
@@ -12,26 +13,38 @@ export const POINT_LIGHT_TYPE = 4;
 export const ENVIRONMENT_LIGHT_TYPE = 5;
 export const LIGHT_FAR_DISTANCE = 1e30;
 
-// The direction and distance from the offset shadow ray "origin" to the light point sampled from "position",
-// offset back along the ray so the ray ends just short of the light's surface
-export const aimShadowRayFn = wgslFn( /* wgsl */ `
+// Writes "outRay", the shadow ray toward a light sampled from "hitPoint", the light "lightDist" away in
+// "lightDirection". The ray starts at the hit point offset off its surface along "hitNormal", or at the hit point
+// itself when the normal is zero, as for a scatter event in fog. It ends at the sampled light point offset back
+// toward the hit point, just short of the light's surface
+export const getShadowRayFn = wgslFn( /* wgsl */ `
 
-	fn aimShadowRay( position: vec3f, direction: vec3f, dist: f32, origin: vec3f ) -> vec4f {
+	fn getShadowRay( hitPoint: vec3f, hitNormal: vec3f, lightDirection: vec3f, lightDist: f32, outRay: ptr<function, Ray> ) -> void {
 
-		if ( dist >= ${ LIGHT_FAR_DISTANCE } ) {
+		var rayStart = hitPoint;
+		if ( any( hitNormal != vec3f( 0.0 ) ) ) {
 
-			return vec4f( direction, dist );
+			rayStart = offsetRayOrigin( hitPoint, lightDirection, hitNormal );
 
 		}
 
-		let lightPoint = offsetRayOrigin( position + direction * dist, - direction, - direction );
-		let toLight = lightPoint - origin;
-		let shadowDist = length( toLight );
-		return vec4f( toLight / shadowDist, shadowDist );
+		outRay.origin = rayStart;
+		outRay.direction = lightDirection;
+		outRay.maxDist = lightDist;
+
+		// lights at infinity have no point to end at
+		if ( lightDist < ${ LIGHT_FAR_DISTANCE } ) {
+
+			let lightPoint = hitPoint + lightDirection * lightDist;
+			let rayEnd = offsetRayOrigin( lightPoint, - lightDirection, - lightDirection );
+			outRay.maxDist = length( rayEnd - rayStart );
+			outRay.direction = ( rayEnd - rayStart ) / outRay.maxDist;
+
+		}
 
 	}
 
-`, [ offsetRayOriginFunc ] );
+`, [ rayStruct, offsetRayOriginFunc ] );
 
 // light kinds that are also bsdf-sampled and so take MIS-weighted NEE - punctual lights take full weight
 export const isMISWeightLightFn = wgslFn( /* wgsl */ `

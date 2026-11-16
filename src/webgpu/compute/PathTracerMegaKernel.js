@@ -13,7 +13,7 @@ import {
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
-import { LIGHT_FAR_DISTANCE, aimShadowRayFn } from '../nodes/lights.wgsl.js';
+import { LIGHT_FAR_DISTANCE, getShadowRayFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
@@ -87,10 +87,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 
 		// Returns the light a light sample adds at a path vertex, given the vertex evaluated toward the light: the
-		// shadow ray the wavefront queues, traces and resolves, starting at the origin in the given media
+		// shadow ray the wavefront queues, traces and resolves, from the hit point and its normal ( zero in fog ) in
+		// the given media
 		const getLightContributionFn = wgslTagFn/* wgsl */`
 			fn getLightContribution(
-				lightRec: ${ lightRecordStruct }, evalColor: vec3f, evalPdf: f32, position: vec3f, origin: vec3f, stack: ${ mediumStackStruct },
+				lightRec: ${ lightRecordStruct }, evalColor: vec3f, evalPdf: f32, hitPoint: vec3f, hitNormal: vec3f, stack: ${ mediumStackStruct },
 				throughput: vec3f, bounce: u32, maxBounces: u32,
 			) -> vec3f {
 
@@ -100,12 +101,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				// the shadow ray toward the light, up to the light distance
-				let aimed = ${ aimShadowRayFn }( position, lightRec.direction, lightRec.dist, origin );
+				// the shadow ray toward the light
 				var shadowRay: ${ rayStruct };
-				shadowRay.origin = origin;
-				shadowRay.direction = aimed.xyz;
-				shadowRay.maxDist = aimed.w;
+				${ getShadowRayFn }( hitPoint, hitNormal, lightRec.direction, lightRec.dist, &shadowRay );
 				let mediumDepth = ${ getShadowMediumDepthFn }( stack, shadowRay.maxDist );
 
 				// opaque occlusion, and the light let through by the partially transparent surfaces and the volumes passed
@@ -424,13 +422,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					// MaterialKernel
-					// the vertex: its light evaluation, next direction, and where the bounce and shadow rays start
+					// the vertex: its light evaluation, next direction, and where the bounce and shadow rays start. The shadow
+					// ray leaves the hit point, offset off the surface along its normal, which stays zero in fog
 					var scatterRec: ${ scatterRecordStruct };
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
 					var bounceOrigin = position;
-					var shadowPosition = position;
-					var shadowOrigin = position;
+					var shadowHitPoint = position;
+					var shadowHitNormal = vec3f( 0.0 );
 					var shadowStack = medium.stack;
 					var emission = vec3f( 0.0 );
 					var isTerminated = false;
@@ -550,8 +549,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
 							lightEvalColor = evalRec.color;
 							lightEvalPdf = evalRec.pdf;
-							shadowPosition = vertexData.position.xyz;
-							shadowOrigin = ${ offsetRayOriginFunc }( shadowPosition, lightRec.direction, hit.normal );
+							shadowHitPoint = vertexData.position.xyz;
+							shadowHitNormal = hit.normal;
 							shadowStack = ${ getShadowMediumStackFn }(
 								medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall,
 								ray.direction, lightRec.direction, hit.normal,
@@ -629,7 +628,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// the vertex's light sample and emission, with the pre-scatter throughput, clamped at the segment's depth
 					if ( lightRec.pdf > 0.0 ) {
 
-						let directLight = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowPosition, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
+						let directLight = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowHitPoint, shadowHitNormal, shadowStack, throughputColor, bounce, maxBounces );
 						resultColor += vec4f( directLight, 0.0 );
 
 					}
