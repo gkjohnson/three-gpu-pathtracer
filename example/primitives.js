@@ -1,6 +1,7 @@
 import { Scene, SphereGeometry, MeshStandardMaterial, Mesh, BoxGeometry, PerspectiveCamera, ACESFilmicToneMapping, WebGPURenderer } from 'three/webgpu';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // init scene
@@ -57,12 +58,12 @@ camera.lookAt( 0, 0, 0 );
 const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 renderer.init();
 renderer.toneMapping = ACESFilmicToneMapping;
-renderer.setAnimationLoop( animate );
 document.body.appendChild( renderer.domElement );
 
 // path tracer
 const pathTracer = new WebGPUPathTracer( renderer );
-pathTracer.setScene( scene, camera );
+pathTracer.setBVHWorker( GenerateMeshBVHWorker );
+pathTracer.setSceneAsync( scene, camera ).then( () => renderer.setAnimationLoop( animate ) );
 
 // controls
 const controls = new OrbitControls( camera, renderer.domElement );

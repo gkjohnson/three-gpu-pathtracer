@@ -12,7 +12,9 @@ import {
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -52,13 +54,13 @@ const params = {
 	rotation: 2 * Math.PI,
 	duration: 0,
 	frameRate: 12,
-	maxSamples: 10,
 	record: startRecording,
 	stop: finishRecording,
 
-	maxBounces: 15,
-	samplesPerFrame: 1,
+	enable: true,
+	maxSamples: 16,
 	renderScale: 1,
+	samplesPerFrame: 1,
 	...getScaledSettings(),
 
 };
@@ -78,7 +80,9 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.renderScale = params.renderScale;
 	pathTracer.renderDelay = 0;
 	pathTracer.minSamples = 1;
 
@@ -102,7 +106,17 @@ async function init() {
 
 	} );
 
-	// write the video frame and advance the animation once every pixel reaches the target sample count
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
+
+	// write the video frame and advance the animation once every pixel reaches the target sample count and
+	// the denoiser has run
 	pathTracer.addEventListener( 'complete', () => {
 
 		if ( recordingState === 'recording' && ! isWritingFrame ) {
@@ -185,7 +199,7 @@ async function init() {
 	// prep for rendering
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	initializeSize();
 	rebuildGUI();
@@ -211,18 +225,22 @@ function rebuildGUI() {
 	animationFolder.add( params, 'rotation', - 2 * Math.PI, 2 * Math.PI ).disable( recording );
 	animationFolder.add( params, 'duration', 0.25, animationDuration, 1e-2 ).disable( recording );
 	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
-	animationFolder.add( params, 'renderScale', 0.1, 1 ).onChange( regenerateScene ).disable( recording );
 	animationFolder.add( params, recording ? 'stop' : 'record' ).disable( recordingState !== 'idle' && recordingState !== 'recording' );
 
-	// dynamic parameters
-	const renderFolder = gui.addFolder( 'rendering' );
-	renderFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( value => {
+	// path tracer parameters, the enable toggle and render scale locked during recording
+	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' ).disable( recording );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
 
-		pathTracer.maxSamples = value;
+		pathTracer.maxSamples = v;
 
 	} );
-	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	renderFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( regenerateScene );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+
+	} ).disable( recording );
+	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 
 }
 
@@ -247,8 +265,6 @@ function initializeSize() {
 
 function regenerateScene() {
 
-	pathTracer.renderScale = params.renderScale;
-	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.setScene( scene, camera );
 
 	averageSamples = 0;
@@ -403,7 +419,11 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
-		if ( ! isWritingFrame ) {
+		if ( ! params.enable && ! isRecording ) {
+
+			renderer.render( scene, camera );
+
+		} else if ( ! isWritingFrame ) {
 
 			pathTracer.renderSample();
 

@@ -11,7 +11,9 @@ import {
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -36,7 +38,7 @@ const params = {
 
 	// path tracer settings
 	enable: true,
-	maxBounces: 15,
+	maxSamples: 16,
 	renderScale: 1,
 	frameBudget: 250000,
 
@@ -63,12 +65,24 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.renderScale = params.renderScale;
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
 		loader.setStage( stage, progress, samples );
 
 	} );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
 
 	// camera
 	camera = new PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -123,7 +137,7 @@ async function init() {
 	scene.add( rightLight );
 
 	// initialize scene
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
@@ -132,8 +146,16 @@ async function init() {
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
-	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+
+	} );
 	ptFolder.close();
 
 	const areaLightFolder = gui.addFolder( 'Area Light' );
@@ -162,9 +184,6 @@ function onParamsChange() {
 		light.height = params.height;
 
 	} );
-
-	pathTracer.maxBounces = params.maxBounces;
-	pathTracer.renderScale = params.renderScale;
 
 	pathTracer.updateLights();
 

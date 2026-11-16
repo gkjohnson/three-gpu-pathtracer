@@ -8,7 +8,9 @@ import {
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 import { MaterialOrbSceneLoader } from './src/MaterialOrbSceneLoader.js';
@@ -68,12 +70,10 @@ const params = {
 	materialProperties: getDefaultMaterialProperties(),
 
 	enable: true,
+	maxSamples: 16,
+	renderScale: 1,
 	displaySampleDensity: false,
 	overlayReference: false,
-	multipleImportanceSampling: true,
-	maxBounces: 15,
-	renderScale: 1,
-	filterGlossyFactor: 1,
 	frameBudget: 250000,
 };
 
@@ -83,7 +83,6 @@ if ( aspectRatio < 0.65 ) {
 
 	params.renderScale *= 0.5;
 	params.frameBudget = 100000;
-	params.multipleImportanceSampling = false;
 
 }
 
@@ -109,12 +108,24 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.renderScale = params.renderScale;
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
 		loader.setStage( stage, progress, samples );
 
 	} );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
 
 	scene = new Scene();
 
@@ -164,7 +175,7 @@ async function init() {
 	loader.setCredits( CREDITS );
 
 	onParamsChange();
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
@@ -180,11 +191,17 @@ async function init() {
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+
+	} );
 	ptFolder.add( params, 'displaySampleDensity' );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
-	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	ptFolder.close();
 
 	const matFolder1 = gui.addFolder( 'Material Parameters' );
@@ -421,11 +438,6 @@ function onParamsChange() {
 	material.anisotropyRotation = materialProperties.anisotropyRotation;
 	material.transparent = material.opacity < 1;
 	material.flatShading = materialProperties.flatShading;
-
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
-	pathTracer.maxBounces = params.maxBounces;
-	pathTracer.renderScale = params.renderScale;
 
 	// note: custom properties
 	material.diffuseRoughness = materialProperties.diffuseRoughness;

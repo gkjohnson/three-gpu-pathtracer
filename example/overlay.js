@@ -13,7 +13,9 @@ import {
 	WebGPURenderer,
 } from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -32,13 +34,10 @@ let loader;
 const params = {
 
 	// path tracer settings
-	maxBounces: 15,
+	enable: true,
+	maxSamples: 16,
 	renderScale: 1,
-	filterGlossyFactor: 1,
 	frameBudget: 250000,
-	multipleImportanceSampling: true,
-
-	enabled: true,
 
 	...getScaledSettings(),
 
@@ -59,12 +58,24 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.renderScale = params.renderScale;
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
 		loader.setStage( stage, progress, samples );
 
 	} );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
 
 	// camera
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -123,7 +134,7 @@ async function init() {
 	overlayScene.add( sampleMesh, sampleMesh2 );
 
 	// initialize scene
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
@@ -131,26 +142,23 @@ async function init() {
 	// gui
 	const gui = new GUI();
 	const ptFolder = gui.addFolder( 'Path Tracer' );
-	ptFolder.add( params, 'filterGlossyFactor', 0, 10 ).onChange( onParamsChange );
-	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
+	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+
+	} );
 	ptFolder.close();
 
-	onParamsChange();
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
 	animate();
-
-}
-
-function onParamsChange() {
-
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
-	pathTracer.maxBounces = params.maxBounces;
-	pathTracer.renderScale = params.renderScale;
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
 
 }
 
@@ -185,7 +193,15 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	updateFloatingObjects();
-	pathTracer.renderSample();
+	if ( params.enable ) {
+
+		pathTracer.renderSample();
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 	const originalAutoClear = renderer.autoClear;
 	const originalBackground = scene.background;

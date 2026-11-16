@@ -12,7 +12,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PhysicalCamera, GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
@@ -26,10 +28,9 @@ const mouse = new Vector2();
 const focusPoint = new Vector3();
 const params = {
 
-	enabled: true,
-	maxBounces: 7,
+	enable: true,
+	maxSamples: 16,
 	renderScale: 1,
-	filterGlossyFactor: 1,
 	autoFocus: true,
 
 };
@@ -49,11 +50,23 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
+	pathTracer.renderScale = params.renderScale;
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
 		loader.setStage( stage, progress, samples );
 
 	} );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
 
 	// camera, positioned once the model bounds are known
 	camera = new PhysicalCamera( 25, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -103,12 +116,11 @@ async function init() {
 	camera.focusDistance = 0.74;
 
 	// update the scene
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
-	onParamsChange();
 	onResize();
 
 	window.addEventListener( 'resize', onResize );
@@ -127,9 +139,17 @@ function buildGui( radius ) {
 	const gui = new GUI();
 
 	const ptFolder = gui.addFolder( 'Path Tracer' );
-	ptFolder.add( params, 'enabled' );
-	ptFolder.add( params, 'maxBounces', 1, 20, 1 ).onChange( onParamsChange );
-	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+
+	} );
 
 	const cameraFolder = gui.addFolder( 'Camera' );
 	cameraFolder.add( params, 'autoFocus' );
@@ -241,10 +261,6 @@ function onResize() {
 
 function onParamsChange() {
 
-	pathTracer.filterGlossyFactor = params.filterGlossyFactor;
-	pathTracer.maxBounces = params.maxBounces;
-	pathTracer.renderScale = params.renderScale;
-
 	pathTracer.updateCamera();
 
 }
@@ -254,7 +270,7 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	// the rasterized scene, for comparison against the path traced result
-	if ( ! params.enabled ) {
+	if ( ! params.enable ) {
 
 		renderer.render( scene, camera );
 		return;

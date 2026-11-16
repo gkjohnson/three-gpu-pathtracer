@@ -1,6 +1,8 @@
 import { Scene, SphereGeometry, MeshPhysicalMaterial, Mesh, PerspectiveCamera, WebGPURenderer, Color } from 'three/webgpu';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser, RANDOM_SOBOL } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { LoaderElement } from './src/LoaderElement.js';
@@ -10,10 +12,10 @@ const AXIS_PROPERTIES = [ 'metalness', 'roughness', 'diffuse roughness', 'specul
 
 const options = {
 	enable: true,
+	maxSamples: 16,
+	renderScale: 1,
 	useMegakernel: false,
-	multipleImportanceSampling: true,
 	whiteBackground: false,
-	maxBounces: 15,
 	xAxis: 'roughness',
 	yAxis: 'metalness',
 };
@@ -23,15 +25,24 @@ const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } )
 renderer.init();
 
 const pathTracer = new WebGPUPathTracer( renderer );
+pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 pathTracer.setRandom( RANDOM_SOBOL );
 pathTracer.useMegakernel( options.useMegakernel );
-pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
-pathTracer.maxBounces = options.maxBounces;
+pathTracer.renderScale = options.renderScale;
+pathTracer.maxSamples = options.maxSamples;
+
+// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+const denoiser = new OIDNDenoiser( {
+	initUNetFromURL,
+	auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+	maxTileSize: 512,
+	dynamicTile: false,
+} );
+pathTracer.setDenoiser( denoiser );
 
 document.body.appendChild( renderer.domElement );
 renderer.setSize( innerWidth, innerHeight );
 renderer.setPixelRatio( devicePixelRatio );
-renderer.setAnimationLoop( animate );
 
 // init scene
 const scene = new Scene();
@@ -69,24 +80,25 @@ pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 } );
 
 const gui = new GUI();
-gui.add( options, 'enable' );
+const ptFolder = gui.addFolder( 'Path Tracer' );
+ptFolder.add( options, 'enable' );
+ptFolder.add( options, 'maxSamples', 1, 100, 1 ).onChange( v => {
+
+	pathTracer.maxSamples = v;
+
+} );
+ptFolder.add( options, 'renderScale', 0.1, 1 ).onChange( v => {
+
+	pathTracer.renderScale = v;
+
+} );
 gui.add( options, 'useMegakernel' ).onChange( () => {
 
 	pathTracer.useMegakernel( options.useMegakernel );
 	pathTracer.setScene( scene, camera );
 
 } );
-gui.add( options, 'multipleImportanceSampling' ).onChange( () => {
-
-	pathTracer.setMultipleImportanceSampling( options.multipleImportanceSampling );
-
-} );
 gui.add( options, 'whiteBackground' ).onChange( updateBackground );
-gui.add( options, 'maxBounces', 1, 100, 1 ).onChange( () => {
-
-	pathTracer.maxBounces = options.maxBounces;
-
-} );
 gui.add( options, 'xAxis', AXIS_PROPERTIES ).onChange( rebuild );
 gui.add( options, 'yAxis', AXIS_PROPERTIES ).onChange( rebuild );
 
@@ -97,7 +109,9 @@ function rebuild() {
 
 }
 
-rebuild();
+// the first build generates the shared sphere's bvh in the worker
+buildGrid();
+pathTracer.setSceneAsync( scene, camera ).then( () => renderer.setAnimationLoop( animate ) );
 updateBackground();
 onResize();
 window.addEventListener( 'resize', onResize );

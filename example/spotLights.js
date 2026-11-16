@@ -12,7 +12,9 @@ import { IESLoader } from 'three/examples/jsm/loaders/IESLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
@@ -53,7 +55,7 @@ let loader;
 // gui parameters
 const params = {
 	enable: true,
-	maxBounces: 15,
+	maxSamples: 16,
 	renderScale: 1,
 	frameBudget: 250000,
 	iesProfile: 6,
@@ -77,12 +79,23 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
 		loader.setStage( stage, progress, samples );
 
 	} );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -189,7 +202,7 @@ async function init() {
 	fillLight.target.position.set( 0, targetHeight, 0 );
 	scene.add( fillLight.target );
 
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
@@ -199,9 +212,13 @@ async function init() {
 
 	// gui
 	const gui = new GUI();
-	const ptFolder = gui.addFolder( 'Path Tracing' );
+	const ptFolder = gui.addFolder( 'Path Tracer' );
 	ptFolder.add( params, 'enable' );
-	ptFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
 	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onResize );
 
 	const lightFolder = gui.addFolder( 'Spot Light' );
@@ -246,8 +263,6 @@ function onResize() {
 
 function onParamsChange() {
 
-	// pathTracer.renderScale = params.renderScale;
-	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.updateLights();
 
 }
