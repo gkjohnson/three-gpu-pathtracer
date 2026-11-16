@@ -149,11 +149,9 @@ const envMaps = {
 
 const params = {
 
-	multipleImportanceSampling: true,
 	renderScale: 1,
 	randomStrategy: 'Sobol',
 	frameBudget: 250000,
-	adaptiveFrameBudget: true,
 
 	model: '',
 
@@ -268,9 +266,7 @@ async function init() {
 	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.asyncCompile = true;
 	pathTracer.frameBudget = params.frameBudget;
-	pathTracer.adaptiveFrameBudget = params.adaptiveFrameBudget;
 	pathTracer.maxSamples = params.maxSamples;
-	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
@@ -540,7 +536,6 @@ function onParamsChange() {
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
-	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 }
 
@@ -639,23 +634,12 @@ function buildGui() {
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
-	const frameBudgetController = pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
-
-		pathTracer.frameBudget = v;
-
-	} ).listen().disable( params.adaptiveFrameBudget );
-	pathTracingFolder.add( params, 'adaptiveFrameBudget' ).onChange( v => {
-
-		pathTracer.adaptiveFrameBudget = v;
-		frameBudgetController.enable( ! v );
-
-	} );
+	pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).listen().disable();
 	pathTracingFolder.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
 
 	} );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'randomStrategy', Object.keys( RANDOM_STRATEGIES ) ).onChange( v => {
 
 		pathTracer.setRandom( RANDOM_STRATEGIES[ v ] );
