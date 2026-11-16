@@ -287,7 +287,7 @@ export class MaterialKernel extends ComputeKernel {
 						}
 
 						// emission, resolved by LogicKernel
-						emission = surface.emission;
+						emission = surface.emission * input.emissionWeight;
 
 						// evaluate the bsdf toward the light LogicKernel selected. The light pdf is 0 if NEE is disabled
 						if ( input.lightPdf > 0.0 ) {

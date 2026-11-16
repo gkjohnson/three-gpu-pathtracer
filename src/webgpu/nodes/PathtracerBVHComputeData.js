@@ -6,6 +6,7 @@ import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.j
 /** @import { Box3, Mesh } from 'three/webgpu' */
 
 const _colorVec = new Vector4();
+const _range = { start: 0, count: 0, vertexStart: 0, vertexCount: 0 };
 const _instanceMatrix = /* @__PURE__ */ new Matrix4();
 const _boxToMesh = /* @__PURE__ */ new Matrix4();
 const _orientedBox = /* @__PURE__ */ new OrientedBox();
@@ -82,6 +83,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.shadingModel = shadingModel;
 		this.structs.objectRecord = objectRecordStruct;
 		this.bvhMap = new Map();
+
+		// each transform slot's { offset, count } of triangles in the packed index buffer
+		this.triangleRanges = [];
 
 	}
 
@@ -693,9 +697,48 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
 		this.updateUvSampleFunction();
 		this.updateColorSampleFn();
+		this.updateTriangleRanges();
 
 		this.bvhMap.clear();
 		this.useTransparencyRaycastFn();
+
+	}
+
+	// Records each transform slot's triangles in the packed index buffer: its geometry group's range, offset by
+	// where its geometry was packed. Each geometry is packed once, in the order the slots first reference it
+	updateTriangleRanges() {
+
+		const geometryOffsets = new Map();
+		let packedCount = 0;
+		this.triangleRanges = [];
+		this._getTransformMap( this.bvh ).forEach( ( { object, instanceId, root, slot } ) => {
+
+			const bvh = this.getBVH( object, instanceId, _range );
+			const rangeStart = _range.start / 3;
+			const rangeEnd = rangeStart + _range.count / 3;
+			if ( ! geometryOffsets.has( bvh ) ) {
+
+				// a non indirect bvh's triangle indices count from the start of the geometry, not the range
+				geometryOffsets.set( bvh, packedCount - ( bvh.indirect ? 0 : rangeStart ) );
+				packedCount += _range.count / 3;
+
+			}
+
+			// the geometry group within the range and draw range
+			const { drawRange } = object.geometry;
+			let start = Math.max( rangeStart, drawRange.start / 3 );
+			let end = Math.min( rangeEnd, ( drawRange.start + drawRange.count ) / 3 );
+			const group = object.geometry.groups[ root ];
+			if ( group ) {
+
+				start = Math.max( start, group.start / 3 );
+				end = Math.min( end, ( group.start + group.count ) / 3 );
+
+			}
+
+			this.triangleRanges[ slot ] = { offset: geometryOffsets.get( bvh ) + start, count: end - start };
+
+		} );
 
 	}
 
