@@ -1746,8 +1746,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			}
 
+			// the render is drawn over the low res preview, which shows through the pixels it hasn't reached yet,
+			// until every pixel has its first sample
 			renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
-			blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
+			blitQuad.material.showPreview = dynamicLowRes && ! lowResMode && this._lastSampleCounts.min < 1;
 			blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
 			blitQuad.material.fromTexture = lowResTarget;
 			blitQuad.material.texture = texture;

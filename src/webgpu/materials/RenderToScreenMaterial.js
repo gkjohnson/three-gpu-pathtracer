@@ -2,6 +2,9 @@ import { MeshBasicNodeMaterial, NoToneMapping, StorageTexture } from 'three/webg
 import { uv, varying, texture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
+// the smallest alpha the composited color is divided by
+const COMPOSITE_ALPHA_EPSILON = 1e-6;
+
 // TODO: we could fall back to hardware-based filtering if available but it has to be specifically
 // requested and available on the renderer which we don't have access to immediately. It's possible this
 // can be detected during build time via a custom node to adjust the sample approach used?
@@ -72,15 +75,15 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	}
 
-	get transition() {
+	get showPreview() {
 
-		return this._transitionUniform.value;
+		return this._showPreviewUniform.value === 1;
 
 	}
 
-	set transition( v ) {
+	set showPreview( v ) {
 
-		this._transitionUniform.value = v;
+		this._showPreviewUniform.value = v ? 1 : 0;
 
 	}
 
@@ -108,33 +111,31 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 		const texUV = varying( uv() );
 
-		const transitionUniform = uniform( 1.0 );
-		this._transitionUniform = transitionUniform;
+		const showPreviewUniform = uniform( 0, 'uint' );
+		this._showPreviewUniform = showPreviewUniform;
 
+		// The render, drawn over the preview in "fromTexture" when "showPreview" is set so the preview shows through
+		// the pixels the render hasn't reached yet, which are transparent.
 		// NOTE: varyings cannot be referenced directly and must be passed as arguments
-		const getFadedColorFn = wgslTagFn/* wgsl */`
-			fn fade( uv: vec2f ) -> vec4f {
+		const getColorFn = wgslTagFn/* wgsl */`
+			fn getColor( uv: vec2f ) -> vec4f {
 
-				if ( ${ transitionUniform } <= 0.0 ) {
+				let color = ${ sampleTexelFn }( ${ texNode }, uv );
+				if ( ${ showPreviewUniform } == 0u ) {
 
-					return ${ sampleTexelFn }( ${ fromTexNode }, uv );
-
-				} else if ( ${ transitionUniform } >= 1.0 ) {
-
-					return ${ sampleTexelFn }( ${ texNode }, uv );
-
-				} else {
-
-					let col0 = ${ sampleTexelFn }( ${ fromTexNode }, uv );
-					let col1 = ${ sampleTexelFn }( ${ texNode }, uv );
-					return mix( col0, col1, ${ transitionUniform } );
+					return color;
 
 				}
+
+				let preview = ${ sampleTexelFn }( ${ fromTexNode }, uv );
+				let alpha = color.a + preview.a * ( 1.0 - color.a );
+				let rgb = color.rgb * color.a + preview.rgb * preview.a * ( 1.0 - color.a );
+				return vec4f( rgb / max( alpha, ${ COMPOSITE_ALPHA_EPSILON } ), alpha );
 
 			}
 		`;
 
-		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getFadedColorFn( texUV ) );
+		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getColorFn( texUV ) );
 		this._toneMapping = toneMappingNode;
 
 		// apply alpha _after_ applying tone mapping
