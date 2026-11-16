@@ -213,7 +213,7 @@ export class LogicKernel extends ComputeKernel {
 						var emissionWeight = 1.0;
 						if ( isMISWeighted && didHitSurface && ! isFogScatter ) {
 
-							emissionWeight = ${ getEmissiveHitWeightFn }( input.origin, position, hitResult.normal, u32( hitResult.objectIndex ), input.scatterPdf );
+							emissionWeight = ${ getEmissiveHitWeightFn }( input.origin, position, hitResult.normal, u32( hitResult.objectIndex ), hitResult.triangleIndex, input.scatterPdf );
 
 						}
 

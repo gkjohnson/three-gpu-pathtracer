@@ -335,7 +335,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var emissionWeight = 1.0;
 					if ( isMISWeighted && didHitSurface && ! isFogScatter ) {
 
-						emissionWeight = ${ getEmissiveHitWeightFn }( ray.origin, position, hitResult.normal, hitResult.objectIndex, scatterPdf );
+						emissionWeight = ${ getEmissiveHitWeightFn }( ray.origin, position, hitResult.normal, hitResult.objectIndex, hitResult.indices.w, scatterPdf );
 
 					}
 
