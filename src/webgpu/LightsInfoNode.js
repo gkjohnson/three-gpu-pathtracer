@@ -194,7 +194,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.getEmissiveShare = wgslTagFn/* wgsl */`
 			fn getEmissiveShare( lightsWeight: f32 ) -> f32 {
 
-				if ( ${ emissiveTriangles.getCount }() == 0u ) {
+				if ( ${ emissiveTriangles.countNode } == 0u ) {
 
 					return 0.0;
 
@@ -523,10 +523,12 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// The MIS weight of the emission a ray from "origin" finds at "position" on an object's triangle, facing
+		// The MIS weight of the emission a ray from "origin" finds at "position" on an object's triangle facing
 		// "normal", against the light sampling at the origin picking that point. One for surfaces it can't pick
 		this.getEmissiveHitWeight = wgslTagFn/* wgsl */`
-			fn getEmissiveHitWeight( origin: vec3f, position: vec3f, normal: vec3f, objectIndex: u32, triangleIndex: u32, scatterPdf: f32 ) -> f32 {
+			fn getEmissiveHitWeight(
+				origin: vec3f, position: vec3f, normal: vec3f, objectIndex: u32, triangleIndex: u32, scatterPdf: f32,
+			) -> f32 {
 
 				let trianglePdf = ${ emissiveTriangles.getPdf }( origin, position, normal, objectIndex, triangleIndex );
 				if ( trianglePdf <= 0.0 ) {

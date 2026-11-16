@@ -12,7 +12,7 @@ const TRANSFORM_MATERIAL_WORD = 33;
 // The floats of a light tree node, three texels:
 // - its bounds' min and its power
 // - its bounds' max and the cosine of its emission cone's spread, -1 when it emits in every direction
-// - its emission cone's axis, and its second child's node index, or -( emitter index + 1 ) for a leaf
+// - its emission cone's axis, and its second child's node index, or -( triangle index + 1 ) for a leaf
 // The first child follows its node. Indices are stored as floats, exact up to 2^24
 const NODE_FLOATS = 12;
 
@@ -114,14 +114,11 @@ export class EmissiveTrianglesInfo {
 		const transformStride = structs.transform.getLength();
 
 		// Every triangle of each emissive object, in order so a hit triangle's place in the list follows from its
-		// object's first one: its object and triangle index, area, bounds, power and the direction it emits to.
-		// Triangles without area are kept, with no power
+		// object's first one: its object and triangle index, area, and its leaf node for the tree. Triangles without
+		// area are kept, with no power
 		const triangles = [];
 		const areas = [];
-		const bounds = [];
-		const powers = [];
-		const axes = [];
-		const cones = [];
+		const leafNodes = [];
 		const objects = new Uint32Array( triangleRanges.length * 2 );
 		triangleRanges.forEach( ( { offset, count }, objectIndex ) => {
 
@@ -143,7 +140,7 @@ export class EmissiveTrianglesInfo {
 			}
 
 			// the object's first triangle in the list, plus one so zero means it doesn't emit
-			objects[ objectIndex * 2 ] = powers.length + 1;
+			objects[ objectIndex * 2 ] = areas.length + 1;
 			objects[ objectIndex * 2 + 1 ] = offset;
 
 			_matrix.fromArray( transformsF32, slot );
@@ -164,22 +161,22 @@ export class EmissiveTrianglesInfo {
 
 				}
 
+				// the triangle's leaf node, in the node layout
+				const triangleIndex = areas.length;
+				leafNodes.push(
+					Math.min( _a.x, _b.x, _c.x ), Math.min( _a.y, _b.y, _c.y ), Math.min( _a.z, _b.z, _c.z ), area * luminance,
+					Math.max( _a.x, _b.x, _c.x ), Math.max( _a.y, _b.y, _c.y ), Math.max( _a.z, _b.z, _c.z ), cone,
+					_axis.x || 0, _axis.y || 0, _axis.z || 1, - ( triangleIndex + 1 ),
+				);
 				triangles.push( objectIndex, t );
 				areas.push( area );
-				bounds.push(
-					Math.min( _a.x, _b.x, _c.x ), Math.min( _a.y, _b.y, _c.y ), Math.min( _a.z, _b.z, _c.z ),
-					Math.max( _a.x, _b.x, _c.x ), Math.max( _a.y, _b.y, _c.y ), Math.max( _a.z, _b.z, _c.z ),
-				);
-				powers.push( area * luminance );
-				axes.push( _axis.x || 0, _axis.y || 0, _axis.z || 1 );
-				cones.push( cone );
 
 			}
 
 		} );
 
-		const count = powers.length;
-		const { nodes, leaves } = this._buildTree( count, bounds, powers, axes, cones );
+		const count = areas.length;
+		const { nodes, leaves } = this._buildTree( count, new Float32Array( leafNodes ) );
 
 		// each triangle's object index, triangle index, leaf node and area bits
 		const triangleData = new Uint32Array( Math.max( count, 1 ) * 4 );
@@ -204,9 +201,11 @@ export class EmissiveTrianglesInfo {
 
 	}
 
-	// Builds the light tree over the triangles, splitting each node at the middle of its triangles' centers along
-	// their widest axis. Returns the nodes and each triangle's leaf node
-	_buildTree( count, bounds, powers, axes, cones ) {
+	// Builds the light tree over the triangles' leaf nodes, splitting each node at the middle of its triangles'
+	// centers along their widest axis. Returns the nodes and each triangle's leaf node index
+	// TODO: build with three-mesh-bvh's BVH once it supports a custom split strategy (three-mesh-bvh#987) and custom
+	// per-node data (three-mesh-bvh#988)
+	_buildTree( count, leafNodes ) {
 
 		const nodes = new Float32Array( Math.max( 2 * count - 1, 1 ) * NODE_FLOATS );
 		const leaves = new Uint32Array( count );
@@ -217,7 +216,7 @@ export class EmissiveTrianglesInfo {
 
 		}
 
-		const center = ( i, axis ) => bounds[ i * 6 + axis ] + bounds[ i * 6 + 3 + axis ];
+		const center = ( i, axis ) => leafNodes[ i * NODE_FLOATS + axis ] + leafNodes[ i * NODE_FLOATS + 4 + axis ];
 
 		let nodeCount = 0;
 		const build = ( start, end ) => {
@@ -225,22 +224,10 @@ export class EmissiveTrianglesInfo {
 			const node = nodeCount ++;
 			const base = node * NODE_FLOATS;
 
-			// a leaf takes its triangle's values
 			if ( end - start === 1 ) {
 
 				const i = order[ start ];
-				nodes[ base ] = bounds[ i * 6 ];
-				nodes[ base + 1 ] = bounds[ i * 6 + 1 ];
-				nodes[ base + 2 ] = bounds[ i * 6 + 2 ];
-				nodes[ base + 3 ] = powers[ i ];
-				nodes[ base + 4 ] = bounds[ i * 6 + 3 ];
-				nodes[ base + 5 ] = bounds[ i * 6 + 4 ];
-				nodes[ base + 6 ] = bounds[ i * 6 + 5 ];
-				nodes[ base + 7 ] = cones[ i ];
-				nodes[ base + 8 ] = axes[ i * 3 ];
-				nodes[ base + 9 ] = axes[ i * 3 + 1 ];
-				nodes[ base + 10 ] = axes[ i * 3 + 2 ];
-				nodes[ base + 11 ] = - ( i + 1 );
+				nodes.set( leafNodes.subarray( i * NODE_FLOATS, ( i + 1 ) * NODE_FLOATS ), base );
 				leaves[ i ] = node;
 				return;
 
@@ -293,13 +280,13 @@ export class EmissiveTrianglesInfo {
 
 			}
 
-			const first = nodeCount;
+			// the first child follows its node
 			build( start, split );
 			const second = nodeCount;
 			build( split, end );
 
 			// the node holds both children: their bounds, total power and a cone around both their cones
-			const firstBase = first * NODE_FLOATS;
+			const firstBase = base + NODE_FLOATS;
 			const secondBase = second * NODE_FLOATS;
 			for ( let k = 0; k < 3; k ++ ) {
 
@@ -340,56 +327,47 @@ export class EmissiveTrianglesInfo {
 		const getUvFromChannel = contextProxyFn( 'bvhData.fns.getUvFromChannel' );
 		const sampleTexel = contextProxyFn( 'shadingModel.fns.sampleTexel' );
 
-		this.getCount = wgslTagFn/* wgsl */`
-			fn getEmissiveTriangleCount() -> u32 {
+		// texel "texel", 0 to 2, of node "node"
+		const readNodeFn = wgslTagFn/* wgsl */`
+			fn readEmissiveNode( node: u32, texel: u32 ) -> vec4f {
 
-				return ${ countNode };
-
-			}
-		`;
-
-		// texel "i" of the tree
-		const readTreeFn = wgslTagFn/* wgsl */`
-			fn readEmissiveTree( i: u32 ) -> vec4f {
-
+				let i = node * 3u + texel;
 				let width = textureDimensions( ${ treeTextureNode } ).x;
 				return textureLoad( ${ treeTextureNode }, vec2u( i % width, i / width ), 0 );
 
 			}
 		`;
 
-		// How much light a node could send to "position": its power over the squared distance, times the cosine of
-		// the smallest angle between the directions it emits to and the direction to the position. See
-		// LightBounds::Importance() in pbrt-v4, without the receiver's normal
+		// The cosine of angle "a" less angle "b", given their sines and cosines, one when "b" is the larger
+		const cosSubClampedFn = wgslTagFn/* wgsl */`
+			fn cosSubClamped( sinA: f32, cosA: f32, sinB: f32, cosB: f32 ) -> f32 {
+
+				return select( cosA * cosB + sinA * sinB, 1.0, cosA > cosB );
+
+			}
+		`;
+
+		// How much light a node could send to "position": its power over the squared distance to its center, at least
+		// its radius, times the cosine of the smallest angle between the directions it emits to and the direction to
+		// the position. See LightBounds::Importance() in pbrt-v4
 		const getImportanceFn = wgslTagFn/* wgsl */`
 			fn getEmissiveNodeImportance( node: u32, position: vec3f ) -> f32 {
 
-				let first = ${ readTreeFn }( node * 3u );
-				let second = ${ readTreeFn }( node * 3u + 1u );
-				let axis = ${ readTreeFn }( node * 3u + 2u ).xyz;
-				let power = first.w;
-				let cosEmit = second.w;
+				let boundsMinPower = ${ readNodeFn }( node, 0u );
+				let boundsMaxCos = ${ readNodeFn }( node, 1u );
+				let axis = ${ readNodeFn }( node, 2u ).xyz;
+				let boundsMin = boundsMinPower.xyz;
+				let boundsMax = boundsMaxCos.xyz;
+				let power = boundsMinPower.w;
+				let cosEmit = boundsMaxCos.w;
 
-				let center = ( first.xyz + second.xyz ) * 0.5;
+				let center = ( boundsMin + boundsMax ) * 0.5;
 				let offset = position - center;
 				let distSq = dot( offset, offset );
-				let radiusSq = dot( second.xyz - first.xyz, second.xyz - first.xyz ) * 0.25;
-
-				// the angle from the cone's axis to the position, less the cone's spread
+				let radiusSq = dot( boundsMax - boundsMin, boundsMax - boundsMin ) * 0.25;
 				let toPosition = offset * inverseSqrt( max( distSq, ${ IMPORTANCE_DISTANCE_EPSILON } ) );
-				let cosToPosition = dot( axis, toPosition );
-				let sinToPosition = sqrt( max( 1.0 - cosToPosition * cosToPosition, 0.0 ) );
-				let sinEmit = sqrt( max( 1.0 - cosEmit * cosEmit, 0.0 ) );
-				var cosAngle = 1.0;
-				var sinAngle = 0.0;
-				if ( cosToPosition < cosEmit ) {
 
-					cosAngle = cosToPosition * cosEmit + sinToPosition * sinEmit;
-					sinAngle = sinToPosition * cosEmit - cosToPosition * sinEmit;
-
-				}
-
-				// less the angle the bounds cover as seen from the position, all of it from inside them
+				// the angle the bounds cover as seen from the position, all of it from inside them
 				var cosBounds = - 1.0;
 				if ( distSq > radiusSq ) {
 
@@ -398,12 +376,14 @@ export class EmissiveTrianglesInfo {
 				}
 
 				let sinBounds = sqrt( max( 1.0 - cosBounds * cosBounds, 0.0 ) );
-				var cosClosest = 1.0;
-				if ( cosAngle < cosBounds ) {
 
-					cosClosest = cosAngle * cosBounds + sinAngle * sinBounds;
-
-				}
+				// the angle from the cone's axis to the position, less the cone's spread and the bounds' angle
+				let cosToPosition = dot( axis, toPosition );
+				let sinToPosition = sqrt( max( 1.0 - cosToPosition * cosToPosition, 0.0 ) );
+				let sinEmit = sqrt( max( 1.0 - cosEmit * cosEmit, 0.0 ) );
+				let cosAngle = ${ cosSubClampedFn }( sinToPosition, cosToPosition, sinEmit, cosEmit );
+				let sinAngle = select( sinToPosition * cosEmit - cosToPosition * sinEmit, 0.0, cosToPosition > cosEmit );
+				let cosClosest = ${ cosSubClampedFn }( sinAngle, cosAngle, sinBounds, cosBounds );
 
 				// the triangles emit over the hemisphere around their normal
 				if ( cosClosest <= 0.0 ) {
@@ -417,6 +397,25 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
+		// The chance of the walk picking the first child of "node" for "position", by the children's importance.
+		// Negative when neither child can light the position
+		const getFirstChildChanceFn = wgslTagFn/* wgsl */`
+			fn getEmissiveFirstChildChance( node: u32, secondChild: u32, position: vec3f ) -> f32 {
+
+				let firstImportance = ${ getImportanceFn }( node + 1u, position );
+				let secondImportance = ${ getImportanceFn }( secondChild, position );
+				let total = firstImportance + secondImportance;
+				if ( total <= 0.0 ) {
+
+					return - 1.0;
+
+				}
+
+				return firstImportance / total;
+
+			}
+		`;
+
 		// Picks an emissive triangle by walking the tree with "ruv.x", and a point on it with "ruv.yz", and returns
 		// the light from that point toward "position". The pdf is zero when the side facing "position" doesn't emit
 		this.sample = wgslTagFn/* wgsl */`
@@ -424,40 +423,36 @@ export class EmissiveTrianglesInfo {
 
 				var lightRec: ${ lightRecordStruct };
 
-				// walk down the tree, picking each child by its importance and reusing the random number
+				// walk down the tree, picking each child by its chance and reusing the random number
 				var node = 0u;
 				var pickPdf = 1.0;
 				var r = ruv.x;
-				var link = ${ readTreeFn }( 2u ).w;
+				var link = ${ readNodeFn }( 0u, 2u ).w;
 				while ( link >= 0.0 ) {
 
-					let first = node + 1u;
-					let second = u32( link );
-					let firstImportance = ${ getImportanceFn }( first, position );
-					let secondImportance = ${ getImportanceFn }( second, position );
-					let total = firstImportance + secondImportance;
-					if ( total <= 0.0 ) {
+					let secondChild = u32( link );
+					let firstChance = ${ getFirstChildChanceFn }( node, secondChild, position );
+					if ( firstChance < 0.0 ) {
 
 						return lightRec;
 
 					}
 
-					let firstChance = firstImportance / total;
 					if ( r < firstChance ) {
 
-						node = first;
+						node = node + 1u;
 						pickPdf *= firstChance;
 						r = r / firstChance;
 
 					} else {
 
-						node = second;
+						node = secondChild;
 						pickPdf *= 1.0 - firstChance;
 						r = ( r - firstChance ) / ( 1.0 - firstChance );
 
 					}
 
-					link = ${ readTreeFn }( node * 3u + 2u ).w;
+					link = ${ readNodeFn }( node, 2u ).w;
 
 				}
 
@@ -484,11 +479,11 @@ export class EmissiveTrianglesInfo {
 
 				let toLight = point - position;
 				let distSq = dot( toLight, toLight );
-				let normal = normalize( cross( p1 - p0, p2 - p0 ) );
+				let triangleNormal = normalize( cross( p1 - p0, p2 - p0 ) );
 				let direction = toLight * inverseSqrt( distSq );
 
 				// whether the side facing "position" emits: front, back or both, by the material's side
-				let cosLight = - dot( normal, direction );
+				let cosLight = - dot( triangleNormal, direction );
 				let facing = select( cosLight * materialInfo.side, abs( cosLight ), materialInfo.side == 0.0 );
 				let area = bitcast<f32>( ids.w );
 				if ( distSq <= 0.0 || facing <= 0.0 || area <= 0.0 ) {
@@ -522,9 +517,9 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
-		// The pdf of "sampleEmissiveTriangle" picking "position" on an object's triangle, as seen from "origin", where
-		// the triangle faces "normal". Zero when the object doesn't emit. Walks down the tree to the triangle's leaf,
-		// multiplying the chances of each child on the way. Used to MIS weight emission that bsdf rays hit
+		// The pdf of "sampleEmissiveTriangle" picking "position" on an object's triangle facing "normal", as seen from
+		// "origin". Zero when the object doesn't emit. Walks down the tree to the triangle's leaf, multiplying the
+		// chances of each child on the way. Used to MIS weight emission that bsdf rays hit
 		this.getPdf = wgslTagFn/* wgsl */`
 			fn getEmissiveTrianglePdf( origin: vec3f, position: vec3f, normal: vec3f, objectIndex: u32, triangleIndex: u32 ) -> f32 {
 
@@ -558,31 +553,29 @@ export class EmissiveTrianglesInfo {
 
 				}
 
-				// walk down to the leaf the same way the sampling would have: its nodes come before the second child's
+				// walk down to the leaf the same way the sampling would have: the first child's nodes come before the
+				// second child
 				var node = 0u;
 				var pickPdf = 1.0;
 				while ( node != leaf ) {
 
-					let first = node + 1u;
-					let second = u32( ${ readTreeFn }( node * 3u + 2u ).w );
-					let firstImportance = ${ getImportanceFn }( first, origin );
-					let secondImportance = ${ getImportanceFn }( second, origin );
-					let total = firstImportance + secondImportance;
-					if ( total <= 0.0 ) {
+					let secondChild = u32( ${ readNodeFn }( node, 2u ).w );
+					let firstChance = ${ getFirstChildChanceFn }( node, secondChild, origin );
+					if ( firstChance < 0.0 ) {
 
 						return 0.0;
 
 					}
 
-					if ( leaf < second ) {
+					if ( leaf < secondChild ) {
 
-						node = first;
-						pickPdf *= firstImportance / total;
+						node = node + 1u;
+						pickPdf *= firstChance;
 
 					} else {
 
-						node = second;
-						pickPdf *= secondImportance / total;
+						node = secondChild;
+						pickPdf *= 1.0 - firstChance;
 
 					}
 
