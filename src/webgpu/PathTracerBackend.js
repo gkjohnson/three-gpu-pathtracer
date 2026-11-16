@@ -118,15 +118,7 @@ export class PathTracerBackend {
 
 	}
 
-	setEnvironment(
-		envMap,
-		envMapIntensity,
-		envMapRotation,
-	) {
-
-	}
-
-	setLights( lights ) {
+	setLightsInfo( lightsInfo ) {
 
 	}
 

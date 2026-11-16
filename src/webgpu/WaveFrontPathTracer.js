@@ -14,9 +14,7 @@ import { PixelQueueRebuildDispatchKernel } from './compute/wavefront/PixelQueueR
 import { RebuildPixelQueueKernel } from './compute/wavefront/RebuildPixelQueueKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { CopyBufferKernel } from './compute/CopyBufferKernel.js';
-import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
-import { LightsInfoNode } from './LightsInfoNode.js';
 import {
 	rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, shadowTraceResultStruct, pixelQueueInfoStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, QUEUE_COUNTER_COUNT,
@@ -58,9 +56,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// scatter events a medium walk takes per pass
 		this.mediumStepsPerPass = 16;
 
-		this.envInfo = new EquirectHdrInfoNode();
 		this.backgroundInfo = new EquirectBackgroundInfo();
-		this.lightsInfo = new LightsInfoNode( this.envInfo );
 
 		// The path slot pool, sized to the frame budget and resized in the render loop as the budget
 		// changes. Every per-slot buffer is allocated to the same count so a full pool can never
@@ -127,10 +123,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.logicKernel.context.clampDirect = this.clampDirect;
 		this.logicKernel.context.clampIndirect = this.clampIndirect;
 
-		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
-		this.logicKernel.envInfo = this.envInfo;
 		this.logicKernel.backgroundInfo = this.backgroundInfo;
-		this.logicKernel.lightsInfo = this.lightsInfo;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -219,30 +212,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setEnvironment( envMap ) {
+	setLightsInfo( lightsInfo ) {
 
-		this.envInfo.updateFrom( envMap );
-
-	}
-
-	setLights( lights ) {
-
-		if ( this.lightsInfo.updateFrom( this.renderer, lights ) ) {
-
-			this.rebuild();
-
-		}
-
-		this.reset();
-
-	}
-
-	setEnvironmentParams( envMapIntensity, envMapRotation ) {
-
-		const { envInfo } = this;
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		envInfo.rotationNode.value.setFromMatrix4( rotationMatrix );
-		envInfo.intensityNode.value = envMapIntensity;
+		this.logicKernel.lightsInfo = lightsInfo;
+		this.logicKernel.envInfo = lightsInfo.envInfo;
+		this.rebuild();
 
 	}
 
@@ -278,9 +252,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	dispose() {
 
 		super.dispose();
-
-		this.envInfo.dispose();
-		this.lightsInfo.dispose();
 
 		this.rayDataStorage?.dispose();
 		this.rayQueue?.dispose();

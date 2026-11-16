@@ -1,8 +1,6 @@
 import { Matrix4, Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
-import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
-import { LightsInfoNode } from './LightsInfoNode.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -14,9 +12,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		super( renderer );
 
-		// options
-		this.envInfo = new EquirectHdrInfoNode();
-
 		// every pixel in a tile finishes its sample in one dispatch, so the counts follow from how
 		// far through the tile cycle the render is and need no GPU work to measure
 		this._completedSamples = 0;
@@ -26,13 +21,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
 		this.kernel.context.clampDirect = this.clampDirect;
 		this.kernel.context.clampIndirect = this.clampIndirect;
-		this.kernel.envInfo = this.envInfo;
 
 		this.backgroundInfo = new EquirectBackgroundInfo();
 		this.kernel.backgroundInfo = this.backgroundInfo;
-
-		this.lightsInfo = new LightsInfoNode( this.envInfo );
-		this.kernel.lightsInfo = this.lightsInfo;
 
 	}
 
@@ -107,21 +98,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setEnvironment( envMap ) {
+	setLightsInfo( lightsInfo ) {
 
-		this.envInfo.updateFrom( envMap );
-
-	}
-
-	setLights( lights ) {
-
-		if ( this.lightsInfo.updateFrom( this.renderer, lights ) ) {
-
-			this.rebuild();
-
-		}
-
-		this.reset();
+		this.kernel.lightsInfo = lightsInfo;
+		this.kernel.envInfo = lightsInfo.envInfo;
+		this.rebuild();
 
 	}
 
@@ -129,15 +110,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		this.kernel.misEnabled = enabled ? 1 : 0;
 		this.reset();
-
-	}
-
-	setEnvironmentParams( envMapIntensity, envMapRotation ) {
-
-		const { envInfo } = this;
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		envInfo.rotationNode.value.setFromMatrix4( rotationMatrix );
-		envInfo.intensityNode.value = envMapIntensity;
 
 	}
 
@@ -279,8 +251,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		super.dispose();
 
 		// TODO: dispose of all buffers
-		this.envInfo.dispose();
-		this.lightsInfo.dispose();
 		this.kernel.dispose();
 
 	}
