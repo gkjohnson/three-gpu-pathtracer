@@ -11,6 +11,7 @@ export const SPOT_LIGHT_TYPE = 2;
 export const DIR_LIGHT_TYPE = 3;
 export const POINT_LIGHT_TYPE = 4;
 export const ENVIRONMENT_LIGHT_TYPE = 5;
+export const EMISSIVE_TRIANGLE_LIGHT_TYPE = 6;
 export const LIGHT_FAR_DISTANCE = 1e30;
 
 // Writes "outRay", the shadow ray toward a light sampled from "hitPoint", the light "lightDist" away in
@@ -51,7 +52,7 @@ export const isMISWeightLightFn = wgslFn( /* wgsl */ `
 
 	fn isMISWeightLight( lightType: i32 ) -> bool {
 
-		return lightType == ${ ENVIRONMENT_LIGHT_TYPE } || lightType == ${ CIRC_AREA_LIGHT_TYPE } || lightType == ${ RECT_AREA_LIGHT_TYPE };
+		return lightType == ${ ENVIRONMENT_LIGHT_TYPE } || lightType == ${ CIRC_AREA_LIGHT_TYPE } || lightType == ${ RECT_AREA_LIGHT_TYPE } || lightType == ${ EMISSIVE_TRIANGLE_LIGHT_TYPE };
 
 	}
 

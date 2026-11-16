@@ -31,10 +31,11 @@ function encodeTextureWrap( wrap ) {
 /**
  * Defines how the pathtracer interprets the scene's materials
  *
- * A custom material struct must keep the fields the ray traversal and medium stack read: "opacity", "side",
- * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap", "alphaMapTransform",
- * "transmission", "thinWall", "fogVolume", "attenuationColor", "attenuationDistance", "multiscatterColor",
- * "scatterStrength" and "scatterAnisotropy".
+ * A custom material struct must keep the fields the ray traversal, medium stack and emissive triangle sampling
+ * read: "opacity", "side", "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap",
+ * "alphaMapTransform", "transmission", "thinWall", "fogVolume", "attenuationColor", "attenuationDistance",
+ * "multiscatterColor", "scatterStrength", "scatterAnisotropy", "emissive", "emissiveIntensity", "emissiveMap" and
+ * "emissiveMapTransform".
  *
  * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
  * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",
