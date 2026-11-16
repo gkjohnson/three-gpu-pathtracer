@@ -45,12 +45,13 @@ export class MaterialKernel extends ComputeKernel {
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
-		// Queues the NEE shadow ray from the origin toward the light LogicKernel selected, starting in the given media,
-		// and returns its index in the queue. A whole struct is written to the buffer, which Safari needs
+		// Queues the NEE shadow ray toward the light LogicKernel selected, from "origin", "position" offset off its
+		// surface, starting in the given media, and returns its index in the queue. A whole struct is written to the
+		// buffer, which Safari needs
 		const queueShadowRayFn = wgslTagFn/* wgsl */`
-			fn queueShadowRay( input: ${ rayDataStruct }, origin: vec3f, stack: ${ mediumStackStruct } ) -> i32 {
+			fn queueShadowRay( input: ${ rayDataStruct }, position: vec3f, origin: vec3f, stack: ${ mediumStackStruct } ) -> i32 {
 
-				let aimed = ${ aimShadowRayFn }( input.lightOrigin, input.lightDirection, input.lightDist, origin );
+				let aimed = ${ aimShadowRayFn }( position, input.lightDirection, input.lightDist, origin );
 				var queuedRay: ${ traceQueuedRayStruct };
 				queuedRay.origin = origin;
 				queuedRay.direction = aimed.xyz;
@@ -138,6 +139,7 @@ export class MaterialKernel extends ComputeKernel {
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
 					var bounceOrigin = input.origin;
+					var shadowPosition = input.origin;
 					var shadowOrigin = input.origin;
 					var shadowStack = medium.stack;
 					var emission = vec3f( 0.0 );
@@ -290,7 +292,8 @@ export class MaterialKernel extends ComputeKernel {
 							let evalRec = ${ bsdfEvalPdfFn }( input.hit, surface, view, input.lightDirection );
 							lightEvalColor = evalRec.color;
 							lightEvalPdf = evalRec.pdf;
-							shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.lightDirection, input.hit.normal );
+							shadowPosition = vertexData.position.xyz;
+							shadowOrigin = ${ offsetRayOriginFunc }( shadowPosition, input.lightDirection, input.hit.normal );
 							shadowStack = ${ getShadowMediumStackFn }(
 								medium.stack, objectInfo.materialIndex, input.hit.side, surface.thinWall,
 								input.direction, input.lightDirection, input.hit.normal,
@@ -417,7 +420,7 @@ export class MaterialKernel extends ComputeKernel {
 
 						rayDataStorage[ index ].lightEvalColor = lightEvalColor;
 						rayDataStorage[ index ].lightEvalPdf = lightEvalPdf;
-						rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowOrigin, shadowStack );
+						rayDataStorage[ index ].shadowRayIntersectionIndex = ${ queueShadowRayFn }( input, shadowPosition, shadowOrigin, shadowStack );
 
 					} else {
 

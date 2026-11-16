@@ -219,7 +219,6 @@ export class LogicKernel extends ComputeKernel {
 								rayDataStorage[ index ].lightDirection = lightRec.direction;
 								rayDataStorage[ index ].lightEmission = lightRec.emission;
 								rayDataStorage[ index ].lightDist = lightRec.dist;
-								rayDataStorage[ index ].lightOrigin = position;
 								rayDataStorage[ index ].lightType = lightRec.lightType;
 
 							}

@@ -12,7 +12,8 @@ export const POINT_LIGHT_TYPE = 4;
 export const ENVIRONMENT_LIGHT_TYPE = 5;
 export const LIGHT_FAR_DISTANCE = 1e30;
 
-// The direction and distance from the offset shadow ray "origin" to the light point sampled from "position"
+// The direction and distance from the offset shadow ray "origin" to the light point sampled from "position",
+// offset back along the ray so the ray ends just short of the light's surface
 export const aimShadowRayFn = wgslFn( /* wgsl */ `
 
 	fn aimShadowRay( position: vec3f, direction: vec3f, dist: f32, origin: vec3f ) -> vec4f {
@@ -23,13 +24,14 @@ export const aimShadowRayFn = wgslFn( /* wgsl */ `
 
 		}
 
-		let toLight = position + direction * dist - origin;
+		let lightPoint = offsetRayOrigin( position + direction * dist, - direction, - direction );
+		let toLight = lightPoint - origin;
 		let shadowDist = length( toLight );
 		return vec4f( toLight / shadowDist, shadowDist );
 
 	}
 
-` );
+`, [ offsetRayOriginFunc ] );
 
 // light kinds that are also bsdf-sampled and so take MIS-weighted NEE - punctual lights take full weight
 export const isMISWeightLightFn = wgslFn( /* wgsl */ `
@@ -156,13 +158,10 @@ export const randomAreaLightSampleFn = wgslFn( /* wgsl */ `
 		let direction = toLight / dist;
 		let lightNormal = normalize( cross( light.u, light.v ) );
 
-		// the shadow ray ends just off the light
-		let shadowPoint = offsetRayOrigin( randomPos, - direction, lightNormal );
-
 		var lightRec: LightRecord;
 		lightRec.lightType = light.lightType;
 		lightRec.emission = light.color * light.intensity;
-		lightRec.dist = length( shadowPoint - rayOrigin );
+		lightRec.dist = dist;
 		lightRec.direction = direction;
 
 		// points behind or edge-on to the light receive no contribution
@@ -181,7 +180,7 @@ export const randomAreaLightSampleFn = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ lightStruct, lightRecordStruct, constants, offsetRayOriginFunc ] );
+`, [ lightStruct, lightRecordStruct, constants ] );
 
 // Samples the disc of a spot light with distance falloff. Angular ( cone or IES ) attenuation is applied by the caller.
 export const randomSpotLightSampleFn = wgslFn( /* wgsl */ `

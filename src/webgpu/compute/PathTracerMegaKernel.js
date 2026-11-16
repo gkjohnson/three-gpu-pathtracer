@@ -429,6 +429,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
 					var bounceOrigin = position;
+					var shadowPosition = position;
 					var shadowOrigin = position;
 					var shadowStack = medium.stack;
 					var emission = vec3f( 0.0 );
@@ -549,7 +550,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
 							lightEvalColor = evalRec.color;
 							lightEvalPdf = evalRec.pdf;
-							shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
+							shadowPosition = vertexData.position.xyz;
+							shadowOrigin = ${ offsetRayOriginFunc }( shadowPosition, lightRec.direction, hit.normal );
 							shadowStack = ${ getShadowMediumStackFn }(
 								medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall,
 								ray.direction, lightRec.direction, hit.normal,
@@ -627,7 +629,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// the vertex's light sample and emission, with the pre-scatter throughput, clamped at the segment's depth
 					if ( lightRec.pdf > 0.0 ) {
 
-						let directLight = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, position, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
+						let directLight = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowPosition, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
 						resultColor += vec4f( directLight, 0.0 );
 
 					}
