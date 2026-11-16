@@ -7,7 +7,6 @@ import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.j
 import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
-import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { toHalfFloatArray } from '../utils/TextureUtils.js';
@@ -654,9 +653,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lowResTarget.type = FloatType;
 		this._lowResTarget.generateMipmaps = false;
 
-		// the environment and lights, which the backends sample
-		this._envInfo = new EquirectHdrInfoNode();
-		this._lightsInfo = new LightsInfoNode( this._envInfo );
+		// the lights and environment, which the backends sample
+		this._lightsInfo = new LightsInfoNode();
 
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 		this._pathTracer.setLightsInfo( this._lightsInfo );
@@ -1325,7 +1323,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		const {
 			_pathTracer,
-			_envInfo,
+			_lightsInfo,
 			scene,
 
 			_environmentCache,
@@ -1333,9 +1331,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		} = this;
 
 		// update the texture if they've changed
+		const { envInfo } = _lightsInfo;
 		if ( _environmentCache.setFromScene( scene ) ) {
 
-			_envInfo.updateFrom( _environmentCache.texture );
+			envInfo.updateFrom( _environmentCache.texture );
 
 		}
 
@@ -1347,8 +1346,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// update the params always since they're cheap
 		_envRotation.makeRotationFromEuler( scene.environmentRotation ).invert();
-		_envInfo.rotationNode.value.setFromMatrix4( _envRotation );
-		_envInfo.intensityNode.value = scene.environmentIntensity;
+		envInfo.rotationNode.value.setFromMatrix4( _envRotation );
+		envInfo.intensityNode.value = scene.environmentIntensity;
 
 		_pathTracer.setBackgroundParams(
 			scene.backgroundIntensity,
@@ -1964,7 +1963,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._upscaler?.dispose();
 		this._bvhData.dispose();
 		this._lightsInfo.dispose();
-		this._envInfo.dispose();
 		this._shadingModel.dispose();
 		this._environmentCache.dispose();
 		this._backgroundCache.dispose();
