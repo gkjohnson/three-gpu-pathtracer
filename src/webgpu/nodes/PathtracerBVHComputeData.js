@@ -706,6 +706,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	// Records each transform slot's triangles in the packed index buffer: its geometry group's range, offset by
 	// where its geometry was packed. Each geometry is packed once, in the order the slots first reference it
+	// TODO: have three-mesh-bvh's BVHComputeData record each slot's triangle range while packing, and remove this
 	updateTriangleRanges() {
 
 		const geometryOffsets = new Map();
