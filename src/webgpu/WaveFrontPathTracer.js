@@ -147,9 +147,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.subsurfaceKernel.context.bvhData = bvhData;
 		this.cameraRayKernel.context.bvhData = bvhData;
 		this.cameraMediumKernel.context.bvhData = bvhData;
-
-		// the emission MIS reads the hit objects' material indices, and light sampling the emissive triangles'
-		// transforms and vertices
 		this.logicKernel.context.bvhData = bvhData;
 		this.rebuild();
 
@@ -192,8 +189,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel.context.shadingModel = shadingModel;
 		this.subsurfaceKernel.context.shadingModel = shadingModel;
 		this.cameraMediumKernel.context.shadingModel = shadingModel;
-
-		// light sampling reads the emissive triangles' materials and emissive maps
 		this.logicKernel.context.shadingModel = shadingModel;
 		this.rebuild();
 

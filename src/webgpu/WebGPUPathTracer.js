@@ -1286,8 +1286,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this.scene.updateMatrixWorld( true );
 		this._bvhData.updateTransforms();
-
-		// the emissive triangles are weighted by their world area
 		this._lightsInfo.emissiveTriangles.update( this._bvhData, this._shadingModel );
 		this._updateCameraInVolume();
 		this.reset();

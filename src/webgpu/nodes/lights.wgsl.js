@@ -52,7 +52,10 @@ export const isMISWeightLightFn = wgslFn( /* wgsl */ `
 
 	fn isMISWeightLight( lightType: i32 ) -> bool {
 
-		return lightType == ${ ENVIRONMENT_LIGHT_TYPE } || lightType == ${ CIRC_AREA_LIGHT_TYPE } || lightType == ${ RECT_AREA_LIGHT_TYPE } || lightType == ${ EMISSIVE_TRIANGLE_LIGHT_TYPE };
+		return lightType == ${ ENVIRONMENT_LIGHT_TYPE } ||
+			lightType == ${ CIRC_AREA_LIGHT_TYPE } ||
+			lightType == ${ RECT_AREA_LIGHT_TYPE } ||
+			lightType == ${ EMISSIVE_TRIANGLE_LIGHT_TYPE };
 
 	}
 
