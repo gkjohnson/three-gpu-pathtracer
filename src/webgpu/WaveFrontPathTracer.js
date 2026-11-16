@@ -1,4 +1,4 @@
-import { Matrix4, StorageBufferAttribute, Vector2 } from 'three/webgpu';
+import { StorageBufferAttribute, Vector2 } from 'three/webgpu';
 import { PopulatePixelIndicesKernel } from './compute/wavefront/PopulatePixelIndicesKernel.js';
 import { LogicKernel } from './compute/wavefront/LogicKernel.js';
 import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
@@ -14,7 +14,6 @@ import { PixelQueueRebuildDispatchKernel } from './compute/wavefront/PixelQueueR
 import { RebuildPixelQueueKernel } from './compute/wavefront/RebuildPixelQueueKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { CopyBufferKernel } from './compute/CopyBufferKernel.js';
-import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import {
 	rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, shadowTraceResultStruct, pixelQueueInfoStruct,
 	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, QUEUE_COUNTER_COUNT,
@@ -55,8 +54,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// scatter events a medium walk takes per pass
 		this.mediumStepsPerPass = 16;
-
-		this.backgroundInfo = new EquirectBackgroundInfo();
 
 		// The path slot pool, sized to the frame budget and resized in the render loop as the budget
 		// changes. Every per-slot buffer is allocated to the same count so a full pool can never
@@ -122,8 +119,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// the logic kernel clamps the light it gathers
 		this.logicKernel.context.clampDirect = this.clampDirect;
 		this.logicKernel.context.clampIndirect = this.clampIndirect;
-
-		this.logicKernel.backgroundInfo = this.backgroundInfo;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -227,25 +222,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setBackground( background ) {
+	setBackgroundInfo( backgroundInfo ) {
 
-		const { backgroundInfo } = this;
-		backgroundInfo.dispose();
-		backgroundInfo.map = background;
-
-	}
-
-	setBackgroundParams(
-		backgroundIntensity,
-		backgroundRotation,
-		backgroundBlurriness,
-	) {
-
-		const { backgroundInfo } = this;
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
-		backgroundInfo.rotationNode.value.copy( rotationMatrix );
-		backgroundInfo.intensity = backgroundIntensity;
-		backgroundInfo.blur = backgroundBlurriness;
+		this.logicKernel.backgroundInfo = backgroundInfo;
+		this.rebuild();
 
 	}
 

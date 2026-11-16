@@ -1,6 +1,5 @@
-import { Matrix4, Vector2 } from 'three/webgpu';
+import { Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
-import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -21,9 +20,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
 		this.kernel.context.clampDirect = this.clampDirect;
 		this.kernel.context.clampIndirect = this.clampIndirect;
-
-		this.backgroundInfo = new EquirectBackgroundInfo();
-		this.kernel.backgroundInfo = this.backgroundInfo;
 
 	}
 
@@ -113,25 +109,10 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setBackground( background ) {
+	setBackgroundInfo( backgroundInfo ) {
 
-		const { backgroundInfo } = this;
-		backgroundInfo.dispose();
-		backgroundInfo.map = background;
-
-	}
-
-	setBackgroundParams(
-		backgroundIntensity,
-		backgroundRotation,
-		backgroundBlurriness,
-	) {
-
-		const { backgroundInfo } = this;
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
-		backgroundInfo.rotationNode.value.copy( rotationMatrix );
-		backgroundInfo.intensity = backgroundIntensity;
-		backgroundInfo.blur = backgroundBlurriness;
+		this.kernel.backgroundInfo = backgroundInfo;
+		this.rebuild();
 
 	}
 

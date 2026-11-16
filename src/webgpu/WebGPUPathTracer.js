@@ -8,6 +8,7 @@ import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
 import { LightsInfoNode } from './LightsInfoNode.js';
+import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { toHalfFloatArray } from '../utils/TextureUtils.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
@@ -37,7 +38,7 @@ const _resolution = new Vector2();
 const _color = new Color();
 const _originBounds = /* @__PURE__ */ new Box3();
 const _originToWorld = /* @__PURE__ */ new Matrix4();
-const _envRotation = /* @__PURE__ */ new Matrix4();
+const _rotationMatrix = /* @__PURE__ */ new Matrix4();
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -603,6 +604,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._timingCount = 0;
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setLightsInfo( this._lightsInfo );
+		this._pathTracer.setBackgroundInfo( this._backgroundInfo );
 		this._pathTracer.setShadingModel( this._shadingModel );
 		this._pathTracer.setRandom( this._random );
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
@@ -611,10 +613,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
 		this._pathTracer.setAccumulateAux( Boolean( this._denoiser && this._denoiser.useAuxiliaryBuffers ) );
 		this.setCamera( this.camera );
-
-		// the new tracer has a default background map so apply the cached scene texture
-		this._pathTracer.setBackground( this._backgroundCache.texture );
-		this.updateEnvironment();
+		this.reset();
 
 	}
 
@@ -653,11 +652,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lowResTarget.type = FloatType;
 		this._lowResTarget.generateMipmaps = false;
 
-		// the lights and environment, which the backends sample
+		// the lights, environment and background, which the backends sample
 		this._lightsInfo = new LightsInfoNode();
+		this._backgroundInfo = new EquirectBackgroundInfo();
 
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 		this._pathTracer.setLightsInfo( this._lightsInfo );
+		this._pathTracer.setBackgroundInfo( this._backgroundInfo );
 
 		// optional post passes, attached with "setDenoiser" / "setUpscaler"
 		this._denoiser = null;
@@ -1322,15 +1323,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 	updateEnvironment() {
 
 		const {
-			_pathTracer,
 			_lightsInfo,
+			_backgroundInfo,
 			scene,
 
 			_environmentCache,
 			_backgroundCache,
 		} = this;
 
-		// update the texture if they've changed
+		// update the texture if they've changed. The background info only owns its default map, which the first
+		// scene texture replaces
 		const { envInfo } = _lightsInfo;
 		if ( _environmentCache.setFromScene( scene ) ) {
 
@@ -1340,20 +1342,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		if ( _backgroundCache.setFromScene( scene ) ) {
 
-			_pathTracer.setBackground( _backgroundCache.texture );
+			_backgroundInfo.dispose();
+			_backgroundInfo.map = _backgroundCache.texture;
 
 		}
 
 		// update the params always since they're cheap
-		_envRotation.makeRotationFromEuler( scene.environmentRotation ).invert();
-		envInfo.rotationNode.value.setFromMatrix4( _envRotation );
+		_rotationMatrix.makeRotationFromEuler( scene.environmentRotation ).invert();
+		envInfo.rotationNode.value.setFromMatrix4( _rotationMatrix );
 		envInfo.intensityNode.value = scene.environmentIntensity;
 
-		_pathTracer.setBackgroundParams(
-			scene.backgroundIntensity,
-			scene.backgroundRotation,
-			scene.backgroundBlurriness,
-		);
+		_rotationMatrix.makeRotationFromEuler( scene.backgroundRotation ).invert();
+		_backgroundInfo.rotationNode.value.copy( _rotationMatrix );
+		_backgroundInfo.intensity = scene.backgroundIntensity;
+		_backgroundInfo.blur = scene.backgroundBlurriness;
 
 		this.reset();
 

@@ -122,12 +122,7 @@ export class PathTracerBackend {
 
 	}
 
-	setBackground(
-		background,
-		backgroundIntensity,
-		backgroundRotation,
-		backgroundBlurriness,
-	) {
+	setBackgroundInfo( backgroundInfo ) {
 
 	}
 
