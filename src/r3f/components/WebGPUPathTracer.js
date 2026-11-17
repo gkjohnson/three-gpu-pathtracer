@@ -2,7 +2,7 @@
 import { createContext, createElement, forwardRef, useContext, useEffect, useLayoutEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { WebGPUPathTracer as WebGPUPathTracerImpl } from '../../webgpu/WebGPUPathTracer.js';
-import { useDeepOptions } from '../utilities/useOptions.js';
+import { useShallowOptions } from '../utilities/useOptions.js';
 import { useApplyRefs } from '../utilities/useApplyRefs.js';
 
 // context for accessing the path tracer
@@ -21,10 +21,11 @@ export function usePathTracer() {
 }
 
 /**
- * Wrapper for the WebGPUPathTracer class that renders the fiber scene and camera. All properties
- * on the path tracer instance can be set as props using dot-notation for nested properties
- * (e.g. `renderer-toneMapping`). Scene changes are not tracked: call the update functions on the
- * instance from `usePathTracer` after adding, moving, or restyling objects.
+ * Wrapper for the WebGPUPathTracer class that renders the fiber scene and camera. The settable
+ * properties of the path tracer instance, such as `maxBounces`, `maxSamples` or `renderScale`, can
+ * be set as props, and its events registered with `onComplete` and `onProgress`. Scene changes are
+ * not tracked: call the update functions on the instance from `usePathTracer` after adding,
+ * moving, or restyling objects.
  * @component
  * @param {Object} props
  * @param {boolean} [props.enabled=true] - If false, the scene is rasterized normally instead.
@@ -116,8 +117,8 @@ export const WebGPUPathTracer = forwardRef( function WebGPUPathTracer( props, re
 	// assign ref
 	useApplyRefs( pathTracer, ref );
 
-	// assign options recursively
-	useDeepOptions( pathTracer, options );
+	// assign the settable properties and events
+	useShallowOptions( pathTracer, options );
 
 	return createElement( WebGPUPathTracerContext.Provider, { value: pathTracer }, children );
 
