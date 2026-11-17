@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Vertex colors are only stored on the GPU when the scene has them, reducing memory use.
 - WebGPUPathTracer: Russian roulette starts at the second vertex, as in Cycles, so paths end sooner and samples are cheaper.
 - WebGPUPathTracer: The wavefront path tracer rebuilds its pixel queue after each pass, skipping finished pixels and the ones the camera declines and sampling the pixels that fall behind first, so renders with "maxSamples" finish sooner and more evenly. The queue shrinks with the render size, except during the low res preview.
+- WebGPUPathTracer: The render fades in over the low res preview, which shows through the pixels the render hasn't reached yet. With a "minSamples" of 0 the preview stays until every pixel has a sample.
 
 ### Fixed
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
