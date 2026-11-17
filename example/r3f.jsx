@@ -8,6 +8,7 @@ import { initUNetFromURL } from 'oidn-webgpu';
 import { Upscaler as UpscalerImpl } from '@pmndrs/upscaler';
 import { OIDNDenoiser, FSRUpscaler } from 'three-gpu-pathtracer/webgpu';
 import { WebGPUPathTracer, Denoiser, Upscaler, usePathTracer } from 'three-gpu-pathtracer/r3f';
+import { getScaledSettings } from './src/getScaledSettings.js';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/devices/headphone-with-stand.glb';
@@ -55,12 +56,12 @@ function App() {
 
 	const [ params, setParams ] = useState( {
 		enabled: true,
-		maxBounces: 5,
-		maxSamples: 64,
-		renderScale: 1,
+		maxSamples: 16,
 		denoise: true,
 		upscale: true,
+		sharpness: 1,
 		color: '#d8d4cc',
+		...getScaledSettings(),
 	} );
 
 	useEffect( () => {
@@ -69,11 +70,11 @@ function App() {
 		const state = { ...params };
 		const update = () => setParams( { ...state } );
 		gui.add( state, 'enabled' ).onChange( update );
-		gui.add( state, 'maxBounces', 1, 20, 1 ).onChange( update );
-		gui.add( state, 'maxSamples', 1, 512, 1 ).onChange( update );
+		gui.add( state, 'maxSamples', 1, 100, 1 ).onChange( update );
 		gui.add( state, 'renderScale', 0.1, 1, 0.01 ).onChange( update );
 		gui.add( state, 'denoise' ).onChange( update );
 		gui.add( state, 'upscale' ).onChange( update );
+		gui.add( state, 'sharpness', 0, 1, 0.01 ).onChange( update );
 		gui.addColor( state, 'color' ).onChange( update );
 		return () => gui.destroy();
 
@@ -93,12 +94,12 @@ function App() {
 			<Suspense fallback={ null }>
 				<WebGPUPathTracer
 					enabled={ params.enabled }
-					maxBounces={ params.maxBounces }
 					maxSamples={ params.maxSamples }
 					renderScale={ params.renderScale }
+					frameBudget={ params.frameBudget }
 				>
 					{ params.denoise && <Denoiser denoiser={ OIDNDenoiser } args={ DENOISER_ARGS } /> }
-					{ params.upscale && <Upscaler upscaler={ FSRUpscaler } args={ UPSCALER_ARGS } /> }
+					{ params.upscale && <Upscaler upscaler={ FSRUpscaler } args={ UPSCALER_ARGS } sharpness={ params.sharpness } /> }
 					<Headphones />
 					<StudioBackdrop color={ params.color } />
 					<Environment files={ ENV_URL } background={ true } />

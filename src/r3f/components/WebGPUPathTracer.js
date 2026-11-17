@@ -82,9 +82,10 @@ export const WebGPUPathTracer = forwardRef( function WebGPUPathTracer( props, re
 			camera.updateMatrixWorld();
 			if ( ! cameraState.matrixWorld.equals( camera.matrixWorld ) || ! cameraState.projectionMatrix.equals( camera.projectionMatrix ) ) {
 
+				// stored after the update, which rebuilds the projection for the WebGPU coordinate system
+				pathTracer.updateCamera();
 				cameraState.matrixWorld.copy( camera.matrixWorld );
 				cameraState.projectionMatrix.copy( camera.projectionMatrix );
-				pathTracer.updateCamera();
 
 			}
 
