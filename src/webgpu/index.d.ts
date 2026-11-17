@@ -1,4 +1,4 @@
-import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture, MagnificationTextureFilter } from 'three';
+import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
 import { StorageArrayTexture, WebGPURenderer, MeshBasicNodeMaterial, MeshBasicNodeMaterialParameters } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
@@ -212,10 +212,8 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	renderDelay: number;
 	fadeDuration: number;
 	dynamicLowRes: boolean;
-	lowResScale: number;
-	adaptiveDynamicRes: boolean;
 	renderScale: number;
-	displayFilter: MagnificationTextureFilter;
+	interpolateDisplay: boolean;
 	synchronizeRenderSize: boolean;
 	renderToCanvas: boolean;
 	asyncCompile: boolean;
