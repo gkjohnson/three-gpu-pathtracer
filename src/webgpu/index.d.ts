@@ -162,6 +162,8 @@ export interface SampleCounts {
 	max: number;
 	avg: number;
 	samplesPerSecond: number;
+	renderTime: number;
+	elapsedTime: number;
 
 }
 

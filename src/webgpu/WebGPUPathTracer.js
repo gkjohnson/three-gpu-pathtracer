@@ -11,6 +11,7 @@ import { LightsInfoNode } from './LightsInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { toHalfFloatArray } from '../utils/TextureUtils.js';
+import { FrameWatchdog } from '../utils/FrameWatchdog.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
@@ -31,7 +32,10 @@ import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
  * @property {number} min - Lowest sample count of any pixel.
  * @property {number} max - Highest sample count of any pixel.
  * @property {number} avg - Mean sample count across the image.
- * @property {number} samplesPerSecond - Mean samples accumulated per second since the last reset.
+ * @property {number} samplesPerSecond - Mean samples accumulated per second of render time since the last reset.
+ * @property {number} renderTime - Milliseconds spent rendering samples since the last reset.
+ * @property {number} elapsedTime - Milliseconds since rendering started after the last reset, including pauses but
+ *   not the time the page is hidden.
  */
 
 const _resolution = new Vector2();
@@ -392,9 +396,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		counts.max = measured.max;
 		counts.avg = measured.avg;
 
-		// averaged over the whole render, and idle time counts against it
-		const elapsed = this.getRenderTime() / 1000;
-		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
+		// averaged over the time spent rendering
+		counts.renderTime = this.getRenderTime();
+		counts.elapsedTime = Math.max( this._resetTime, 0 );
+		counts.samplesPerSecond = counts.renderTime > 0 ? 1000 * counts.avg / counts.renderTime : 0;
 
 		return { ...counts };
 
@@ -628,13 +633,38 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._renderer = renderer;
 		this._timer = new Timer();
 
+		// leaves out the time the page spends hidden
+		if ( typeof document !== 'undefined' ) {
+
+			this._timer.connect( document );
+
+		}
+
 		this._environmentCache = new TextureCache( renderer, 'environment' );
 		this._backgroundCache = new TextureCache( renderer, 'background' );
 
 		this._resetTime = - 1;
 		this._fadeState = 0;
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._size = new Vector2();
+
+		// the time spent rendering, and a watchdog that notices when the app stops calling "renderSample"
+		this._renderTime = 0;
+		this._renderedLastCall = false;
+		this._renderWatchdog = new FrameWatchdog( () => {
+
+			// count the last sample up to the frame it would have been followed by another call
+			this._timer.update();
+			if ( this._renderedLastCall ) {
+
+				this._renderTime += 1000 * this._timer.getDelta();
+
+			}
+
+			this._renderedLastCall = false;
+
+		} );
+
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// adaptive frame budget and preview state
@@ -1408,11 +1438,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.reset();
 		this._denoiser?.reset();
 		this._resetTime = - 1;
+		this._renderTime = 0;
+		this._renderedLastCall = false;
 		this._fadeState = 0;
 		this._timer.update();
 
 		// a fresh object rather than a clear, so measurements still in flight detach
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
 
@@ -1453,7 +1485,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} else {
 
-			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0 } );
+			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 } );
 
 		}
 
@@ -1571,6 +1603,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		} = this;
 
 		timer.update();
+		this._renderWatchdog.markCalled();
 
 		if ( ! this._renderer._initialized ) {
 
@@ -1642,6 +1675,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// update the samples, stopping once every pixel has reached "maxSamples"
 		const samplesComplete = maxSamples > 0 && this._lastSampleCounts.min >= maxSamples;
+		let rendered = false;
 		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
@@ -1649,8 +1683,18 @@ export class WebGPUPathTracer extends EventDispatcher {
 			pathTracer.update();
 			this._readTiming();
 			this._setStage( pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING );
+			rendered = this._stage === STAGE_RENDERING;
 
 		}
+
+		// count the time since a call that rendered samples
+		if ( this._renderedLastCall ) {
+
+			this._renderTime += delta;
+
+		}
+
+		this._renderedLastCall = rendered;
 
 		// nothing renders while the next scene's BVHs build or the kernels compile, so restart the preview timer and
 		// keep the last frame
@@ -1974,16 +2018,18 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._timer.dispose();
+		this._renderWatchdog.dispose();
+
 	}
 
 	/**
-	 * Milliseconds elapsed since the last reset.
+	 * Milliseconds spent rendering samples since the last reset.
 	 * @returns {number}
 	 */
-	// TODO: this is not completely accurate if the user has not called "renderSample" continuously
 	getRenderTime() {
 
-		return this._resetTime;
+		return this._renderTime;
 
 	}
 

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - WebGPUPathTracer: Support for bump maps, with "bumpScale" as a height in object units.
 - WebGPUPathTracer: "interpolateDisplay", set to false to show the render without interpolation when it's drawn at a different size than the canvas.
+- WebGPUPathTracer: "renderTime" and "elapsedTime" in the sample counts, the milliseconds spent rendering and the milliseconds since rendering started.
 
 ### Changed
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.
 
 ### Fixed
+- WebGPUPathTracer: "getRenderTime" and "samplesPerSecond" counting the time spent paused, finished, with the page hidden or between "renderSample" calls, such as after "maxSamples" is reached and then raised.
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
 - WebGPUPathTracer: Rays parallel to an axis missing bounds they lie on the face of.
 - WebGPUPathTracer: "reset" restoring an old "frameBudget" when "adaptiveFrameBudget" is off.
