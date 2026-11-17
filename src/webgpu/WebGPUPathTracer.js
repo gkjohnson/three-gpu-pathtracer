@@ -31,7 +31,7 @@ import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
  * @property {number} min - Lowest sample count of any pixel.
  * @property {number} max - Highest sample count of any pixel.
  * @property {number} avg - Mean sample count across the image.
- * @property {number} samplesPerSecond - Mean samples accumulated per second since the last reset.
+ * @property {number} samplesPerSecond - Mean samples accumulated per second of render time since the last reset.
  */
 
 const _resolution = new Vector2();
@@ -392,7 +392,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		counts.max = measured.max;
 		counts.avg = measured.avg;
 
-		// averaged over the whole render, and idle time counts against it
+		// averaged over the time spent rendering
 		const elapsed = this.getRenderTime() / 1000;
 		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
 
@@ -628,6 +628,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._renderer = renderer;
 		this._timer = new Timer();
 
+		// leaves out the time the page spends hidden
+		if ( typeof document !== 'undefined' ) {
+
+			this._timer.connect( document );
+
+		}
+
 		this._environmentCache = new TextureCache( renderer, 'environment' );
 		this._backgroundCache = new TextureCache( renderer, 'background' );
 
@@ -635,6 +642,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._fadeState = 0;
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._size = new Vector2();
+
+		// the time spent rendering samples, and the state of the frame loop that notices when the app stops calling
+		// "renderSample"
+		this._renderTime = 0;
+		this._renderedLastCall = false;
+		this._calledSinceCheck = false;
+		this._callCheckFrame = null;
+		this._checkCalls = this._checkCalls.bind( this );
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// adaptive frame budget and preview state
@@ -1408,6 +1423,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.reset();
 		this._denoiser?.reset();
 		this._resetTime = - 1;
+		this._renderTime = 0;
 		this._fadeState = 0;
 		this._timer.update();
 
@@ -1572,6 +1588,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		timer.update();
 
+		this._calledSinceCheck = true;
+		if ( this._callCheckFrame === null && typeof requestAnimationFrame !== 'undefined' ) {
+
+			this._callCheckFrame = requestAnimationFrame( this._checkCalls );
+
+		}
+
 		if ( ! this._renderer._initialized ) {
 
 			return;
@@ -1642,6 +1665,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// update the samples, stopping once every pixel has reached "maxSamples"
 		const samplesComplete = maxSamples > 0 && this._lastSampleCounts.min >= maxSamples;
+		let rendered = false;
 		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
@@ -1649,8 +1673,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 			pathTracer.update();
 			this._readTiming();
 			this._setStage( pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING );
+			rendered = this._stage === STAGE_RENDERING;
 
 		}
+
+		// the time since the last call counts toward the render time when both calls rendered samples, so time
+		// paused, finished, compiling or between calls isn't counted
+		if ( rendered && this._renderedLastCall ) {
+
+			this._renderTime += delta;
+
+		}
+
+		this._renderedLastCall = rendered;
 
 		// nothing renders while the next scene's BVHs build or the kernels compile, so restart the preview timer and
 		// keep the last frame
@@ -1974,16 +2009,40 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._timer.dispose();
+		if ( this._callCheckFrame !== null ) {
+
+			cancelAnimationFrame( this._callCheckFrame );
+
+		}
+
 	}
 
 	/**
-	 * Milliseconds elapsed since the last reset.
+	 * Milliseconds spent rendering samples since the last reset. Time paused, finished, compiling, between
+	 * {@link WebGPUPathTracer#renderSample} calls once the app stops calling it, or with the page hidden isn't counted.
 	 * @returns {number}
 	 */
-	// TODO: this is not completely accurate if the user has not called "renderSample" continuously
 	getRenderTime() {
 
-		return this._resetTime;
+		return this._renderTime;
+
+	}
+
+	// Runs every frame while "renderSample" is being called. A frame without a call means the app stopped calling, so
+	// the time until its next call isn't counted toward the render time
+	_checkCalls() {
+
+		if ( ! this._calledSinceCheck ) {
+
+			this._renderedLastCall = false;
+			this._callCheckFrame = null;
+			return;
+
+		}
+
+		this._calledSinceCheck = false;
+		this._callCheckFrame = requestAnimationFrame( this._checkCalls );
 
 	}
 
