@@ -643,13 +643,26 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._size = new Vector2();
 
-		// the time spent rendering samples, and the state of the frame loop that notices when the app stops calling
-		// "renderSample"
+		// the time spent rendering, and a frame loop that notices when the app stops calling "renderSample"
 		this._renderTime = 0;
 		this._renderedLastCall = false;
 		this._calledSinceCheck = false;
 		this._callCheckFrame = null;
-		this._checkCalls = this._checkCalls.bind( this );
+		this._checkCalls = () => {
+
+			if ( ! this._calledSinceCheck ) {
+
+				this._renderedLastCall = false;
+				this._callCheckFrame = null;
+				return;
+
+			}
+
+			this._calledSinceCheck = false;
+			this._callCheckFrame = requestAnimationFrame( this._checkCalls );
+
+		};
+
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// adaptive frame budget and preview state
@@ -1677,8 +1690,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// the time since the last call counts toward the render time when both calls rendered samples, so time
-		// paused, finished, compiling or between calls isn't counted
+		// count the time between two calls that both rendered samples
 		if ( rendered && this._renderedLastCall ) {
 
 			this._renderTime += delta;
@@ -2019,30 +2031,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Milliseconds spent rendering samples since the last reset. Time paused, finished, compiling, between
-	 * {@link WebGPUPathTracer#renderSample} calls once the app stops calling it, or with the page hidden isn't counted.
+	 * Milliseconds spent rendering samples since the last reset.
 	 * @returns {number}
 	 */
 	getRenderTime() {
 
 		return this._renderTime;
-
-	}
-
-	// Runs every frame while "renderSample" is being called. A frame without a call means the app stopped calling, so
-	// the time until its next call isn't counted toward the render time
-	_checkCalls() {
-
-		if ( ! this._calledSinceCheck ) {
-
-			this._renderedLastCall = false;
-			this._callCheckFrame = null;
-			return;
-
-		}
-
-		this._calledSinceCheck = false;
-		this._callCheckFrame = requestAnimationFrame( this._checkCalls );
 
 	}
 
