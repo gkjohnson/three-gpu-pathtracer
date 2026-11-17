@@ -6,14 +6,21 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 // requested and available on the renderer which we don't have access to immediately. It's possible this
 // can be detected during build time via a custom node to adjust the sample approach used?
 const sampleTexelFn = wgslFn( /* wgsl */`
-	fn sampleTexel( tex: texture_2d<f32>, coord: vec2f ) -> vec4f {
+	fn sampleTexel( tex: texture_2d<f32>, coord: vec2f, nearest: u32 ) -> vec4f {
 
 		// Manual bilinear filtering using textureLoad to support filterable float32 textures
 		// on all devices
 		let size = vec2f( textureDimensions( tex, 0 ) );
 
 		// the path tracer stores its color rows top down
-		let pxCoord = vec2f( coord.x, 1.0 - coord.y ) * size - 0.5;
+		let texelCoord = vec2f( coord.x, 1.0 - coord.y ) * size;
+		if ( nearest != 0u ) {
+
+			return textureLoad( tex, clamp( vec2i( floor( texelCoord ) ), vec2i( 0 ), vec2i( size ) - 1 ), 0 );
+
+		}
+
+		let pxCoord = texelCoord - 0.5;
 		let px = vec2i( floor( pxCoord ) );
 		let fr = fract( pxCoord );
 
@@ -84,6 +91,18 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	}
 
+	get nearest() {
+
+		return this._nearestUniform.value === 1;
+
+	}
+
+	set nearest( v ) {
+
+		this._nearestUniform.value = v ? 1 : 0;
+
+	}
+
 	get showPreview() {
 
 		return this._showPreviewUniform.value === 1;
@@ -123,6 +142,10 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const transitionUniform = uniform( 1.0 );
 		this._transitionUniform = transitionUniform;
 
+		// whether the textures are read without interpolation
+		const nearestUniform = uniform( 0, 'uint' );
+		this._nearestUniform = nearestUniform;
+
 		const showPreviewUniform = uniform( 0, 'uint' );
 		this._showPreviewUniform = showPreviewUniform;
 
@@ -131,14 +154,14 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const getFadedColorFn = wgslTagFn/* wgsl */`
 			fn fade( uv: vec2f ) -> vec4f {
 
-				let color = ${ sampleTexelFn }( ${ texNode }, uv );
+				let color = ${ sampleTexelFn }( ${ texNode }, uv, ${ nearestUniform } );
 				if ( ${ showPreviewUniform } == 0u ) {
 
 					return color;
 
 				}
 
-				let preview = ${ sampleTexelFn }( ${ fromTexNode }, uv );
+				let preview = ${ sampleTexelFn }( ${ fromTexNode }, uv, ${ nearestUniform } );
 				let colorAlpha = color.a * ${ transitionUniform };
 				return vec4f( mix( preview.rgb, color.rgb, colorAlpha ), mix( preview.a, 1.0, colorAlpha ) );
 

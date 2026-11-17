@@ -697,28 +697,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.fadeDuration = 250;
 
 		/**
-		 * Whether to render a low resolution preview while the camera is moving.
-		 * @type {boolean}
-		 * @default true
-		 */
-		this.dynamicLowRes = true;
-
-		/**
-		 * Resolution of the low resolution preview, as a fraction of the render size. Adjusted when
-		 * {@link WebGPUPathTracer#adaptiveDynamicRes} is set. The preview never has more pixels than a
-		 * frame of {@link WebGPUPathTracer#frameBudget} can render.
-		 * @type {number}
-		 * @default 0.1
-		 */
-		this.lowResScale = 0.1;
-
-		/**
-		 * Whether {@link WebGPUPathTracer#lowResScale} is adjusted to the pixels a frame of
+		 * Whether to render a low resolution preview while the camera is moving, sized to the pixels a frame of
 		 * {@link WebGPUPathTracer#frameBudget} can render.
 		 * @type {boolean}
 		 * @default true
 		 */
-		this.adaptiveDynamicRes = true;
+		this.dynamicLowRes = true;
 
 		/**
 		 * Whether {@link WebGPUPathTracer#frameBudget} is adjusted to keep each
@@ -743,6 +727,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @default 1
 		 */
 		this.renderScale = 1;
+
+		/**
+		 * Whether the render is interpolated when drawn to a canvas of a different size, such as with a
+		 * {@link WebGPUPathTracer#renderScale} below one or during the low resolution preview. Set to `false` to show
+		 * each rendered pixel as is. Not used by an upscaler.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.interpolateDisplay = true;
 
 		/**
 		 * Whether to track the canvas size automatically. Set to `false` to drive the render
@@ -1573,7 +1566,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 			dynamicLowRes,
 			synchronizeRenderSize,
 			renderScale,
-			adaptiveDynamicRes,
 			minSamples,
 			maxSamples,
 		} = this;
@@ -1622,18 +1614,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const lowResMode = this._resetTime < renderDelay || ( firstFrame && dynamicLowRes && minSamples !== 0 );
 		if ( lowResMode ) {
 
-			// the most pixels a preview frame can render within the frame budget. Pixels past it are never
-			// reached by the wavefront in a preview
-			const budgetScale = Math.min( Math.sqrt( pathTracer.getPreviewPixelBudget() / ( width * height ) ), 1 );
-
-			if ( adaptiveDynamicRes ) {
-
-				this.lowResScale = budgetScale;
-
-			}
-
-			// checked every frame since the budget adapts separately
-			const scale = Math.min( this.lowResScale, budgetScale );
+			// the most pixels a preview frame can render within the frame budget, checked every frame since the budget
+			// adapts. Pixels past it are never reached by the wavefront in a preview
+			const scale = Math.min( Math.sqrt( pathTracer.getPreviewPixelBudget() / ( width * height ) ), 1 );
 			width = Math.max( 1, Math.floor( scale * width ) );
 			height = Math.max( 1, Math.floor( scale * height ) );
 
@@ -1752,6 +1735,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
 			blitQuad.material.showPreview = dynamicLowRes && ! lowResMode && previewNeeded;
 			blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
+			blitQuad.material.nearest = ! this.interpolateDisplay;
 			blitQuad.material.fromTexture = lowResTarget;
 			blitQuad.material.texture = texture;
 			blitQuad.render( renderer );

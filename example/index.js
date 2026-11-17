@@ -150,6 +150,7 @@ const envMaps = {
 const params = {
 
 	renderScale: 1,
+	interpolateDisplay: true,
 	randomStrategy: 'Sobol',
 	frameBudget: 250000,
 
@@ -631,6 +632,11 @@ function buildGui() {
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'interpolateDisplay' ).onChange( v => {
+
+		pathTracer.interpolateDisplay = v;
+
+	} );
 	pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).listen().disable();
 	pathTracingFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
 
