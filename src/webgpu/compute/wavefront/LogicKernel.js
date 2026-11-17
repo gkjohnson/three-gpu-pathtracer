@@ -360,8 +360,7 @@ export class LogicKernel extends ComputeKernel {
 
 				} else {
 
-					// show the path so far once it has gathered light, which the first sample overwrites. Without any it
-					// would only cover what's drawn under the render
+					// show the path so far once it has gathered light, which the first sample overwrites
 					if ( storedSamples == 0u && any( resultColor.rgb > vec3f( 0.0 ) ) ) {
 
 						textureStore( ${ params.outputTarget }, colorIndex, resultColor );

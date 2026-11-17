@@ -129,11 +129,10 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const showPreviewUniform = uniform( 0, 'uint' );
 		this._showPreviewUniform = showPreviewUniform;
 
-		// The render faded in by "transition", drawn over the preview in "fromTexture" while "showPreview" is set. The
-		// preview shows through the render's transparent pixels, the ones it hasn't reached yet.
+		// the render faded in over the preview, which shows through the pixels the render hasn't reached
 		// NOTE: varyings cannot be referenced directly and must be passed as arguments
-		const getColorFn = wgslTagFn/* wgsl */`
-			fn getColor( uv: vec2f ) -> vec4f {
+		const getFadedColorFn = wgslTagFn/* wgsl */`
+			fn fade( uv: vec2f ) -> vec4f {
 
 				let color = ${ sampleTexelFn }( ${ texNode }, uv );
 				if ( ${ showPreviewUniform } == 0u ) {
@@ -151,7 +150,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 			}
 		`;
 
-		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getColorFn( texUV ) );
+		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getFadedColorFn( texUV ) );
 		this._toneMapping = toneMappingNode;
 
 		// apply alpha _after_ applying tone mapping

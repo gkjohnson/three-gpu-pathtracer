@@ -1746,8 +1746,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			}
 
-			// The render fades in over the low res preview, which shows through the pixels it hasn't reached yet. The
-			// preview stays until the fade finishes, and with a "minSamples" of zero until every pixel has a sample
+			// the preview stays under the render until it fades in, and with no "minSamples" until every pixel has a sample
 			const previewNeeded = this._fadeState < 1 || ( minSamples === 0 && this._lastSampleCounts.min < 1 );
 			renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
 			blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
