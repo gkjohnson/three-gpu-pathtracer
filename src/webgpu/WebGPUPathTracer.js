@@ -11,6 +11,7 @@ import { LightsInfoNode } from './LightsInfoNode.js';
 import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { toHalfFloatArray } from '../utils/TextureUtils.js';
+import { FrameWatchdog } from '../utils/FrameWatchdog.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
@@ -643,25 +644,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
 		this._size = new Vector2();
 
-		// the time spent rendering, and a frame loop that notices when the app stops calling "renderSample"
+		// the time spent rendering, and a watchdog that notices when the app stops calling "renderSample"
 		this._renderTime = 0;
 		this._renderedLastCall = false;
-		this._calledSinceCheck = false;
-		this._callCheckFrame = null;
-		this._checkCalls = () => {
+		this._renderWatchdog = new FrameWatchdog( () => {
 
-			if ( ! this._calledSinceCheck ) {
+			this._renderedLastCall = false;
 
-				this._renderedLastCall = false;
-				this._callCheckFrame = null;
-				return;
-
-			}
-
-			this._calledSinceCheck = false;
-			this._callCheckFrame = requestAnimationFrame( this._checkCalls );
-
-		};
+		} );
 
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
@@ -1600,13 +1590,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		} = this;
 
 		timer.update();
-
-		this._calledSinceCheck = true;
-		if ( this._callCheckFrame === null && typeof requestAnimationFrame !== 'undefined' ) {
-
-			this._callCheckFrame = requestAnimationFrame( this._checkCalls );
-
-		}
+		this._renderWatchdog.markCalled();
 
 		if ( ! this._renderer._initialized ) {
 
@@ -2022,11 +2006,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		this._timer.dispose();
-		if ( this._callCheckFrame !== null ) {
-
-			cancelAnimationFrame( this._callCheckFrame );
-
-		}
+		this._renderWatchdog.dispose();
 
 	}
 
