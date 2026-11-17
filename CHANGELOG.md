@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 ### Added
 - WebGPUPathTracer: Support for bump maps, with "bumpScale" as a height in object units.
+- WebGPUPathTracer: "displayFilter" to show the render without interpolation, with `NearestFilter`, when it's drawn at a different size than the canvas.
 
 ### Changed
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".

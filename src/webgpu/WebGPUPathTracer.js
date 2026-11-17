@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, NearestFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -743,6 +743,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @default 1
 		 */
 		this.renderScale = 1;
+
+		/**
+		 * How the render is filtered when drawn to a canvas of a different size, such as with a
+		 * {@link WebGPUPathTracer#renderScale} below one or during the low resolution preview.
+		 * `LinearFilter` interpolates between rendered pixels and `NearestFilter` shows each one as is. Not used by an
+		 * upscaler.
+		 * @type {number}
+		 * @default LinearFilter
+		 */
+		this.displayFilter = LinearFilter;
 
 		/**
 		 * Whether to track the canvas size automatically. Set to `false` to drive the render
@@ -1749,6 +1759,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
 			blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
 			blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
+			blitQuad.material.nearest = this.displayFilter === NearestFilter;
 			blitQuad.material.fromTexture = lowResTarget;
 			blitQuad.material.texture = texture;
 			blitQuad.render( renderer );
