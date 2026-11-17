@@ -51,6 +51,8 @@ export class EmissiveTrianglesInfo {
 	// transforms change
 	update( bvhData, shadingModel ) {
 
+		// TODO: read the packed geometry and object records with three-mesh-bvh's async read function
+		// (three-mesh-bvh#996) instead of the storage buffers' CPU arrays, which won't exist once the data is GPU-resident
 		const { storage: bvhStorage, structs, triangleRanges } = bvhData;
 		const index = bvhStorage.index.proxyNode.value.array;
 		const attributes = new Float32Array( bvhStorage.attributes.proxyNode.value.array.buffer );
@@ -142,8 +144,9 @@ export class EmissiveTrianglesInfo {
 
 	// Builds the light tree over the triangles' leaf nodes, splitting each node at the middle of its triangles'
 	// centers along their widest axis. Returns the nodes and each triangle's leaf node index
-	// TODO: build with three-mesh-bvh's BVH once it supports a custom split strategy (three-mesh-bvh#987) and custom
-	// per-node data (three-mesh-bvh#988)
+	// TODO: this split matches three-mesh-bvh's CENTER strategy, so the tree can be built with its BVH now, summing
+	// each node's power in a pass afterward. A power weighted split needs a custom split strategy (three-mesh-bvh#987),
+	// and packing and walking the tree with BVHComputeData instead of this class needs per-node data (three-mesh-bvh#988)
 	_buildTree( count, leafNodes ) {
 
 		const nodes = new Float32Array( Math.max( 2 * count - 1, 1 ) * NODE_FLOATS );
