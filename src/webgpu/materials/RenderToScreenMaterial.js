@@ -103,6 +103,18 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	}
 
+	get showPreview() {
+
+		return this._showPreviewUniform.value === 1;
+
+	}
+
+	set showPreview( v ) {
+
+		this._showPreviewUniform.value = v ? 1 : 0;
+
+	}
+
 	get exposure() {
 
 		return this._toneMapping.exposureNode.value;
@@ -134,25 +146,24 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const nearestUniform = uniform( 0, 'uint' );
 		this._nearestUniform = nearestUniform;
 
+		const showPreviewUniform = uniform( 0, 'uint' );
+		this._showPreviewUniform = showPreviewUniform;
+
+		// the render faded in over the preview, which shows through the pixels the render hasn't reached
 		// NOTE: varyings cannot be referenced directly and must be passed as arguments
 		const getFadedColorFn = wgslTagFn/* wgsl */`
 			fn fade( uv: vec2f ) -> vec4f {
 
-				if ( ${ transitionUniform } <= 0.0 ) {
+				let color = ${ sampleTexelFn }( ${ texNode }, uv, ${ nearestUniform } );
+				if ( ${ showPreviewUniform } == 0u ) {
 
-					return ${ sampleTexelFn }( ${ fromTexNode }, uv, ${ nearestUniform } );
-
-				} else if ( ${ transitionUniform } >= 1.0 ) {
-
-					return ${ sampleTexelFn }( ${ texNode }, uv, ${ nearestUniform } );
-
-				} else {
-
-					let col0 = ${ sampleTexelFn }( ${ fromTexNode }, uv, ${ nearestUniform } );
-					let col1 = ${ sampleTexelFn }( ${ texNode }, uv, ${ nearestUniform } );
-					return mix( col0, col1, ${ transitionUniform } );
+					return color;
 
 				}
+
+				let preview = ${ sampleTexelFn }( ${ fromTexNode }, uv, ${ nearestUniform } );
+				let colorAlpha = color.a * ${ transitionUniform };
+				return vec4f( mix( preview.rgb, color.rgb, colorAlpha ), mix( preview.a, 1.0, colorAlpha ) );
 
 			}
 		`;

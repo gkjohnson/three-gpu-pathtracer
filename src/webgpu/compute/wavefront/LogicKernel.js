@@ -46,6 +46,7 @@ export class LogicKernel extends ComputeKernel {
 			maxBounces: uniform( 5, 'uint' ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 			accumulateAux: uniform( 0, 'uint' ),
+			lowResMode: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
@@ -77,6 +78,7 @@ export class LogicKernel extends ComputeKernel {
 				maxBounces: u32,
 				transmissiveBackground: u32,
 				accumulateAux: u32,
+				lowResMode: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -360,8 +362,8 @@ export class LogicKernel extends ComputeKernel {
 
 				} else {
 
-					// show the path so far, which the first sample overwrites
-					if ( storedSamples == 0u ) {
+					// the low res preview shows the path so far, which the first sample overwrites
+					if ( lowResMode != 0u && storedSamples == 0u ) {
 
 						textureStore( ${ params.outputTarget }, colorIndex, resultColor );
 
