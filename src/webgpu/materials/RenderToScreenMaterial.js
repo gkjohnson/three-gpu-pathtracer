@@ -75,6 +75,18 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	}
 
+	get transition() {
+
+		return this._transitionUniform.value;
+
+	}
+
+	set transition( v ) {
+
+		this._transitionUniform.value = v;
+
+	}
+
 	get showPreview() {
 
 		return this._showPreviewUniform.value === 1;
@@ -111,11 +123,14 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 		const texUV = varying( uv() );
 
+		const transitionUniform = uniform( 1.0 );
+		this._transitionUniform = transitionUniform;
+
 		const showPreviewUniform = uniform( 0, 'uint' );
 		this._showPreviewUniform = showPreviewUniform;
 
-		// The render, drawn over the preview in "fromTexture" when "showPreview" is set so the preview shows through
-		// the pixels the render hasn't reached yet, which are transparent.
+		// The render faded in by "transition", drawn over the preview in "fromTexture" while "showPreview" is set. The
+		// preview shows through the render's transparent pixels, the ones it hasn't reached yet.
 		// NOTE: varyings cannot be referenced directly and must be passed as arguments
 		const getColorFn = wgslTagFn/* wgsl */`
 			fn getColor( uv: vec2f ) -> vec4f {
@@ -128,8 +143,9 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 				}
 
 				let preview = ${ sampleTexelFn }( ${ fromTexNode }, uv );
-				let alpha = color.a + preview.a * ( 1.0 - color.a );
-				let rgb = color.rgb * color.a + preview.rgb * preview.a * ( 1.0 - color.a );
+				let colorAlpha = color.a * ${ transitionUniform };
+				let alpha = colorAlpha + preview.a * ( 1.0 - colorAlpha );
+				let rgb = color.rgb * colorAlpha + preview.rgb * preview.a * ( 1.0 - colorAlpha );
 				return vec4f( rgb / max( alpha, ${ COMPOSITE_ALPHA_EPSILON } ), alpha );
 
 			}
