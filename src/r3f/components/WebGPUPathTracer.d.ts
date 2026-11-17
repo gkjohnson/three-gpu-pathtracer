@@ -4,9 +4,12 @@ import type {
 	Context,
 	ForwardRefExoticComponent,
 	RefAttributes,
+	JSX,
 } from 'react';
 
 export declare const WebGPUPathTracerContext: Context<WebGPUPathTracerImpl | null>;
+export declare const DenoiserContext: Context<any>;
+export declare const UpscalerContext: Context<any>;
 
 export declare function usePathTracer(): WebGPUPathTracerImpl | null;
 
@@ -63,3 +66,35 @@ interface WebGPUPathTracerProps
 export declare const WebGPUPathTracer: ForwardRefExoticComponent<
 	WebGPUPathTracerProps & RefAttributes<WebGPUPathTracerImpl>
 >;
+
+interface DenoiserProps<
+	Type extends new ( ...args: any[] ) => any,
+	Params extends any[] = ConstructorParameters<Type>,
+> {
+	denoiser: Type;
+	args?: Params | Params[ 0 ];
+	children?: ReactNode;
+	[key: string]: any;
+}
+
+export declare const Denoiser: <
+	Type extends new ( ...args: any[] ) => any,
+>(
+	props: DenoiserProps<Type> & RefAttributes<InstanceType<Type>>,
+) => JSX.Element;
+
+interface UpscalerProps<
+	Type extends new ( ...args: any[] ) => any,
+	Params extends any[] = ConstructorParameters<Type>,
+> {
+	upscaler: Type;
+	args?: Params | Params[ 0 ];
+	children?: ReactNode;
+	[key: string]: any;
+}
+
+export declare const Upscaler: <
+	Type extends new ( ...args: any[] ) => any,
+>(
+	props: UpscalerProps<Type> & RefAttributes<InstanceType<Type>>,
+) => JSX.Element;
