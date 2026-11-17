@@ -2,9 +2,6 @@ import { MeshBasicNodeMaterial, NoToneMapping, StorageTexture } from 'three/webg
 import { uv, varying, texture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
-// the smallest alpha the composited color is divided by
-const COMPOSITE_ALPHA_EPSILON = 1e-6;
-
 // TODO: we could fall back to hardware-based filtering if available but it has to be specifically
 // requested and available on the renderer which we don't have access to immediately. It's possible this
 // can be detected during build time via a custom node to adjust the sample approach used?
@@ -143,9 +140,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 				let preview = ${ sampleTexelFn }( ${ fromTexNode }, uv );
 				let colorAlpha = color.a * ${ transitionUniform };
-				let alpha = colorAlpha + preview.a * ( 1.0 - colorAlpha );
-				let rgb = color.rgb * colorAlpha + preview.rgb * preview.a * ( 1.0 - colorAlpha );
-				return vec4f( rgb / max( alpha, ${ COMPOSITE_ALPHA_EPSILON } ), alpha );
+				return vec4f( mix( preview.rgb, color.rgb, colorAlpha ), mix( preview.a, 1.0, colorAlpha ) );
 
 			}
 		`;
