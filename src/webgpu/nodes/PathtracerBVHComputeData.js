@@ -1,14 +1,25 @@
-import { BackSide, FrontSide, DoubleSide, BufferAttribute, BufferGeometry, StorageBufferAttribute, StructTypeNode, Vector4, SkinnedMesh, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter } from 'three/webgpu';
-import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { storage, float, bool, texture, uniformArray, uint } from 'three/tsl';
-import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
-import { materialStruct } from './structs.wgsl.js';
-import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
-import { sampleTexelFunc } from './utils.wgsl.js';
-import { getSurfaceRecordFunc } from './material.wgsl.js';
-import { AtlasTexture } from '../AtlasTexture.js';
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix3, Matrix4, Raycaster, Vector3, MeshBasicMaterial, DoubleSide } from 'three/webgpu';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { float, uint } from 'three/tsl';
+import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
+import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.js';
+/** @import { Box3, Mesh } from 'three/webgpu' */
 
 const _colorVec = new Vector4();
+const _instanceMatrix = /* @__PURE__ */ new Matrix4();
+const _boxToMesh = /* @__PURE__ */ new Matrix4();
+const _orientedBox = /* @__PURE__ */ new OrientedBox();
+const _normalMatrix = /* @__PURE__ */ new Matrix3();
+const _rayOrigin = /* @__PURE__ */ new Vector3();
+const _rayDirection = /* @__PURE__ */ new Vector3( 0, 0, 1 );
+
+// raycasts a mesh instance from both sides
+const _raycaster = /* @__PURE__ */ new Raycaster();
+const _raycastTarget = {
+	matrixWorld: _instanceMatrix,
+	material: /* @__PURE__ */ new MeshBasicMaterial( { side: DoubleSide } ),
+};
+
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -20,23 +31,34 @@ const transformStruct = new StructTypeNode( {
 }, 'TransformStruct' );
 
 // three-mesh-bvh's ray hit result. Shadow rays also record the share of bsdf rays the faces they skipped
-// would stop, and the share of light the partially transparent surfaces they passed block
+// would stop, the share of light the partially transparent surfaces they passed block, and the optical
+// depth of the fog volume boundaries they passed
 const intersectionResultStruct = new StructTypeNode( {
 	indices: 'vec4u',
 	normal: 'vec3f',
 	didHit: 'bool',
 	barycoord: 'vec3f',
 	objectIndex: 'uint',
+	fogDepth: 'vec3f',
 	side: 'float',
 	dist: 'float',
 	skippedOcclusion: 'float',
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
+// a ray's nearest volume hit past "minDist"
+const volumeHitStruct = new StructTypeNode( {
+	didHit: 'bool',
+	materialIndex: 'uint',
+	dist: 'float',
+	side: 'float',
+	minDist: 'float',
+}, 'VolumeHit' );
+
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
 
-	constructor( bvh, options = {} ) {
+	constructor( bvh, shadingModel, options = {} ) {
 
 		// TODO: once supported we should use the appropriately-sized member sizes
 		super( bvh, {
@@ -50,13 +72,75 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			...options,
 		} );
 
+		// the shading model owns the materials, the traversal reads them through the node context
+		this.shadingModel = shadingModel;
 		this.structs.transform = transformStruct;
-		this.structs.material = materialStruct;
-		this.storage.materials = null;
-		this.materialsMap = new Map();
-		this.materials = [];
 		this.bvhMap = new Map();
-		this.textureAtlas = new AtlasTexture();
+
+	}
+
+	/**
+	 * Returns whether the box, in the space "boxToWorld" maps from, overlaps the mesh's closed volume.
+	 *
+	 * @param {Box3} box
+	 * @param {Matrix4} boxToWorld
+	 * @param {Mesh} mesh
+	 * @returns {boolean}
+	 */
+	boxIntersectsMesh( box, boxToWorld, mesh ) {
+
+		const instanceBVHs = this.bvh.bvhMap.get( mesh ) || [];
+		for ( let instance = 0; instance < instanceBVHs.length; instance ++ ) {
+
+			const instanceBVH = instanceBVHs[ instance ];
+			if ( ! instanceBVH ) {
+
+				continue;
+
+			}
+
+			_instanceMatrix.copy( mesh.matrixWorld );
+			if ( mesh.isInstancedMesh || mesh.isBatchedMesh ) {
+
+				mesh.getMatrixAt( instance, _instanceMatrix ).premultiply( mesh.matrixWorld );
+
+			}
+
+			_boxToMesh.copy( _instanceMatrix ).invert().multiply( boxToWorld );
+			_orientedBox.set( box.min, box.max, _boxToMesh );
+			_orientedBox.needsUpdate = true;
+
+			// the volume's surface passes through the box
+			const crossesSurface = instanceBVH.shapecast( {
+				intersectsBounds: bounds => _orientedBox.intersectsBox( bounds ),
+				intersectsTriangle: triangle => _orientedBox.intersectsTriangle( triangle ),
+			} );
+
+			if ( crossesSurface ) {
+
+				return true;
+
+			}
+
+			// otherwise the box is inside if the nearest hit is a back face
+			box.getCenter( _rayOrigin ).applyMatrix4( boxToWorld );
+			_raycaster.set( _rayOrigin, _rayDirection );
+			_raycaster.firstHitOnly = true;
+			const hit = instanceBVH.raycastObject3D( _raycastTarget, _raycaster )[ 0 ];
+			if ( hit ) {
+
+				_normalMatrix.getNormalMatrix( _instanceMatrix );
+				if ( hit.face.normal.applyMatrix3( _normalMatrix ).dot( _rayDirection ) > 0 ) {
+
+					return true;
+
+				}
+
+			}
+
+		}
+
+		return false;
 
 	}
 
@@ -64,6 +148,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const { attributes } = this;
 		const keys = new Set( [ 'color' ] );
+		delete attributes.color;
 		for ( let i = 0; i < 8; i ++ ) {
 
 			const key = i === 0 ? 'uv' : 'uv' + i;
@@ -179,27 +264,112 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	useTransparencyRaycastFn() {
 
-		const { textureAtlas, storage, fns } = this;
-		const textures = textureAtlas.texture;
-		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'bvh_textureInfo' );
+		const { storage, fns } = this;
 
-		// build the single sampleTexel bound to this instance's textureInfo node
-		const sampleTexel = sampleTexelFunc( textureInfo, texture( textures ) );
+		// the shading model owns the textures. Its surface shading reads the same "sampleTexel", so both
+		// resolve to one texture info binding per pipeline
+		const sampleTexel = contextProxyFn( 'shadingModel.fns.sampleTexel' );
+		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 
-		// getSurfaceRecord shares the same sampleTexel, so the surface shading and
-		// the transparency raycast resolve to one textureInfo binding per pipeline
-		fns.getSurfaceRecord = getSurfaceRecordFunc( sampleTexel, fns.getUvFromChannel, fns.getColor );
-
-		// raycast first hit, bounded by the ray's "maxDist" - 0 means unbounded
-		const currentMaterialIndex = uint().toVar( 'bvh_materialIndex' );
+		// the object being traversed, set when the ray is transformed into its space
+		const currentObjectIndex = uint().toVar( 'bvh_objectIndex' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
 
-		// shadow rays hit both sides, pass through the objects not visible to them and partially transparent
-		// surfaces, and stop at the first opaque hit
-		const isShadowRay = bool( false ).toVar( 'bvh_isShadowRay' );
-		const skipShadowObject = bool( false ).toVar( 'bvh_skipShadowObject' );
+		// the opacity of a hit triangle at its barycentric coordinate, from the object's opacity, the vertex
+		// colors and the alpha of the map and alpha map
+		const getHitOpacity = wgslTagFn/* wgsl */`
+			fn getHitOpacity( materialIndex: u32, i0: u32, i1: u32, i2: u32, barycoord: vec3f ) -> f32 {
 
+				let material = &${ materialsStorage }[ materialIndex ];
+				var opacity = ${ baseOpacityScalar };
+				if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
+
+					// add support for vertex color opacity
+					if ( material.vertexColors == 1 ) {
+
+						let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
+						let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
+						let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
+						let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+
+						opacity *= col.a;
+
+					}
+
+					// account for alpha component of albedo map
+					if ( material.map != - 1 ) {
+
+						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
+						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
+						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
+						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+						let uvPrime = material.mapTransform * vec3f( uv, 1 );
+
+						opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
+
+					}
+
+					// account for green component of alpha map
+					if ( material.alphaMap != - 1 ) {
+
+						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
+						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
+						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
+						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+						let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
+
+						opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
+
+					}
+
+				}
+
+				return opacity;
+
+			}
+		`;
+
+		// the world distance at which the ray enters the bounds, or - 1 when it misses them
+		const rayBoundsDistance = wgslTagFn/* wgsl */`
+			fn rayBoundsDistance( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct } ) -> f32 {
+
+				let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
+				let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
+
+				// avoid 0 * infinity for rays parallel to a slab and on its boundary, as in three-mesh-bvh
+				let parallel = ray.direction == vec3f( 0.0 );
+				if ( any( parallel & ( ( ray.origin < boundsMin ) | ( ray.origin > boundsMax ) ) ) ) {
+
+					return - 1.0;
+
+				}
+
+				let invDir = 1.0 / select( ray.direction, vec3f( 1.0 ), parallel );
+				let tMinPlane = ( boundsMin - ray.origin ) * invDir;
+				let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
+
+				// parallel axes never limit the slab interval
+				const FLT_MAX = 3.402823e38;
+				let tMinHit = select( min( tMinPlane, tMaxPlane ), vec3f( - FLT_MAX ), parallel );
+				let tMaxHit = select( max( tMinPlane, tMaxPlane ), vec3f( FLT_MAX ), parallel );
+
+				let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
+				let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
+
+				let dist = max( t0, 0.0 );
+				if ( t1 < dist ) {
+
+					return - 1.0;
+
+				}
+
+				return dist * ${ scratchRayScalar };
+
+			}
+		`;
+
+		// the traversal shared by the first hit and shadow rays, bounded by the ray's "maxDist" - 0 means unbounded
 		const raycastOptions = {
 			shapeStruct: rayStruct,
 			resultStruct: intersectionResultStruct,
@@ -214,36 +384,23 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
 				fn rayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
-					// early-out if our object is completely transparent, or a shadow ray is already occluded
-					if ( ${ baseOpacityScalar } == 0.0 || ( ${ isShadowRay } && result.didHit ) ) {
+					// early-out if our object is completely transparent
+					if ( ${ baseOpacityScalar } == 0.0 ) {
 
 						return 0u;
 
 					}
 
-					let boundsMin = vec3( bounds.min[0], bounds.min[1], bounds.min[2] );
-					let boundsMax = vec3( bounds.max[0], bounds.max[1], bounds.max[2] );
-
-					let invDir = 1.0 / ray.direction;
-					let tMinPlane = ( boundsMin - ray.origin ) * invDir;
-					let tMaxPlane = ( boundsMax - ray.origin ) * invDir;
-
-					let tMinHit = min( tMinPlane, tMaxPlane );
-					let tMaxHit = max( tMinPlane, tMaxPlane );
-
-					let t0 = max( max( tMinHit.x, tMinHit.y ), tMinHit.z );
-					let t1 = min( min( tMaxHit.x, tMaxHit.y ), tMaxHit.z );
-
-					let dist = max( t0, 0.0 );
-					if ( t1 < dist ) {
+					let dist = ${ rayBoundsDistance }( ray, bounds );
+					if ( dist < 0.0 ) {
 
 						return 0u;
 
-					} else if ( ray.maxDist > 0.0 && dist * ${ scratchRayScalar } >= ray.maxDist ) {
+					} else if ( ray.maxDist > 0.0 && dist >= ray.maxDist ) {
 
 						return 0u;
 
-					} else if ( result.didHit && dist * ${ scratchRayScalar } >= result.dist ) {
+					} else if ( result.didHit && dist >= result.dist ) {
 
 						return 0u;
 
@@ -255,133 +412,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 				}
 
-			`,
-			intersectRangeFn: wgslTagFn/* wgsl */`
-				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> bool {
-
-					var didHit = false;
-					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
-
-						let i0 = ${ storage.index }[ ti * 3u ];
-						let i1 = ${ storage.index }[ ti * 3u + 1u ];
-						let i2 = ${ storage.index }[ ti * 3u + 2u ];
-
-						let a = ${ storage.attributes }[ i0 ].position.xyz;
-						let b = ${ storage.attributes }[ i1 ].position.xyz;
-						let c = ${ storage.attributes }[ i2 ].position.xyz;
-
-						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
-						triResult.dist *= ${ scratchRayScalar };
-						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
-
-							let material = ${ storage.materials }[ ${ currentMaterialIndex } ];
-
-							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							// shadow rays hit both sides
-							if ( ! ${ isShadowRay } && material.side != 0 && triResult.side != material.side ) {
-
-								continue;
-
-							}
-
-							var opacity = ${ baseOpacityScalar };
-							if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
-
-								// add support for vertex color opacity
-								if ( material.vertexColors == 1 ) {
-
-									let barycoord = triResult.barycoord;
-									let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
-									let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
-									let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
-									let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-
-									opacity *= col.a;
-
-								}
-
-								// account for alpha component of albedo map
-								if ( material.map != - 1 ) {
-
-									let barycoord = triResult.barycoord;
-									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
-									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
-									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
-									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-									let uvPrime = material.mapTransform * vec3f( uv, 1 );
-
-									opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
-
-								}
-
-								// account for green component of alpha map
-								if ( material.alphaMap != - 1 ) {
-
-									let barycoord = triResult.barycoord;
-									let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
-									let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
-									let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
-									let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-									let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
-
-									opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
-
-								}
-
-								// Opacity is resolved at surface processing but skip full transparent hits here.
-								if ( material.transparent != 0 && opacity <= 0.0 ) {
-
-									continue;
-
-								}
-
-								if ( opacity < material.alphaTest ) {
-
-									continue;
-
-								}
-
-							}
-
-							// shadow rays skip the objects not visible to them. Record the share of bsdf rays this face
-							// would stop: all of them if it's opaque, its opacity if it's partially transparent
-							if ( ${ skipShadowObject } ) {
-
-								if ( material.side == 0 || triResult.side == material.side ) {
-
-									result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * select( 1.0, opacity, material.transparent != 0 );
-
-								}
-
-								continue;
-
-							}
-
-							// shadow rays pass partially transparent surfaces, each blocking its opacity's share of the
-							// light still getting through, just as bsdf rays pass them by chance
-							if ( ${ isShadowRay } && material.transparent != 0 && opacity < 1.0 ) {
-
-								result.occlusion += ( 1.0 - result.occlusion ) * opacity;
-								continue;
-
-							}
-
-							result.didHit = true;
-							result.dist = triResult.dist;
-							result.normal = triResult.normal;
-							result.side = triResult.side;
-							result.barycoord = triResult.barycoord;
-							result.indices = vec4u( i0, i1, i2, ti );
-
-							didHit = true;
-
-						}
-
-					}
-
-					return didHit;
-
-				}
 			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
 				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
@@ -395,10 +425,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					${ scratchRayScalar } = 1.0 / len;
 
 					let object = ${ storage.transforms }[ objectIndex ];
-					${ currentMaterialIndex } = object.materialIndex;
+					${ currentObjectIndex } = objectIndex;
 
-					let material = ${ storage.materials }[ object.materialIndex ];
-					if ( material.transparent == 1 ) {
+					let material = &${ materialsStorage }[ object.materialIndex ];
+					if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
 						${ baseOpacityScalar } = material.opacity * object.color.a;
 
@@ -407,8 +437,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						${ baseOpacityScalar } = 1.0;
 
 					}
-
-					${ skipShadowObject } = ${ isShadowRay } && object.visibleToShadowRays == 0u;
 
 				}
 			`,
@@ -431,25 +459,247 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			`,
 		};
 
+		// the nearest hit on the material's visible side, past fully transparent and alpha tested surfaces
 		fns.raycastFirstHit = this.getShapecastFn( {
 			...raycastOptions,
 			name: 'raycastFirstHit',
-			prefixFn: wgslTagFn/* wgsl */`
-				fn initFirstHitCull() -> void {
+			intersectRangeFn: wgslTagFn/* wgsl */`
+				fn intersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
-					${ isShadowRay } = false;
+					var didHit = false;
+					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
+
+						let i0 = ${ storage.index }[ ti * 3u ];
+						let i1 = ${ storage.index }[ ti * 3u + 1u ];
+						let i2 = ${ storage.index }[ ti * 3u + 2u ];
+
+						let a = ${ storage.attributes }[ i0 ].position.xyz;
+						let b = ${ storage.attributes }[ i1 ].position.xyz;
+						let c = ${ storage.attributes }[ i2 ].position.xyz;
+
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
+						triResult.dist *= ${ scratchRayScalar };
+						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
+
+							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
+							let material = &${ materialsStorage }[ object.materialIndex ];
+
+							// TODO: if material is a transmissive volume we may need to assume double-sidedness
+							if ( material.side != 0 && triResult.side != material.side ) {
+
+								continue;
+
+							}
+
+							// partial opacity is resolved at surface processing, but fully transparent and alpha
+							// tested surfaces are skipped here
+							let opacity = ${ getHitOpacity }( object.materialIndex, i0, i1, i2, triResult.barycoord );
+							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
+
+								continue;
+
+							}
+
+							result.didHit = true;
+							result.dist = triResult.dist;
+							result.normal = triResult.normal;
+							result.side = triResult.side;
+							result.barycoord = triResult.barycoord;
+							result.indices = vec4u( i0, i1, i2, ti );
+
+							didHit = true;
+
+						}
+
+					}
+
+					return select( ${ NOT_INTERSECTED }u, ${ INTERSECTED }u, didHit );
 
 				}
 			`,
 		} );
 
+		// shadow rays hit both sides, pass through the objects not visible to them and partially transparent
+		// surfaces, and stop at the first opaque hit
+		// TODO: shadow rays could use a thinner result struct with only the occlusion fields, building the
+		// shared bounds test and result transform for each struct
 		fns.raycastShadow = this.getShapecastFn( {
 			...raycastOptions,
 			name: 'raycastShadow',
-			prefixFn: wgslTagFn/* wgsl */`
-				fn initShadowCull() -> void {
+			intersectRangeFn: wgslTagFn/* wgsl */`
+				fn intersectShadowRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ intersectionResultStruct }> ) -> u32 {
 
-					${ isShadowRay } = true;
+					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
+
+						let i0 = ${ storage.index }[ ti * 3u ];
+						let i1 = ${ storage.index }[ ti * 3u + 1u ];
+						let i2 = ${ storage.index }[ ti * 3u + 2u ];
+
+						let a = ${ storage.attributes }[ i0 ].position.xyz;
+						let b = ${ storage.attributes }[ i1 ].position.xyz;
+						let c = ${ storage.attributes }[ i2 ].position.xyz;
+
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
+						triResult.dist *= ${ scratchRayScalar };
+						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) ) {
+
+							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
+							let material = &${ materialsStorage }[ object.materialIndex ];
+
+							// pass fog volume boundaries, in any order: entering adds the fog's optical depth back from
+							// the fog shadow distance, and leaving takes it away
+							if ( material.fogVolume != 0 ) {
+
+								let extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+								let depth = extinction * ( ${ getFogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
+								result.fogDepth += select( - depth, depth, triResult.side > 0.0 );
+								continue;
+
+							}
+
+							let opacity = ${ getHitOpacity }( object.materialIndex, i0, i1, i2, triResult.barycoord );
+							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
+
+								continue;
+
+							}
+
+							// skip the objects not visible to shadow rays. Record the share of bsdf rays this face
+							// would stop: all of them if it's opaque, its opacity if it's partially transparent
+							if ( object.visibleToShadowRays == 0u ) {
+
+								if ( material.side == 0 || triResult.side == material.side ) {
+
+									result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * select( 1.0, opacity, material.transparent != 0 );
+
+								}
+
+								continue;
+
+							}
+
+							// pass partially transparent surfaces, each blocking its opacity's share of the light still
+							// getting through, just as bsdf rays pass them by chance
+							if ( material.transparent != 0 && opacity < 1.0 ) {
+
+								result.occlusion += ( 1.0 - result.occlusion ) * opacity;
+								continue;
+
+							}
+
+							// the first opaque hit ends the whole traversal
+							result.didHit = true;
+							return ${ STOP_TRAVERSAL }u;
+
+						}
+
+					}
+
+					return ${ NOT_INTERSECTED }u;
+
+				}
+			`,
+		} );
+
+		// The nearest volume hit past "minDist"
+		// TODO: three-mesh-bvh has no clear way to skip an object during traversal, so a flag set when the ray is
+		// transformed is checked in both the bounds and range tests. A dedicated hook would be good
+		const skipObject = uint( 0 ).toVar( 'bvh_skipObject' );
+
+		fns.raycastVolumeHit = this.getShapecastFn( {
+			name: 'raycastVolumeHit',
+			shapeStruct: rayStruct,
+			resultStruct: volumeHitStruct,
+
+			boundsOrderFn: raycastOptions.boundsOrderFn,
+			intersectsBoundsFn: wgslTagFn/* wgsl */`
+				fn volumeRayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ volumeHitStruct }> ) -> u32 {
+
+					if ( ${ skipObject } != 0u ) {
+
+						return 0u;
+
+					}
+
+					let dist = ${ rayBoundsDistance }( ray, bounds );
+					if ( dist < 0.0 || ( result.didHit && dist >= result.dist ) ) {
+
+						return 0u;
+
+					}
+
+					return 1u;
+
+				}
+			`,
+			intersectRangeFn: wgslTagFn/* wgsl */`
+				fn intersectVolumeRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ volumeHitStruct }> ) -> u32 {
+
+					if ( ${ skipObject } != 0u ) {
+
+						return ${ NOT_INTERSECTED }u;
+
+					}
+
+					let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
+					let material = &${ materialsStorage }[ object.materialIndex ];
+
+					var didHit = false;
+					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
+
+						let i0 = ${ storage.index }[ ti * 3u ];
+						let i1 = ${ storage.index }[ ti * 3u + 1u ];
+						let i2 = ${ storage.index }[ ti * 3u + 2u ];
+
+						let a = ${ storage.attributes }[ i0 ].position.xyz;
+						let b = ${ storage.attributes }[ i1 ].position.xyz;
+						let c = ${ storage.attributes }[ i2 ].position.xyz;
+
+						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
+						triResult.dist *= ${ scratchRayScalar };
+						if ( ! triResult.didHit || triResult.dist <= result.minDist || ( result.didHit && triResult.dist >= result.dist ) ) {
+
+							continue;
+
+						}
+
+						// fully transparent and alpha tested surfaces are passed, as by the first hit traversal
+						let opacity = ${ getHitOpacity }( object.materialIndex, i0, i1, i2, triResult.barycoord );
+						if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
+
+							continue;
+
+						}
+
+						result.didHit = true;
+						result.materialIndex = object.materialIndex;
+						result.dist = triResult.dist;
+						result.side = triResult.side;
+
+						didHit = true;
+
+					}
+
+					return select( ${ NOT_INTERSECTED }u, ${ INTERSECTED }u, didHit );
+
+				}
+			`,
+			transformShapeFn: wgslTagFn/* wgsl */`
+				fn transformVolumeRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
+
+					${ raycastOptions.transformShapeFn }( ray, objectIndex );
+
+					let material = &${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
+					let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
+					${ skipObject } = select( 1u, 0u, isVolume );
+
+				}
+			`,
+			resetShapeFn: wgslTagFn/* wgsl */`
+				fn resetVolumeRay( objectIndex: u32 ) -> void {
+
+					${ raycastOptions.resetShapeFn }( objectIndex );
+					${ skipObject } = 0u;
 
 				}
 			`,
@@ -459,99 +709,32 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	update() {
 
-		const { structs } = this;
-		const attr = new StorageBufferAttribute( new Uint8Array(), structs.material.getLength() );
-		this.storage.materials = storage( attr, structs.material ).toReadOnly().setName( 'bvh_materials' );
-
 		this.updateUvAttributesFromScene();
 
-		// the material indices are written with the transforms
-		this.updateMaterialsMap();
-
+		// the material indices are written with the transforms, so the shading model's materials must
+		// be updated first
 		super.update();
 
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
 		this.updateUvSampleFunction();
 		this.updateColorSampleFn();
 
-		// build material storage
-		this.updateMaterials();
-
 		this.bvhMap.clear();
 		this.useTransparencyRaycastFn();
 
 	}
 
-	updateMaterialsMap() {
+	setShadingModel( shadingModel ) {
 
-		const { materials, materialsMap } = this;
-		materialsMap.clear();
-		materials.length = 0;
-		this.getRootObject().traverse( o => {
-
-			if ( o.material ) {
-
-				if ( Array.isArray( o.material ) ) {
-
-					o.material.forEach( m => m && add( m ) );
-
-				} else {
-
-					add( o.material );
-
-				}
-
-			}
-
-		} );
-
-		materials
-			.sort( ( a, b ) => {
-
-				return a.uuid < b.uuid ? 1 : - 1;
-
-			} )
-			.forEach( ( m, i ) => {
-
-				materialsMap.set( m, i );
-
-			} );
-
-		function add( mat ) {
-
-			if ( ! materialsMap.has( mat ) ) {
-
-				materials.push( mat );
-				materialsMap.set( mat, - 1 );
-
-			}
-
-		}
+		this.shadingModel = shadingModel;
+		this.updateMaterialIndices();
 
 	}
 
-	updateMaterials() {
+	updateMaterialIndices() {
 
-		this.updateMaterialsMap();
-
-		const { materials, storage, structs, bvh } = this;
-		const { materialData, textures } = this.writeMaterialsBuffer( materials );
-
-		const materialsStorage = storage.materials.proxyNode;
+		const { storage, bvh } = this;
 		const transformsStorage = storage.transforms.proxyNode;
-		const count = materialData.length / structs.material.getLength();
-		if ( materialsStorage.value.count < count ) {
-
-			materialsStorage.value.dispose();
-			materialsStorage.value = new StorageBufferAttribute( materialData, structs.material.getLength() );
-
-		}
-
-		// copy the material buffer content
-		materialsStorage.value.array.set( materialData );
-		materialsStorage.value.needsUpdate = true;
-
-		// update the transform content
 		this._getTransformMap( bvh ).forEach( info => {
 
 			this.writeMaterialData( info, info.slot, transformsStorage.value.array.buffer );
@@ -559,423 +742,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		} );
 		transformsStorage.value.needsUpdate = true;
 
-		// save the textures
-		this.textures = textures;
-
-	}
-
-	writeMaterialsBuffer( materials ) {
-
-		function encodeTextureWrap( wrap ) {
-
-			switch ( wrap ) {
-
-				case RepeatWrapping:
-					return 0;
-				case ClampToEdgeWrapping:
-					return 1;
-				case MirroredRepeatWrapping:
-					return 2;
-				default:
-					return 0;
-
-			}
-
-		}
-
-		function getTexture( material, key ) {
-
-			if ( key in material && material[ key ] ) {
-
-				const texture = material[ key ];
-				const hash = getTextureHash( texture );
-
-				if ( ! textureLookUp.has( hash ) ) {
-
-					textureLookUp.set( hash, textureLookUp.size );
-					textures.push( texture );
-
-				}
-
-				const idx = textureLookUp.get( hash );							// 23 bits
-				const channel = texture.channel & 7;							// 3 bits
-				const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
-				const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
-				const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
-				return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
-
-			} else {
-
-				return - 1;
-
-			}
-
-		}
-
-		function getField( material, key, def ) {
-
-			return key in material ? material[ key ] : def;
-
-		}
-
-		function writeTextureMatrixToArray( material, textureKey, array, offset ) {
-
-			const texture = material[ textureKey ] && material[ textureKey ].isTexture ? material[ textureKey ] : null;
-
-			// check if texture exists
-			if ( texture ) {
-
-				if ( texture.matrixAutoUpdate ) {
-
-					texture.updateMatrix();
-
-				}
-
-				const elements = texture.matrix.elements;
-
-				// Both wgsl struct and elements should be in column-major format
-				for ( let i = 0; i < 3; i ++ ) {
-
-					array[ offset + 4 * i + 0 ] = elements[ 3 * i + 0 ];
-					array[ offset + 4 * i + 1 ] = elements[ 3 * i + 1 ];
-					array[ offset + 4 * i + 2 ] = elements[ 3 * i + 2 ];
-					array[ offset + 4 * i + 3 ] = 0; // padding float
-
-				}
-
-			}
-
-			return 12;
-
-		}
-
-		let index = 0;
-
-		// Collect and index the list of textures based on shareable source
-		const textureLookUp = new Map();
-		const textures = [];
-
-		// NOTE: make the minimum material buffer length 2 in order to avoid TSL converting it to a scalar
-		// TODO: remove this when fixed in three
-		const materialBufferLength = Math.max( materials.length, 2 );
-		const floatArray = new Float32Array( materialBufferLength * this.structs.material.getLength() );
-		const intArray = new Int32Array( floatArray.buffer );
-
-		// TODO: make features work
-		// features.reset();
-		for ( let i = 0, l = materials.length; i < l; i ++ ) {
-
-			const m = materials[ i ];
-
-			// if ( m.isFogVolumeMaterial ) {
-			//
-			// 	// features.setUsed( 'FOG' );
-			//
-			// 	for ( let j = 0; j < MATERIAL_STRIDE; j ++ ) {
-			//
-			// 		floatArray[ index + j ] = 0;
-			//
-			// 	}
-			//
-			// 	// sample 0 .rgb
-			// 	floatArray[ index + 0 * 4 + 0 ] = m.color.r;
-			// 	floatArray[ index + 0 * 4 + 1 ] = m.color.g;
-			// 	floatArray[ index + 0 * 4 + 2 ] = m.color.b;
-			//
-			// 	// sample 2 .a
-			// 	floatArray[ index + 2 * 4 + 3 ] = getField( m, 'emissiveIntensity', 0.0 );
-			//
-			// 	// sample 3 .rgb
-			// 	floatArray[ index + 3 * 4 + 0 ] = m.emissive.r;
-			// 	floatArray[ index + 3 * 4 + 1 ] = m.emissive.g;
-			// 	floatArray[ index + 3 * 4 + 2 ] = m.emissive.b;
-			//
-			// 	// sample 13 .g
-			// 	// reusing opacity field
-			// 	floatArray[ index + 13 * 4 + 1 ] = m.density;
-			//
-			// 	// side
-			// 	floatArray[ index + 13 * 4 + 3 ] = 0.0;
-			//
-			// 	// sample 14 .b
-			// 	floatArray[ index + 14 * 4 + 2 ] = 1 << 2;
-			//
-			// 	index += MATERIAL_STRIDE;
-			// 	continue;
-			//
-			// }
-
-			// color - offset 0
-			floatArray[ index ++ ] = m.color.r;
-			floatArray[ index ++ ] = m.color.g;
-			floatArray[ index ++ ] = m.color.b;
-			intArray[ index ++ ] = getTexture( m, 'map' );
-
-			// metalness & roughness - offset 4
-			floatArray[ index ++ ] = getField( m, 'metalness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'metalnessMap' );
-			floatArray[ index ++ ] = getField( m, 'roughness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'roughnessMap' );
-
-			// transmission & emissiveIntensity - offset 8
-			// three.js assumes a default f0 of 0.04 if no ior is provided which equates to an ior of 1.5
-			floatArray[ index ++ ] = getField( m, 'ior', 1.5 );
-			floatArray[ index ++ ] = getField( m, 'transmission', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'transmissionMap' );
-			floatArray[ index ++ ] = getField( m, 'emissiveIntensity', 0.0 );
-
-			// emission - offset 12
-			if ( 'emissive' in m ) {
-
-				floatArray[ index ++ ] = m.emissive.r;
-				floatArray[ index ++ ] = m.emissive.g;
-				floatArray[ index ++ ] = m.emissive.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-
-			}
-
-			intArray[ index ++ ] = getTexture( m, 'emissiveMap' );
-
-			// normals - offset 16
-			intArray[ index ++ ] = getTexture( m, 'normalMap' );
-			index ++; // because of vec2 alignment
-			if ( 'normalScale' in m ) {
-
-				floatArray[ index ++ ] = m.normalScale.x;
-				floatArray[ index ++ ] = m.normalScale.y;
-
- 			} else {
-
- 				floatArray[ index ++ ] = 1;
- 				floatArray[ index ++ ] = 1;
-
- 			}
-
-			// clearcoat - offset 20
-			floatArray[ index ++ ] = getField( m, 'clearcoat', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'clearcoatMap' );
-			intArray[ index ++ ] = getTexture( m, 'clearcoatNormalMap' );
-			index ++; // because of vec2 alignment
-
-			// offset 24
-			if ( 'clearcoatNormalScale' in m ) {
-
-				floatArray[ index ++ ] = m.clearcoatNormalScale.x;
-				floatArray[ index ++ ] = m.clearcoatNormalScale.y;
-
-			} else {
-
-				floatArray[ index ++ ] = 1;
-				floatArray[ index ++ ] = 1;
-
-			}
-
-			floatArray[ index ++ ] = getField( m, 'clearcoatRoughness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'clearcoatRoughnessMap' );
-
-			// iridescence - offset 28
-			intArray[ index ++ ] = getTexture( m, 'iridescenceMap' );
-			intArray[ index ++ ] = getTexture( m, 'iridescenceThicknessMap' );
-
-			floatArray[ index ++ ] = getField( m, 'iridescence', 0.0 );
-			floatArray[ index ++ ] = getField( m, 'iridescenceIOR', 1.3 );
-
-			// offset 32
-			const iridescenceThicknessRange = getField( m, 'iridescenceThicknessRange', [ 100, 400 ] );
-			floatArray[ index ++ ] = iridescenceThicknessRange[ 0 ];
-			floatArray[ index ++ ] = iridescenceThicknessRange[ 1 ];
-			floatArray[ index ++ ] = getField( m, 'diffuseRoughness', 0.0 );
-			floatArray[ index ++ ] = getField( m, 'dispersion', 0.0 );
-
-			// specular color - offset 36
-			if ( 'specularColor' in m ) {
-
-				floatArray[ index ++ ] = m.specularColor.r;
-				floatArray[ index ++ ] = m.specularColor.g;
-				floatArray[ index ++ ] = m.specularColor.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-
-			}
-
-			intArray[ index ++ ] = getTexture( m, 'specularColorMap' );
-
-			// specular intensity - offset 40
-			floatArray[ index ++ ] = getField( m, 'specularIntensity', 1.0 );
-			intArray[ index ++ ] = getTexture( m, 'specularIntensityMap' );
-
-			// isThinWall
-			const isThinWall = getField( m, 'thickness', 0.0 ) === 0.0 && getField( m, 'attenuationDistance', Infinity ) === Infinity;
-			intArray[ index ++ ] = Number( isThinWall );
-			index ++;
-
-			// attenuation - offset 44
-			if ( 'attenuationColor' in m ) {
-
-				floatArray[ index ++ ] = m.attenuationColor.r;
-				floatArray[ index ++ ] = m.attenuationColor.g;
-				floatArray[ index ++ ] = m.attenuationColor.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-
-			}
-
-			floatArray[ index ++ ] = getField( m, 'attenuationDistance', Infinity );
-
-			// alphaMap - offset 48
-			intArray[ index ++ ] = getTexture( m, 'alphaMap' );
-			intArray[ index ++ ] = Number( getField( m, 'castShadow', true ) ); // shadow
-			floatArray[ index ++ ] = m.opacity;
-			floatArray[ index ++ ] = m.alphaTest;
-
-			// side & matte - offset 52
-			if ( ! isThinWall && m.transmission > 0.0 ) {
-
-				floatArray[ index ++ ] = 0;
-
-			} else {
-
-				switch ( m.side ) {
-
-					case FrontSide:
-						floatArray[ index ++ ] = 1;
-						break;
-					case BackSide:
-						floatArray[ index ++ ] = - 1;
-						break;
-					case DoubleSide:
-						floatArray[ index ++ ] = 0;
-						break;
-
-				}
-
-			}
-
-			intArray[ index ++ ] = Number( getField( m, 'matte', false ) ); // matte
-			floatArray[ index ++ ] = getField( m, 'sheen', 0.0 );
-			index ++; // vec3 alignment requirements
-
-			// sheenColor - offset 56
-			if ( 'sheenColor' in m ) {
-
-				floatArray[ index ++ ] = m.sheenColor.r;
-				floatArray[ index ++ ] = m.sheenColor.g;
-				floatArray[ index ++ ] = m.sheenColor.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-
-			}
-
-			intArray[ index ++ ] = getTexture( m, 'sheenColorMap' );
-
-			// sheenRoughness, flags - offset 60
-			floatArray[ index ++ ] = getField( m, 'sheenRoughness', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'sheenRoughnessMap' );
-
-			intArray[ index ++ ] = Number( m.vertexColors );
-			intArray[ index ++ ] = Number( m.flatShading );
-
-			// transparent, fogVolume - offset 64
-			intArray[ index ++ ] = Number( m.transparent );
-			intArray[ index ++ ] = 0;
-
-			// anisotropy, anisotropyRotation, anisotropyMap - offset 66
-			floatArray[ index ++ ] = getField( m, 'anisotropy', 0.0 );
-			floatArray[ index ++ ] = getField( m, 'anisotropyRotation', 0.0 );
-			intArray[ index ++ ] = getTexture( m, 'anisotropyMap' );
-			index ++; // padding for mat3 alignment
-			index ++;
-			index ++;
-
-			// map transform - offset 72
-			index += writeTextureMatrixToArray( m, 'map', floatArray, index );
-
-			// metalnessMap transform - offset 84
-			index += writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
-
-			// roughnessMap transform - offset 96
-			index += writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
-
-			// transmissionMap transform - offset 108
-			index += writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
-
-			// emissiveMap transform - offset 120
-			index += writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
-
-			// normalMap transform - offset 132
-			index += writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
-
-			// clearcoatMap transform - offset 144
-			index += writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
-
-			// clearcoatNormalMap transform - offset 156
-			index += writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
-
-			// clearcoatRoughnessMap transform - offset 168
-			index += writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
-
-			// sheenColorMap transform - offset 180
-			index += writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
-
-			// sheenRoughnessMap transform - offset 192
-			index += writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
-
-			// iridescenceMap transform - offset 204
-			index += writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
-
-			// iridescenceThicknessMap transform - offset 216
-			index += writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
-
-			// specularColorMap transform - offset 228
-			index += writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
-
-			// specularIntensityMap transform - offset 240
-			index += writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
-
-			// alphaMap transform - offset 252
-			index += writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
-
-			// anisotropyMap transform - offset 264
-			index += writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
-
-			// scattering volume - offset 276
-			const multiscatterColor = getField( m, 'multiscatterColor', null );
-			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.r : 1.0;
-			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.g : 1.0;
-			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.b : 1.0;
-			floatArray[ index ++ ] = getField( m, 'scatterStrength', 0.0 );
-			floatArray[ index ++ ] = getField( m, 'scatterAnisotropy', 0.0 );
-
-			// padding to the struct's 16 byte alignment
-			index += 3;
-
-		}
-
-		return { materialData: intArray, textures };
-
 	}
 
 	writeMaterialData( info, writeOffset, targetBuffer ) {
 
 		// write material data to the transforms
-		const { materialsMap } = this;
+		const { shadingModel } = this;
 		const { object, instanceId, root } = info;
 
 		// get the material associated with the bvh group
@@ -989,7 +761,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const transformBufferU32 = new Uint32Array( targetBuffer );
 
-		const index = materialsMap.has( material ) ? materialsMap.get( material ) : - 1;
+		const index = shadingModel.getMaterialIndex( material );
 		if ( index === - 1 ) {
 
 			// hide the object when there is no material

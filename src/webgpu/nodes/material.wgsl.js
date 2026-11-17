@@ -20,7 +20,7 @@ import {
 	ggxRefractionAdjustedPDFFunc,
 	ggxShadowMaskG1Func,
 } from './ggx.wgsl.js';
-import { constants, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
+import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
@@ -128,21 +128,34 @@ const ensureValidViewNormal = wgslTagFn/* wgsl */`
 
 `;
 
-// Builds getSurfaceRecord using the given per-instance sampleTexel and uv channel lookup
 // Sentinel for a disabled glossy filter ( FLT_MAX, mirroring Cycles ): the blur term
 // clamps to zero for any path pdf when the inverted filter value is this large.
 export const FILTER_GLOSSY_DISABLED = 3.402823466e38;
 
-export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) => wgslFn( /* wgsl */ `
-
+// Builds getSurfaceRecord from the given structs, texture sampling and vertex data lookups
+export const getSurfaceRecordFunc = ( {
+	materialStruct,
+	surfaceRecordStruct,
+	attributesStruct,
+	attributesStorage,
+	transformsStorage,
+	sampleTexel,
+	getTextureSize,
+	getUvFromChannel,
+	getColor,
+} ) => wgslTagFn/* wgsl */`
+	${ [ constants ] }
 	fn getSurfaceRecord(
-		material: Material,
-		vertexData: bvh_GeometryStruct,
-		side: f32,
-		faceNormal: vec3f,
+		material: ${ materialStruct },
+		objectColor: vec4f,
+		vertexData: ${ attributesStruct },
+		hit: ${ hitRecordStruct },
 		view: vec3f,
 		blurRoughness: f32,
-	) -> SurfaceRecord {
+	) -> ${ surfaceRecordStruct } {
+
+		let side = hit.side;
+		let faceNormal = hit.normal;
 
 		// "faceNormal" is provided on the hit side so flip it back to the geometric side
 		var normal = faceNormal * side;
@@ -165,48 +178,84 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
 				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
-				let uvPrime = material.normalMapTransform * vec3( getUvFromChannel( vertexData, material.normalMap ), 1.0 );
-				var texNormal = sampleTexel( uvPrime.xy, material.normalMap, 0 ).xyz;
+				let uvPrime = material.normalMapTransform * vec3( ${ getUvFromChannel }( vertexData,material.normalMap ), 1.0 );
+				var texNormal = ${ sampleTexel }( uvPrime.xy,material.normalMap, 0 ).xyz;
 				texNormal = texNormal * 2.0 - 1.0;
 				texNormal = texNormal * vec3f( material.normalScale, 1.0 );
 				normal = normalize( vTBN * texNormal );
 
 			}
 
+		} else if ( material.bumpMap != -1 ) {
+
+			// "Bump Mapping Unparametrized Surfaces on the GPU" by Morten S. Mikkelsen, as in three.js, with the
+			// triangle's edges in place of the screen-space derivatives
+			// https://mmikk.github.io/papers3d/mm_sfgrad_bump.pdf
+			let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
+			let a0 = ${ attributesStorage }[ hit.indices.x ];
+			let a1 = ${ attributesStorage }[ hit.indices.y ];
+			let a2 = ${ attributesStorage }[ hit.indices.z ];
+
+			// the triangle's edges in world space, and in the bump map's uv space
+			let sigmaX = ( objectInfo.matrixWorld * vec4f( a1.position.xyz - a0.position.xyz, 0.0 ) ).xyz;
+			let sigmaY = ( objectInfo.matrixWorld * vec4f( a2.position.xyz - a0.position.xyz, 0.0 ) ).xyz;
+			let uv0 = ( material.bumpMapTransform * vec3f( ${ getUvFromChannel }( a0, material.bumpMap ), 1.0 ) ).xy;
+			let uv1 = ( material.bumpMapTransform * vec3f( ${ getUvFromChannel }( a1, material.bumpMap ), 1.0 ) ).xy;
+			let uv2 = ( material.bumpMapTransform * vec3f( ${ getUvFromChannel }( a2, material.bumpMap ), 1.0 ) ).xy;
+
+			// the height gradient in uv space, with central differences one texel apart
+			let uv = ( material.bumpMapTransform * vec3f( ${ getUvFromChannel }( vertexData, material.bumpMap ), 1.0 ) ).xy;
+			let texelSize = 1.0 / ${ getTextureSize }( material.bumpMap );
+			let dx = vec2f( texelSize.x, 0.0 );
+			let dy = vec2f( 0.0, texelSize.y );
+			let gradU = ( ${ sampleTexel }( uv + dx, material.bumpMap, 0 ).x - ${ sampleTexel }( uv - dx, material.bumpMap, 0 ).x ) / ( 2.0 * texelSize.x );
+			let gradV = ( ${ sampleTexel }( uv + dy, material.bumpMap, 0 ).x - ${ sampleTexel }( uv - dy, material.bumpMap, 0 ).x ) / ( 2.0 * texelSize.y );
+
+			// bumpScale is a height in local units, so it follows the object's scale along the normal
+			let scale = material.bumpScale * length( ( transpose( objectInfo.matrixWorld ) * vec4f( baseNormal, 0.0 ) ).xyz );
+			let dBx = scale * dot( vec2f( gradU, gradV ), uv1 - uv0 );
+			let dBy = scale * dot( vec2f( gradU, gradV ), uv2 - uv0 );
+
+			let R1 = cross( sigmaY, baseNormal );
+			let R2 = cross( baseNormal, sigmaX );
+			let det = dot( sigmaX, R1 );
+			let grad = sign( det ) * ( dBx * R1 + dBy * R2 );
+			normal = normalize( abs( det ) * baseNormal - grad );
+
 		}
 
 		normal *= side;
 
-		normal = ensureValidViewNormal( normal, faceNormal, view );
+		normal = ${ ensureValidViewNormal }( normal, faceNormal, view );
 
-		normal = ensureValidReflectionNormal( normal, faceNormal, view );
+		normal = ${ ensureValidReflectionNormal }( normal, faceNormal, view );
 
-		var albedo = vec4( material.color, material.opacity );
+		var albedo = vec4( material.color, material.opacity ) * objectColor;
 		if ( material.vertexColors == 1 ) {
 
-			albedo *= getColor( vertexData );
+			albedo *= ${ getColor }( vertexData );
 
 		}
 
 		if ( material.map != -1 ) {
 
-			let uvPrime = material.mapTransform * vec3f( getUvFromChannel( vertexData, material.map ), 1 );
-			albedo *= sampleTexel( uvPrime.xy, material.map, 0 );
+			let uvPrime = material.mapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.map ), 1 );
+			albedo *= ${ sampleTexel }( uvPrime.xy,material.map, 0 );
 
 		}
 
 		if ( material.alphaMap != -1 ) {
 
-			let uvPrime = material.alphaMapTransform * vec3f( getUvFromChannel( vertexData, material.alphaMap ), 1 );
-			albedo.a *= sampleTexel( uvPrime.xy, material.alphaMap, 0 ).g;
+			let uvPrime = material.alphaMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.alphaMap ), 1 );
+			albedo.a *= ${ sampleTexel }( uvPrime.xy,material.alphaMap, 0 ).g;
 
 		}
 
 		var roughness = material.roughness;
 		if ( material.roughnessMap != -1 ) {
 
-			let uvPrime = material.roughnessMapTransform * vec3f( getUvFromChannel( vertexData, material.roughnessMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.roughnessMap, 0 );
+			let uvPrime = material.roughnessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.roughnessMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.roughnessMap, 0 );
 			roughness *= texColor.g;
 
 		}
@@ -214,8 +263,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var metalness = material.metalness;
 		if ( material.metalnessMap != -1 ) {
 
-			let uvPrime = material.metalnessMapTransform * vec3f( getUvFromChannel( vertexData, material.metalnessMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.metalnessMap, 0 );
+			let uvPrime = material.metalnessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.metalnessMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.metalnessMap, 0 );
 			metalness *= texColor.b;
 
 		}
@@ -223,8 +272,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var emission = material.emissiveIntensity * material.emissive;
 		if ( material.emissiveMap != -1 ) {
 
-			let uvPrime = material.emissiveMapTransform * vec3f( getUvFromChannel( vertexData, material.emissiveMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.emissiveMap, 0 );
+			let uvPrime = material.emissiveMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.emissiveMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.emissiveMap, 0 );
 			emission *= texColor.rgb;
 
 		}
@@ -232,8 +281,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var transmission = material.transmission;
 		if ( material.transmissionMap != -1 ) {
 
-			let uvPrime = material.transmissionMapTransform * vec3f( getUvFromChannel( vertexData, material.transmissionMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.transmissionMap, 0 );
+			let uvPrime = material.transmissionMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.transmissionMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.transmissionMap, 0 );
 			transmission *= texColor.r;
 
 		}
@@ -241,8 +290,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var clearcoat = material.clearcoat;
 		if ( material.clearcoatMap != -1 ) {
 
-			let uvPrime = material.clearcoatMapTransform * vec3f( getUvFromChannel( vertexData, material.clearcoatMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.clearcoatMap, 0 );
+			let uvPrime = material.clearcoatMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.clearcoatMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.clearcoatMap, 0 );
 			clearcoat *= texColor.r;
 
 		}
@@ -250,8 +299,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var clearcoatRoughness = material.clearcoatRoughness;
 		if ( material.clearcoatRoughnessMap != -1 ) {
 
-			let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( getUvFromChannel( vertexData, material.clearcoatRoughnessMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.clearcoatRoughnessMap, 0 );
+			let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.clearcoatRoughnessMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.clearcoatRoughnessMap, 0 );
 			clearcoatRoughness *= texColor.g;
 
 		}
@@ -269,8 +318,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
 				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
-				let uvPrime = material.clearcoatNormalMapTransform * vec3( getUvFromChannel( vertexData, material.clearcoatNormalMap ), 1.0 );
-				var texNormal = sampleTexel( uvPrime.xy, material.clearcoatNormalMap, 0 ).xyz;
+				let uvPrime = material.clearcoatNormalMapTransform * vec3( ${ getUvFromChannel }( vertexData,material.clearcoatNormalMap ), 1.0 );
+				var texNormal = ${ sampleTexel }( uvPrime.xy,material.clearcoatNormalMap, 0 ).xyz;
 				texNormal = texNormal * 2.0 - 1.0;
 				texNormal = texNormal * vec3f( material.clearcoatNormalScale, 1.0 );
 				clearcoatNormal = normalize( vTBN * texNormal );
@@ -281,15 +330,15 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 		clearcoatNormal *= side;
 
-		clearcoatNormal = ensureValidViewNormal( clearcoatNormal, faceNormal, view );
+		clearcoatNormal = ${ ensureValidViewNormal }( clearcoatNormal, faceNormal, view );
 
-		clearcoatNormal = ensureValidReflectionNormal( clearcoatNormal, faceNormal, view );
+		clearcoatNormal = ${ ensureValidReflectionNormal }( clearcoatNormal, faceNormal, view );
 
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
 
-			let uvPrime = material.sheenColorMapTransform * vec3f( getUvFromChannel( vertexData, material.sheenColorMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.sheenColorMap, 0 );
+			let uvPrime = material.sheenColorMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.sheenColorMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.sheenColorMap, 0 );
 			sheenColor *= texColor.rgb;
 
 		}
@@ -297,17 +346,17 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var sheenRoughness = material.sheenRoughness;
 		if ( material.sheenRoughnessMap != -1 ) {
 
-			let uvPrime = material.sheenRoughnessMapTransform * vec3f( getUvFromChannel( vertexData, material.sheenRoughnessMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.sheenRoughnessMap, 0 );
-			sheenRoughness *= texColor.r;
+			let uvPrime = material.sheenRoughnessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.sheenRoughnessMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.sheenRoughnessMap, 0 );
+			sheenRoughness *= texColor.a;
 
 		}
 
 		var iridescence = material.iridescence;
 		if ( material.iridescenceMap != -1 ) {
 
-			let uvPrime = material.iridescenceMapTransform * vec3f( getUvFromChannel( vertexData, material.iridescenceMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.iridescenceMap, 0 );
+			let uvPrime = material.iridescenceMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.iridescenceMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.iridescenceMap, 0 );
 			iridescence *= texColor.r;
 
 		}
@@ -315,8 +364,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var iridescenceThickness = material.iridescenceThicknessMaximum;
 		if ( material.iridescenceThicknessMap != -1 ) {
 
-			let uvPrime = material.iridescenceThicknessMapTransform * vec3f( getUvFromChannel( vertexData, material.iridescenceThicknessMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.iridescenceThicknessMap, 0 );
+			let uvPrime = material.iridescenceThicknessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.iridescenceThicknessMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.iridescenceThicknessMap, 0 );
 
 			iridescenceThickness = mix(
 				material.iridescenceThicknessMinimum,
@@ -329,8 +378,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var specularColor = material.specularColor;
 		if ( material.specularColorMap != -1 ) {
 
-			let uvPrime = material.specularColorMapTransform * vec3f( getUvFromChannel( vertexData, material.specularColorMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.specularColorMap, 0 );
+			let uvPrime = material.specularColorMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.specularColorMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.specularColorMap, 0 );
 			specularColor *= texColor.rgb;
 
 		}
@@ -338,8 +387,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var specularIntensity = material.specularIntensity;
 		if ( material.specularIntensityMap != -1 ) {
 
-			let uvPrime = material.specularIntensityMapTransform * vec3f( getUvFromChannel( vertexData, material.specularIntensityMap ), 1 );
-			let texColor = sampleTexel( uvPrime.xy, material.specularIntensityMap, 0 );
+			let uvPrime = material.specularIntensityMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.specularIntensityMap ), 1 );
+			let texColor = ${ sampleTexel }( uvPrime.xy,material.specularIntensityMap, 0 );
 			specularIntensity *= texColor.a;
 
 		}
@@ -348,8 +397,8 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		var anisotropyDirVec = material.anisotropy * vec2f( cos( material.anisotropyRotation ), sin( material.anisotropyRotation ) );
 		if ( material.anisotropyMap != -1 ) {
 
-			let uvPrime = material.anisotropyMapTransform * vec3f( getUvFromChannel( vertexData, material.anisotropyMap ), 1.0 );
-			let aniTex = sampleTexel( uvPrime.xy, material.anisotropyMap, 0 );
+			let uvPrime = material.anisotropyMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.anisotropyMap ), 1.0 );
+			let aniTex = ${ sampleTexel }( uvPrime.xy,material.anisotropyMap, 0 );
 
 			// map rg encode the direction ([-1,1]), b the strength; rotate + scale by the material anisotropy.
 			let mapDir = aniTex.rg * 2.0 - vec2f( 1.0 );
@@ -368,7 +417,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 		// adjust the surface basis to be oriented along the anisotropic vector
 		let anisotropyStrength = length( anisotropyDirVec );
-		var surfaceBasis = getBasisFromNormal( normal );
+		var surfaceBasis = ${ getBasisFromNormalFunc }( normal );
 		if ( anisotropyStrength > 0.0 && length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
 
 			let anisotropyDir = anisotropyDirVec / anisotropyStrength;
@@ -386,7 +435,7 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 
 		}
 
-		var surf: SurfaceRecord;
+		var surf: ${ surfaceRecordStruct };
 
 		surf.volumeParticle = false;
 		surf.faceNormal = faceNormal;
@@ -398,12 +447,12 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 		surf.emission = emission;
 
 		surf.opacity = select( 1.0, albedo.a, material.transparent != 0 );
+		surf.matte = material.matte != 0;
 
 		surf.ior = material.ior;
 		surf.transmission = transmission;
 		surf.thinWall = material.thinWall == 1;
-		surf.attenuationColor = material.attenuationColor;
-		surf.attenuationDistance = material.attenuationDistance;
+		surf.dispersion = material.dispersion;
 
 		surf.clearcoatNormal = clearcoatNormal;
 		surf.clearcoat = clearcoat;
@@ -436,30 +485,19 @@ export const getSurfaceRecordFunc = ( sampleTexel, getUvFromChannel, getColor ) 
 			surf.eta = material.ior;
 
 		}
-		surf.f0 = iorToF0( surf.eta );
+		surf.f0 = ${ iorToF0Func }( surf.eta );
 
 		// get the normal frames
 		surf.normalBasis = surfaceBasis;
-		surf.normalInvBasis = inverse( surf.normalBasis );
+		surf.normalInvBasis = ${ inverseMat3x3Func }( surf.normalBasis );
 
-		surf.clearcoatBasis = getBasisFromNormal( surf.clearcoatNormal );
-		surf.clearcoatInvBasis = inverse( surf.clearcoatBasis );
+		surf.clearcoatBasis = ${ getBasisFromNormalFunc }( surf.clearcoatNormal );
+		surf.clearcoatInvBasis = ${ inverseMat3x3Func }( surf.clearcoatBasis );
 
 		return surf;
 	}
 
-`, [
-	inverseMat3x3Func,
-	iorToF0Func,
-	getBasisFromNormalFunc,
-	sampleTexel,
-	getUvFromChannel,
-	getColor,
-	surfaceRecordStruct,
-	constants,
-	ensureValidReflectionNormal,
-	ensureValidViewNormal,
-] );
+`;
 
 /*
  *
@@ -587,17 +625,6 @@ export const thinWallTransmissionRoughnessFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_materials_volume/README.md#attenuation
-export const transmissionAttenuationFunc = wgslFn( /* wgsl */ `
-
-	fn transmissionAttenuation( dist: f32, attColor: vec3f, attDist: f32 ) -> vec3f {
-
-		return pow( attColor, vec3f( dist / attDist ) );
-
-	}
-
-` );
-
 // Continuous Cauchy IOR approximation derived from the Fraunhofer C, d, and F spectral lines:
 // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_dispersion
 // https://github.com/bsdorra/slang-pbr/blob/c12046ec3b9628bcfc384ed2c275c92d007e5d7e/src/models/enterprise/components/transmission.slang#L20-L27
@@ -617,9 +644,10 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// takes the surface by name since the shading model defines its struct
 export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
-	fn applyDispersion( surf: ptr<function, ${ surfaceRecordStruct }>, dispersion: f32, wavelength: f32 ) -> void {
+	fn applyDispersion( surf: ptr<function, SurfaceRecord>, dispersion: f32, wavelength: f32 ) -> void {
 
 		surf.ior = ${ dispersionIorFunc }( surf.ior, dispersion, wavelength );
 		surf.eta = select( surf.ior, 1.0 / surf.ior, surf.thinWall || surf.frontFace );

@@ -4,7 +4,7 @@ import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rayDataStruct, MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER } from './structs.js';
 
-// Gathers the path slots walking a medium for MediumKernel's dispatch. Separate from MaterialKernel, which
+// Gathers the path slots walking a medium for SubsurfaceKernel's dispatch. Separate from MaterialKernel, which
 // is at its storage buffer limit.
 export class QueueMediumWalksKernel extends ComputeKernel {
 
@@ -33,7 +33,7 @@ export class QueueMediumWalksKernel extends ComputeKernel {
 
 				}
 
-				if ( rayDataStorage[ index ].walkPending != 0u && rayDataStorage[ index ].objectIndex >= 0 ) {
+				if ( rayDataStorage[ index ].walkPending != 0u && rayDataStorage[ index ].hit.objectIndex >= 0 ) {
 
 					let queueIndex = atomicAdd( &mediumQueue[ ${ MEDIUM_QUEUE_LENGTH }u ], 1u );
 					atomicStore( &mediumQueue[ ${ MEDIUM_QUEUE_HEADER }u + queueIndex ], index );

@@ -157,6 +157,9 @@ quality against download size and per tile cost.
 // Fired when a pass started by `update` fails, such as the weights failing to download, with the
 // failure as the event's `error`. No other pass starts until a reset.
 { type: 'error' }
+
+// Fired as each tile of a pass finishes, with the fraction of the pass done as `progress`.
+{ type: 'progress' }
 ```
 
 ### .texture
@@ -272,6 +275,11 @@ the accumulated image restarts it.
 // Fired once every pixel has reached `maxSamples` and an attached denoiser has finished. Fires
 // again after a reset, or after `maxSamples` is raised, once the render has caught up.
 { type: 'complete' }
+
+// Fired as the render advances. `stage` is "building", "compiling", "rendering" or "denoising", and
+// `progress` is the fraction of it done, or null when unknown. "rendering" also gives the sample
+// counts as `samples`, reported a few times a second.
+{ type: 'progress' }
 ```
 
 ### .maxBounces
@@ -290,7 +298,7 @@ resolve more indirect light at the cost of speed.
 frameBudget: number = 250000
 ```
 
-Number of path slots dispatched per [WebGPUPathTracer#renderSample](WebGPUPathTracer#renderSample) call,
+Number of path steps dispatched per [WebGPUPathTracer#renderSample](WebGPUPathTracer#renderSample) call,
 independent of resolution. Raising it trades frame rate for convergence speed.
 
 
@@ -464,13 +472,13 @@ The atlas every scene texture is packed into for the kernels to sample.
 minSamples: number = 1
 ```
 
-Samples every pixel must reach before the full resolution render is faded in.
+Average samples per pixel the full resolution render must reach before it is faded in.
 
 
 ### .renderDelay
 
 ```js
-renderDelay: number = 500
+renderDelay: number = 16
 ```
 
 Milliseconds to show the low resolution preview for after a reset.
@@ -479,7 +487,7 @@ Milliseconds to show the low resolution preview for after a reset.
 ### .fadeDuration
 
 ```js
-fadeDuration: number = 500
+fadeDuration: number = 250
 ```
 
 Milliseconds taken to cross fade from the preview to the full render.
@@ -500,9 +508,9 @@ Whether to render a low resolution preview while the camera is moving.
 lowResScale: number = 0.1
 ```
 
-Resolution of the low resolution preview, as a fraction of the render size. The minimum when
-[WebGPUPathTracer#adaptiveDynamicRes](WebGPUPathTracer#adaptiveDynamicRes) is set. The preview never has more pixels than
-[WebGPUPathTracer#frameBudget](WebGPUPathTracer#frameBudget).
+Resolution of the low resolution preview, as a fraction of the render size. Adjusted when
+[WebGPUPathTracer#adaptiveDynamicRes](WebGPUPathTracer#adaptiveDynamicRes) is set. The preview never has more pixels than a
+frame of [WebGPUPathTracer#frameBudget](WebGPUPathTracer#frameBudget) can render.
 
 
 ### .adaptiveDynamicRes
@@ -511,8 +519,8 @@ Resolution of the low resolution preview, as a fraction of the render size. The 
 adaptiveDynamicRes: boolean = true
 ```
 
-Whether the low resolution preview is sized to take [WebGPUPathTracer#targetFrameTime](WebGPUPathTracer#targetFrameTime) per
-frame. Requires a renderer created with `trackTimestamp: true`.
+Whether [WebGPUPathTracer#lowResScale](WebGPUPathTracer#lowResScale) is adjusted to the pixels a frame of
+[WebGPUPathTracer#frameBudget](WebGPUPathTracer#frameBudget) can render.
 
 
 ### .adaptiveFrameBudget
@@ -532,8 +540,7 @@ GPU time. Requires a renderer created with `trackTimestamp: true`.
 targetFrameTime: number = 16
 ```
 
-GPU time in milliseconds per frame targeted by [WebGPUPathTracer#adaptiveFrameBudget](WebGPUPathTracer#adaptiveFrameBudget) and
-[WebGPUPathTracer#adaptiveDynamicRes](WebGPUPathTracer#adaptiveDynamicRes).
+GPU time in milliseconds per frame targeted by [WebGPUPathTracer#adaptiveFrameBudget](WebGPUPathTracer#adaptiveFrameBudget).
 
 
 ### .renderScale

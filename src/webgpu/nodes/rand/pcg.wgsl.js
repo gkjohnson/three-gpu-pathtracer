@@ -11,13 +11,13 @@ const pcgStateStruct = wgsl( /* wgsl */`
 ` );
 
 const pcgInitFunc = wgslFn( /* wgsl */`
-	fn pcgInitialize( pixel: vec2u, pathIndex: u32, bounceIndex: u32 ) -> void {
+	fn pcgInitialize( globalSeed: u32, pixel: vec2u, pathIndex: u32, bounceIndex: u32 ) -> void {
 
 		// white noise seed
-		g_state.s0 = vec4u( pixel | vec2( bounceIndex << 16 ), pathIndex, pixel.x + pixel.y);
+		g_state.s0 = vec4u( pixel | vec2( bounceIndex << 16 ), pathIndex, ( pixel.x + pixel.y ) ^ globalSeed );
 
 		// blue noise seed
-		g_state.s1 = vec4u( pathIndex, pathIndex * 15843, pathIndex * 31 + 4566, pathIndex * 2345 + 58585 );
+		g_state.s1 = vec4u( pathIndex, pathIndex * 15843, pathIndex * 31 + 4566, pathIndex * 2345 + 58585 ) ^ vec4u( globalSeed );
 
 	}
 `, [ pcgStateStruct ] );

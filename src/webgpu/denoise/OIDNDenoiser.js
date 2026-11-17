@@ -12,6 +12,11 @@ import { createAuxImageTarget } from '../compute/targets.js';
  */
 
 /**
+ * Fired as each tile of a pass finishes, with the fraction of the pass done as `progress`.
+ * @event OIDNDenoiser#progress
+ */
+
+/**
  * Runs Open Image Denoise over a path traced image. Pass one to
  * "WebGPUPathTracer.setDenoiser", or drive it directly with "denoise".
  *
@@ -140,7 +145,7 @@ export class OIDNDenoiser extends EventDispatcher {
 	 * every frame.
 	 *
 	 * @param {Texture} target - The path traced result, in linear HDR.
-	 * @param {StorageArrayTexture|null} aux - The packed auxiliary buffers, see "aux.wgsl.js".
+	 * @param {StorageArrayTexture|null} aux - The packed auxiliary buffers, see "auxiliary.wgsl.js".
 	 * @returns {Texture|null}
 	 */
 	update( target, aux = null ) {
@@ -230,7 +235,12 @@ export class OIDNDenoiser extends EventDispatcher {
 			scheduling: 'animation-frame',
 
 			// the output is seeded with the raw color, so copying per tile shows a progressive wipe
-			progress: output => this._copyOutputToTexture( output, width, height ),
+			progress: ( output, tileData, tile, tileIndex, tileCount ) => {
+
+				this._copyOutputToTexture( output, width, height );
+				this.dispatchEvent( { type: 'progress', progress: ( tileIndex + 1 ) / tileCount } );
+
+			},
 			done: output => {
 
 				this._running = false;

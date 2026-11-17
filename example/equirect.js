@@ -11,7 +11,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EquirectCamera } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
@@ -26,7 +28,8 @@ let camera, equirectCamera, loader;
 
 const params = {
 
-	maxBounces: 15,
+	enable: true,
+	maxSamples: 16,
 	renderScale: 1,
 	frameBudget: 250000,
 	projection: 'Equirectangular',
@@ -42,15 +45,32 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.dynamicLowRes = true;
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.renderScale = params.renderScale;
+	pathTracer.maxSamples = params.maxSamples;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
 
 	// cameras, positioned once the scene's authored viewpoint is available
 	camera = new PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.025, 500 );
@@ -114,7 +134,7 @@ async function init() {
 	sphericalControls.target.copy( center ).addScaledVector( forward, 0.05 );
 	sphericalControls.update();
 
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
@@ -125,13 +145,18 @@ async function init() {
 
 	// gui
 	const gui = new GUI();
-	gui.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
+	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
 
-		pathTracer.frameBudget = value;
+		pathTracer.maxSamples = v;
 
 	} );
-	gui.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
-	gui.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+
+	} );
 	gui.add( params, 'projection', [ 'Perspective', 'Equirectangular' ] ).onChange( onParamsChange );
 
 	animate();
@@ -171,9 +196,6 @@ function onParamsChange() {
 
 	}
 
-	pathTracer.maxBounces = params.maxBounces;
-	pathTracer.renderScale = params.renderScale;
-
 	pathTracer.setScene( scene, activeCamera );
 
 }
@@ -182,9 +204,16 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	pathTracer.renderSample();
+	if ( params.enable ) {
 
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
+		pathTracer.renderSample();
+
+	} else {
+
+		// the equirect camera can't be rasterized, so the perspective view stands in
+		renderer.render( scene, camera );
+
+	}
 
 }
 

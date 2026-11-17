@@ -60,6 +60,7 @@ const sobolConstants = wgsl( /* wgsl */ `
 const sobolPixelIndex = uint( 0 ).toVar( 'sobolPixelIndex' );
 const sobolPathIndex = uint( 0 ).toVar( 'sobolPathIndex' );
 const sobolBounceIndex = uint( 0 ).toVar( 'sobolBounceIndex' );
+const sobolGlobalSeed = uint( 0 ).toVar( 'sobolGlobalSeed' );
 
 const getMaskedSobolFunc = wgslFn( /* wgsl */ `
 	fn getMaskedSobol( index: u32, directions: array<u32, 32> ) -> u32 {
@@ -192,8 +193,11 @@ const sobolGetSeedFunc = wgslTagFn/* wgsl */`
 		return ${ sobolHashFunc }(
 			${ sobolNodes[ 1 ].hashCombine }(
 				${ sobolNodes[ 1 ].hashCombine }(
-					${ sobolHashFunc }( ${ sobolBounceIndex } ),
-					${ sobolPixelIndex }
+					${ sobolNodes[ 1 ].hashCombine }(
+						${ sobolHashFunc }( ${ sobolBounceIndex } ),
+						${ sobolPixelIndex }
+					),
+					${ sobolGlobalSeed }
 				),
 				effect
 			)
@@ -259,11 +263,12 @@ const sobolRand3Func = sobolGenerator( 3 );
 const sobolRand4Func = sobolGenerator( 4 );
 
 const sobolInitFunc = wgslTagFn/* wgsl */`
-	fn sobolInit( pixel: vec2u, pathIndex: u32, bounceIndex: u32 ) -> void {
+	fn sobolInit( globalSeed: u32, pixel: vec2u, pathIndex: u32, bounceIndex: u32 ) -> void {
 
 		${ sobolPixelIndex } = ( pixel.x << 16 ) | pixel.y;
 		${ sobolPathIndex } = pathIndex;
 		${ sobolBounceIndex } = bounceIndex;
+		${ sobolGlobalSeed } = globalSeed;
 
 	}
 `;

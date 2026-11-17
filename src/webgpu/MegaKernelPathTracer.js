@@ -1,8 +1,5 @@
-import { Matrix4, Vector2 } from 'three/webgpu';
+import { Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
-import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
-import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
-import { LightsInfoNode } from './LightsInfoNode.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 
@@ -14,9 +11,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		super( renderer );
 
-		// options
-		this.envInfo = new EquirectHdrInfoNode();
-
 		// every pixel in a tile finishes its sample in one dispatch, so the counts follow from how
 		// far through the tile cycle the render is and need no GPU work to measure
 		this._completedSamples = 0;
@@ -24,25 +18,21 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		// kernels
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
-		this.kernel.envInfo = this.envInfo;
-
-		this.backgroundInfo = new EquirectBackgroundInfo();
-		this.kernel.backgroundInfo = this.backgroundInfo;
-
-		this.lightsInfo = new LightsInfoNode();
-		this.kernel.lightsInfo = this.lightsInfo;
+		this.kernel.context.clampDirect = this.clampDirect;
+		this.kernel.context.clampIndirect = this.clampIndirect;
 
 	}
 
 	resetSeed() {
 
-		this.kernel.seed = 0;
+		this.kernel.globalSeed = 0;
 
 	}
 
 	reset() {
 
 		super.reset();
+		this.kernel.globalSeed ++;
 		this._completedSamples = 0;
 		this._tileProgress = 0;
 
@@ -85,16 +75,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 	setRandom( random ) {
 
 		this.kernel.context.random = random;
-		this.kernel.needsUpdate = true;
-		this.reset();
+		this.rebuild();
 
 	}
 
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
-		this.kernel.material = material.getData();
-		this.kernel.needsUpdate = true;
-		this.reset();
+		this.kernel.context.shadingModel = shadingModel;
+		this.rebuild();
 
 	}
 
@@ -106,24 +94,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setClamping( direct, indirect ) {
+	setLightsInfo( lightsInfo ) {
 
-		this.kernel.clampDirect = direct;
-		this.kernel.clampIndirect = indirect;
-		this.reset();
-
-	}
-
-	setEnvironment( envMap ) {
-
-		this.envInfo.updateFrom( envMap );
-
-	}
-
-	setLights( lights ) {
-
-		this.lightsInfo.updateFrom( this.renderer, lights );
-		this.reset();
+		this.kernel.lightsInfo = lightsInfo;
+		this.kernel.envInfo = lightsInfo.envInfo;
+		this.rebuild();
 
 	}
 
@@ -134,34 +109,10 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
-	setEnvironmentParams( envMapIntensity, envMapRotation ) {
+	setBackgroundInfo( backgroundInfo ) {
 
-		const { envInfo } = this;
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		envInfo.rotationNode.value.setFromMatrix4( rotationMatrix );
-		envInfo.intensityNode.value = envMapIntensity;
-
-	}
-
-	setBackground( background ) {
-
-		const { backgroundInfo } = this;
-		backgroundInfo.dispose();
-		backgroundInfo.map = background;
-
-	}
-
-	setBackgroundParams(
-		backgroundIntensity,
-		backgroundRotation,
-		backgroundBlurriness,
-	) {
-
-		const { backgroundInfo } = this;
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
-		backgroundInfo.rotationNode.value.copy( rotationMatrix );
-		backgroundInfo.intensity = backgroundIntensity;
-		backgroundInfo.blur = backgroundBlurriness;
+		this.kernel.backgroundInfo = backgroundInfo;
+		this.rebuild();
 
 	}
 
@@ -180,6 +131,8 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			maxBounces,
 			maxTransparentBounces,
 			maxSubsurfaceBounces,
+			maxFogBounces,
+			cameraInVolume,
 
 			outputTarget,
 			sampleCountTarget,
@@ -195,11 +148,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		kernel.maxBounces = maxBounces;
 		kernel.maxTransparentBounces = maxTransparentBounces;
 		kernel.maxSubsurfaceBounces = maxSubsurfaceBounces;
+		kernel.maxFogBounces = maxFogBounces;
+		kernel.cameraInVolume = Number( cameraInVolume );
 
 		// compile the kernel before its first dispatch
 		yield* this.compileKernels( [ kernel ] );
 
-		// number of tile cycles that have finished, ie. the sample count every pixel has reached
+		// Number of tile cycles that have finished, ie. the sample count every pixel has reached. It is the sample
+		// index of the next cycle, as in the wavefront, and the global seed gives each render its own sequence
 		let completedSamples = 0;
 
 		while ( true ) {
@@ -238,7 +194,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			}
 
 			const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
-			kernel.seed += 1;
+			kernel.sampleIndex = completedSamples;
 
 			// Swap targets to support devices without <rgba32float, read_write> textures
 			// Copy latest data to a new outputTarget to keep the appearance
@@ -276,8 +232,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		super.dispose();
 
 		// TODO: dispose of all buffers
-		this.envInfo.dispose();
-		this.lightsInfo.dispose();
 		this.kernel.dispose();
 
 	}

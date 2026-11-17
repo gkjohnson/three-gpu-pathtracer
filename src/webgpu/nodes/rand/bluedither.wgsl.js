@@ -27,11 +27,11 @@ const pixelSeed = vec4( 0 ).toVar( 'blueDitherSeed' );
 // When dithering, the sobol sampler is seeded with a constant pixel so every pixel
 // uses the same sequence, which is modified with the per-pixel blue noise sample.
 const blueDitherInitFunc = wgslTagFn/* wgsl */`
-	fn blueDitherInitialize( pixel: vec2u, pathIndex: u32, bounceIndex: u32 ) -> void {
+	fn blueDitherInitialize( globalSeed: u32, pixel: vec2u, pathIndex: u32, bounceIndex: u32 ) -> void {
 
 		let coord = vec2i( pixel % vec2u( ${ BN_SIZE }u ) );
 		${ pixelSeed } = textureLoad( ${ blueNoiseTexNode }, coord, 0 );
-		${ rngInit }( vec2u( 0 ), pathIndex, bounceIndex );
+		${ rngInit }( globalSeed, vec2u( 0 ), pathIndex, bounceIndex );
 
 	}
 `;

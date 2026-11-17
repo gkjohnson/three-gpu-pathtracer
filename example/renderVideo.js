@@ -12,7 +12,9 @@ import {
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -37,10 +39,8 @@ let animationDuration = 0;
 let videoUrl = '';
 let loader;
 
-// Sample counts are measured asynchronously, so the average is kept for the recording checks. A
-// measurement requested before the latest reset is dropped so it cannot trigger a frame write
+// the average sample count from the latest "progress" event, shown in the recording progress
 let averageSamples = 0;
-let resetCount = 0;
 let videoOutput, videoSource;
 let isWritingFrame = false;
 let recordingState = 'idle';
@@ -54,13 +54,13 @@ const params = {
 	rotation: 2 * Math.PI,
 	duration: 0,
 	frameRate: 12,
-	maxSamples: 10,
 	record: startRecording,
 	stop: finishRecording,
 
-	maxBounces: 15,
-	samplesPerFrame: 1,
+	enable: true,
+	maxSamples: 16,
 	renderScale: 1,
+	samplesPerFrame: 1,
 	...getScaledSettings(),
 
 };
@@ -73,20 +73,59 @@ async function init() {
 	loader.attach( document.body );
 
 	// renderer
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.renderScale = params.renderScale;
 	pathTracer.renderDelay = 0;
 	pathTracer.minSamples = 1;
 
 	// the tracer stops itself at the target, and without a fade a captured frame is never dimmed
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.fadeDuration = 0;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		// the loading line shows the recording progress while recording
+		if ( recordingState !== 'recording' ) {
+
+			loader.setStage( stage, progress, samples );
+
+		}
+
+		if ( samples ) {
+
+			averageSamples = samples.avg;
+
+		}
+
+	} );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
+
+	// write the video frame and advance the animation once every pixel reaches the target sample count and
+	// the denoiser has run
+	pathTracer.addEventListener( 'complete', () => {
+
+		if ( recordingState === 'recording' && ! isWritingFrame ) {
+
+			writeVideoFrame();
+
+		}
+
+	} );
 
 	// scene
 	scene = new Scene();
@@ -160,7 +199,7 @@ async function init() {
 	// prep for rendering
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	initializeSize();
 	rebuildGUI();
@@ -186,23 +225,22 @@ function rebuildGUI() {
 	animationFolder.add( params, 'rotation', - 2 * Math.PI, 2 * Math.PI ).disable( recording );
 	animationFolder.add( params, 'duration', 0.25, animationDuration, 1e-2 ).disable( recording );
 	animationFolder.add( params, 'frameRate', 12, 60, 1 ).disable( recording );
-	animationFolder.add( params, 'renderScale', 0.1, 1 ).onChange( regenerateScene ).disable( recording );
 	animationFolder.add( params, recording ? 'stop' : 'record' ).disable( recordingState !== 'idle' && recordingState !== 'recording' );
 
-	// dynamic parameters
-	const renderFolder = gui.addFolder( 'rendering' );
-	renderFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( value => {
+	// path tracer parameters, the enable toggle and render scale locked during recording
+	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' ).disable( recording );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
 
-		pathTracer.frameBudget = value;
-
-	} );
-	renderFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( value => {
-
-		pathTracer.maxSamples = value;
+		pathTracer.maxSamples = v;
 
 	} );
-	renderFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
-	renderFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( regenerateScene );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+
+	} ).disable( recording );
+	ptFolder.add( params, 'samplesPerFrame', 1, 10, 1 );
 
 }
 
@@ -227,12 +265,9 @@ function initializeSize() {
 
 function regenerateScene() {
 
-	pathTracer.renderScale = params.renderScale;
-	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.setScene( scene, camera );
 
 	averageSamples = 0;
-	resetCount ++;
 
 }
 
@@ -281,6 +316,8 @@ async function finishRecording() {
 
 	if ( recordingState !== 'recording' ) return;
 
+	// no more frames are written while the video finalizes
+	recordingState = 'finishing';
 	rebuildGUI();
 
 	try {
@@ -305,6 +342,7 @@ async function finishRecording() {
 		videoOutput = null;
 		videoSource = null;
 		isWritingFrame = false;
+		loader.setPercentage( 1 );
 
 		pathTracer.minSamples = 1;
 		recordedFrames = 0;
@@ -368,18 +406,6 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const measuredReset = resetCount;
-	pathTracer.getSampleCountsAsync().then( counts => {
-
-		loader.setSamples( counts );
-		if ( measuredReset === resetCount ) {
-
-			averageSamples = counts.avg;
-
-		}
-
-	} );
-
 	const isRecording = recordingState === 'recording';
 	const displayingVideo = params.displayVideo && ! isRecording && videoUrl !== '';
 	if ( displayingVideo ) {
@@ -393,23 +419,13 @@ function animate() {
 
 		camera.updateMatrixWorld();
 
-		for ( let i = 0; ! isWritingFrame && i < 1; i ++ ) {
+		if ( ! params.enable && ! isRecording ) {
+
+			renderer.render( scene, camera );
+
+		} else if ( ! isWritingFrame ) {
 
 			pathTracer.renderSample();
-
-			// Break when reaching the target sample count to avoid extra samples
-			if ( isRecording && averageSamples >= params.maxSamples ) {
-
-				break;
-
-			}
-
-		}
-
-		// If recording and target samples are reached, write the video frame and advance the animation
-		if ( isRecording && ! isWritingFrame && averageSamples >= params.maxSamples ) {
-
-			writeVideoFrame();
 
 		}
 
@@ -422,11 +438,7 @@ function animate() {
 		const percStride = 1 / total;
 		const samplesPerc = averageSamples / params.maxSamples;
 		const percentDone = ( samplesPerc + recordedFrames ) * percStride;
-		loader.setPercentage( percentDone );
-
-	} else {
-
-		loader.setPercentage( 1 );
+		loader.setProgress( 'Recording', percentDone );
 
 	}
 

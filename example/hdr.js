@@ -17,7 +17,9 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { LoaderElement } from './src/LoaderElement.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { HDRImageGenerator } from './src/HDRImageGenerator.js';
@@ -29,10 +31,10 @@ const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main
 const CREDITS = 'Model courtesy of NASA/Caltech-JPL';
 const DESCRIPTION = window.matchMedia( '(dynamic-range: high)' ).matches ? 'HDR display supported' : 'HDR display not supported';
 
-const MAX_SAMPLES = 45;
-
 const params = {
+	enable: true,
 	pause: false,
+	maxSamples: 16,
 	hdr: true,
 	environmentIntensity: 15,
 	renderScale: 1,
@@ -59,15 +61,36 @@ async function init() {
 	// renderer
 	// outputType HalfFloatType configures the canvas for extended-range tone mapping, so the path
 	// tracer's linear values above 1.0 are displayed directly in HDR ( on a capable display ).
-	renderer = new WebGPURenderer( { antialias: true, outputType: HalfFloatType } );
+	renderer = new WebGPURenderer( { antialias: true, outputType: HalfFloatType, trackTimestamp: true } );
 	renderer.init();
 	document.body.appendChild( renderer.domElement );
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.maxSamples = params.maxSamples;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+		if ( samples ) {
+
+			averageSamples = samples.avg;
+
+		}
+
+	} );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
 
 	// generator
 	hdrGenerator = new HDRImageGenerator( renderer );
@@ -124,22 +147,29 @@ async function init() {
 	scene.add( floorPlane );
 
 	// initialize the path tracer
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
 	loader.setPercentage( 1 );
 
 	const gui = new GUI();
+	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'pause' );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+		pathTracer.renderScale = v;
+
+	} );
 	gui.add( params, 'hdr' ).onChange( v => {
 
 		renderer.toneMapping = v ? NoToneMapping : ACESFilmicToneMapping;
-
-	} );
-	gui.add( params, 'pause' );
-	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
-
-		pathTracer.renderScale = v;
 
 	} );
 	gui.add( params, 'environmentIntensity', 0, 30 ).onChange( v => {
@@ -209,15 +239,16 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	const doPause = params.pause && averageSamples >= 1;
-	pathTracer.pause = averageSamples >= MAX_SAMPLES || doPause;
-	pathTracer.renderSample();
+	if ( params.enable ) {
 
-	pathTracer.getSampleCountsAsync().then( counts => {
+		// a paused render still takes its first sample
+		pathTracer.pause = params.pause && averageSamples >= 1;
+		pathTracer.renderSample();
 
-		averageSamples = counts.avg;
-		loader.setSamples( counts );
+	} else {
 
-	} );
+		renderer.render( scene, camera );
+
+	}
 
 }

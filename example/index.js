@@ -149,12 +149,10 @@ const envMaps = {
 
 const params = {
 
-	multipleImportanceSampling: true,
 	renderScale: 1,
+	interpolateDisplay: true,
 	randomStrategy: 'Sobol',
 	frameBudget: 250000,
-	adaptiveFrameBudget: true,
-	targetFrameTime: 16,
 
 	model: '',
 
@@ -169,7 +167,6 @@ const params = {
 	lighting: 'none',
 
 	enable: true,
-	maxBounces: 15,
 	pause: false,
 	maxSamples: 16,
 
@@ -269,10 +266,18 @@ async function init() {
 	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.asyncCompile = true;
 	pathTracer.frameBudget = params.frameBudget;
-	pathTracer.adaptiveFrameBudget = params.adaptiveFrameBudget;
-	pathTracer.targetFrameTime = params.targetFrameTime;
 	pathTracer.maxSamples = params.maxSamples;
-	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
+
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+		if ( samples ) {
+
+			averageSamples = samples.avg;
+
+		}
+
+	} );
 
 	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
 	denoiser = new OIDNDenoiser( {
@@ -424,11 +429,9 @@ function animate() {
 
 	if ( params.enable ) {
 
-		if ( ! params.pause || averageSamples < 1 ) {
-
-			pathTracer.renderSample();
-
-		}
+		// a paused render still takes its first sample
+		pathTracer.pause = params.pause && averageSamples >= 1;
+		pathTracer.renderSample();
 
 		// draws the denoiser's auxiliary buffer over the render
 		if ( params.auxView !== 'none' ) {
@@ -443,18 +446,13 @@ function animate() {
 
 	}
 
-	// hide the canvas while loading and while the kernels compile
-	renderer.domElement.style.visibility = loading || pathTracer.compiling ? 'hidden' : 'visible';
+	// hide the canvas while loading and compiling, keeping the text light until it shows
+	const hidden = loading || pathTracer.compiling;
+	renderer.domElement.style.visibility = hidden ? 'hidden' : 'visible';
+	document.body.classList.toggle( 'light-background', ! hidden && params.background === 'white' );
 
-	pathTracer.getSampleCountsAsync().then( counts => {
-
-		averageSamples = counts.avg;
-		loader.setSamples( counts );
-
-		// shows the budget the tracer has adapted to
-		params.frameBudget = pathTracer.frameBudget;
-
-	} );
+	// shows the budget the tracer has adapted to
+	params.frameBudget = pathTracer.frameBudget;
 
 }
 
@@ -507,7 +505,6 @@ function alignBackdropToCamera() {
 
 function onParamsChange() {
 
-	pathTracer.maxBounces = params.maxBounces;
 	pathTracer.renderScale = params.renderScale;
 
 	const transparent = params.background === 'transparent';
@@ -535,11 +532,9 @@ function onParamsChange() {
 	backdrop.material.roughness = light ? 0.2 : 0.6;
 
 	document.body.classList.toggle( 'checkerboard', transparent );
-	document.body.classList.toggle( 'light-background', light );
 
 	pathTracer.updateMaterials();
 	pathTracer.updateEnvironment();
-	pathTracer.setMultipleImportanceSampling( params.multipleImportanceSampling );
 
 }
 
@@ -636,30 +631,18 @@ function buildGui() {
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
 	pathTracingFolder.add( params, 'pause' );
-	pathTracingFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onParamsChange );
-	const frameBudgetController = pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
+	pathTracingFolder.add( params, 'interpolateDisplay' ).onChange( v => {
 
-		pathTracer.frameBudget = v;
-
-	} ).listen().disable( params.adaptiveFrameBudget );
-	pathTracingFolder.add( params, 'adaptiveFrameBudget' ).onChange( v => {
-
-		pathTracer.adaptiveFrameBudget = v;
-		frameBudgetController.enable( ! v );
+		pathTracer.interpolateDisplay = v;
 
 	} );
-	pathTracingFolder.add( params, 'targetFrameTime', 4, 100, 1 ).onChange( v => {
-
-		pathTracer.targetFrameTime = v;
-
-	} );
-	pathTracingFolder.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
+	pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).listen().disable();
+	pathTracingFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
 
 	} );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'randomStrategy', Object.keys( RANDOM_STRATEGIES ) ).onChange( v => {
 
 		pathTracer.setRandom( RANDOM_STRATEGIES[ v ] );
@@ -823,7 +806,7 @@ async function updateModel() {
 	const modelInfo = customModel || models[ params.model ];
 
 	// hide the canvas and the transparency checkerboard while loading
-	document.body.classList.remove( 'checkerboard' );
+	document.body.classList.remove( 'checkerboard', 'light-background' );
 	renderer.domElement.style.visibility = 'hidden';
 	loading = true;
 	loader.setPercentage( 0 );
@@ -858,7 +841,7 @@ async function updateModel() {
 
 		model = await loadModel( modelInfo.url, v => {
 
-			loader.setPercentage( 0.5 * v );
+			loader.setProgress( 'Loading', v );
 
 		}, modelInfo.fileMap );
 
@@ -958,7 +941,13 @@ async function updateModel() {
 
 	await pathTracer.setSceneAsync( scene, activeCamera );
 
-	loader.setPercentage( 1 );
+	// otherwise the "rendering" progress event hides the loading line
+	if ( ! params.enable ) {
+
+		loader.setPercentage( 1 );
+
+	}
+
 	loader.setCredits( modelInfo.credit || '' );
 
 	// models that carry their own lighting can override the scene defaults

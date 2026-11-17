@@ -1,5 +1,6 @@
-import { Box3, Color, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
+import { Box3, Color, CylinderGeometry, DirectionalLight, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
 import { ShapedAreaLight } from 'three-gpu-pathtracer';
+import { FogVolumeNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -173,13 +174,13 @@ export function convertEmissivePlanesToLights( model ) {
 		let light;
 		if ( isCircular ) {
 
-			light = new ShapedAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
+			light = new ShapedAreaLight( material.emissive, material.emissiveIntensity, width, height );
 			light.isCircular = true;
 
 		} else {
 
 			// use a rect area light so the three.js rasterization path works
-			light = new RectAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
+			light = new RectAreaLight( material.emissive, material.emissiveIntensity, width, height );
 
 		}
 
@@ -337,7 +338,7 @@ export const MODEL_LIST = {
 
 		// aperture refit from the source scene's f/0.45 at 82mm to the normalized model scale
 		bokehSize: 28,
-		focusDistance: 0.536,
+		focusDistance: 0.56,
 
 		postProcess: model => {
 
@@ -379,27 +380,75 @@ export const MODEL_LIST = {
 
 		postProcess: model => {
 
-			// the source scene renders the monster with subsurface scattering, which the path tracer
-			// has no equivalent for, so stand in a rough transmissive material
+			// subsurface settings from the source Blender scene, whose random walk radius Cycles scales by 1 / ( 4 PI )
+			const CYCLES_RANDOM_WALK_RADIUS_SCALE = 0.25 / Math.PI;
+			const SUBSURFACE = {
+				monster: { color: [ 0.352, 0.24, 0.8 ], radius: [ 1, 0.2, 0.1 ], scale: 3, clearcoat: 0.5 },
+				hand: { color: [ 0.6, 0.348, 0.24 ], radius: [ 1, 0.2, 0.1 ], scale: 0.2, clearcoat: 0.125 },
+			};
+
+			// the exported lamps rely on a Blender shader trick, so they're replaced with area lights below
+			const toRemove = [];
 			model.traverse( c => {
 
-				if ( c.material && /^monster/.test( c.material.name ) ) {
+				if ( c.material && c.material.emissive.getHex() !== 0 ) {
+
+					toRemove.push( c );
+
+				}
+
+				const name = c.material && /^(monster|hand)/.exec( c.material.name );
+				if ( name ) {
+
+					const { color, scale, clearcoat } = SUBSURFACE[ name[ 1 ] ];
+					const radius = SUBSURFACE[ name[ 1 ] ].radius.map( r => r * scale * CYCLES_RANDOM_WALK_RADIUS_SCALE );
+					const distance = Math.min( ...radius );
 
 					const material = new MeshPhysicalMaterial();
 					MeshStandardMaterial.prototype.copy.call( material, c.material );
+					material.color.set( 0xffffff );
+					material.map = null;
+					material.metalness = 0;
+					material.metalnessMap = null;
+					material.ior = 1.45;
+					material.clearcoat = clearcoat;
+					material.clearcoatRoughness = 0.2;
 					material.transmission = 1;
-					material.roughness = 0.55;
-					material.ior = 1.4;
-					material.thickness = 0.15;
-					material.attenuationDistance = 0.25;
-					material.attenuationColor.copy( c.material.color );
+					material.thickness = 1;
+					material.scatterStrength = 1;
+					material.multiscatterColor = new Color().setRGB( ...color );
+					material.attenuationDistance = distance;
+					material.attenuationColor.setRGB( ...radius.map( r => Math.exp( - distance / r ) ) );
 					c.material = material;
 
 				}
 
 			} );
 
-			convertEmissivePlanesToLights( model );
+			toRemove.forEach( c => c.removeFromParent() );
+
+			const LIGHTS = [
+				// key and fill
+				{ size: [ 2, 2 ], position: [ - 2.2, 4.2, 3 ], target: [ 0.1, 1.7, 0.3 ], intensity: 14 },
+				{ size: [ 2, 2 ], position: [ 2.8, 1.4, 3.5 ], target: [ 0, 1, 0.5 ], intensity: 3 },
+
+				// backlight
+				{ size: [ 1.5, 1 ], position: [ 0.3, 1, - 2 ], target: [ 0, 0.8, 0 ], intensity: 25 },
+
+				// wall and floor
+				{ size: [ 2, 1 ], position: [ 0, 3.5, 0 ], target: [ 0, 1.8, - 2.4 ], intensity: 4 },
+				{ size: [ 1.5, 1.5 ], position: [ - 3.4, 0.5, 0.5 ], target: [ 0, 0, 0.5 ], intensity: 5 },
+				{ size: [ 1.5, 1.5 ], position: [ 3.4, 0.5, 0.5 ], target: [ 0, 0, 0.5 ], intensity: 5 },
+			];
+
+			LIGHTS.forEach( ( { size, position, target, intensity } ) => {
+
+				const light = new RectAreaLight( 0xffcfa2, intensity, ...size );
+				light.position.set( ...position );
+				light.lookAt( ...target );
+				model.add( light );
+
+			} );
 
 		}
 	},
@@ -815,7 +864,7 @@ export const MODEL_LIST = {
 			material.thickness = 1;
 			material.scatterStrength = 1;
 			material.multiscatterColor = new Color().setRGB( 0.4, 0.025, 0.015 );
-			material.attenuationDistance = 0.005 * Math.max( size.x, size.y, size.z );
+			material.attenuationDistance = 0.01 * Math.max( size.x, size.y, size.z );
 			material.attenuationColor.setRGB( Math.exp( - 1 ), Math.exp( - 1 / 0.25 ), Math.exp( - 1 / 0.17 ) );
 
 			model.traverse( c => {
@@ -831,6 +880,44 @@ export const MODEL_LIST = {
 			model.add( camera );
 
 		}
+	},
+
+	'Stalenhag Winter': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/colourdrafts/scene.glb',
+		credit: 'Model by "ganzhugav" on Sketchfab',
+		postProcess( model ) {
+
+			// a cylinder of fog around the whole diorama
+			const box = new Box3().setFromObject( model );
+			const fog = new Mesh( new CylinderGeometry( 0.5, 0.5, 1, 20 ), new FogVolumeNodeMaterial( {
+				color: 0x666666,
+				density: 1.5,
+			} ) );
+
+			fog.scale.subVectors( box.max, box.min );
+			fog.scale.x += 0.1;
+			fog.scale.y += 0.01;
+			fog.scale.z += 0.1;
+			fog.scale.x = fog.scale.z = Math.max( fog.scale.x, fog.scale.z );
+
+			box.getCenter( fog.position );
+			fog.position.y += 0.02;
+
+			const sun = new DirectionalLight( 0xfff1dd, 80 );
+			sun.position.set( 1, 0.4, - 1 );
+			sun.target.position.set( - 1, - 0.4, 1 );
+			sun.add( sun.target );
+
+			const camera = new PerspectiveCamera( 45, 1, 0.025, 500 );
+			camera.position.set( - 0.078, 0.11, 0.11 );
+			camera.rotation.set( 0.04, - 0.51, 0.02 );
+
+			model.add( fog, sun, camera );
+
+		},
+		background: 'black',
+		envMap: 'none',
+		stage: 'none',
 	},
 
 	'Crab Sculpture': {

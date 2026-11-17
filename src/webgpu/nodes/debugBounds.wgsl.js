@@ -24,9 +24,10 @@ const debugBoundsResultStruct = new StructTypeNode( {
 
 // Builds the full-screen "bvh bounds heatmap" fragment function for the given bvh data. The uniforms
 // driving it are attached as `.uniforms` so the caller can update them each frame.
-export function getDebugBoundsFunction( bvhData ) {
+export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
-	const { transforms, index, attributes, materials } = bvhData.storage;
+	const { transforms, index, attributes } = bvhData.storage;
+	const { materials } = shadingModel.storage;
 
 	// uniforms
 

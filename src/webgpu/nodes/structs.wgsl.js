@@ -120,6 +120,8 @@ export const materialStruct = new StructTypeNode( {
 	anisotropyRotation: 'float',
 	// offset 68 floats
 	anisotropyMap: 'int',
+	bumpMap: 'int',
+	bumpScale: 'float',
 
 	// offset 72 floats
 	mapTransform: 'mat3',
@@ -156,14 +158,32 @@ export const materialStruct = new StructTypeNode( {
 
 	// offset 264 floats
 	anisotropyMapTransform: 'mat3',
-
 	// offset 276 floats
+	bumpMapTransform: 'mat3',
+
+	// offset 288 floats
 	// the volume's scattering, from "KHR_materials_scatter"
 	multiscatterColor: 'vec3',
 	scatterStrength: 'float',
 	scatterAnisotropy: 'float',
-	// total size = 284
+	// total size = 296
 }, 'Material' );
+
+// A ray's surface hit. "normal" is the face normal on the hit side, "side" is -1 for back face hits and
+// objectIndex < 0 encodes a miss
+export const hitRecordStruct = new StructTypeNode( {
+	barycoord: 'vec3f',
+	objectIndex: 'int',
+
+	normal: 'vec3f',
+	side: 'float',
+
+	indices: 'vec3u',
+	dist: 'float',
+
+	// the bounce the surface was hit at
+	bounce: 'uint',
+}, 'HitRecord' );
 
 export const surfaceRecordStruct = new StructTypeNode( {
 	// surface type
@@ -188,13 +208,13 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	color: 'vec3f',
 	emission: 'vec3f',
 	opacity: 'f32',
+	matte: 'bool',
 
 	// transmission
 	ior: 'f32',
 	transmission: 'f32',
 	thinWall: 'bool',
-	attenuationColor: 'vec3f',
-	attenuationDistance: ' f32',
+	dispersion: 'f32',
 
 	// clearcoat
 	clearcoatNormal: 'vec3f',

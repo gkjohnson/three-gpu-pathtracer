@@ -3,12 +3,9 @@ import { StorageBufferAttribute } from 'three/webgpu';
 import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { rayDataStruct, PIXEL_QUEUE_CURRENT, PIXEL_QUEUE_ELEMENT_COUNT, PIXEL_QUEUE_HEADER } from './structs.js';
+import { rayDataStruct, pixelQueueInfoStruct, NO_PIXEL } from './structs.js';
 
-// Runs once per reset: assigns each of the first rayData-pool-count pixels to a path slot and parks
-// the overflow pixel indices in the pixel queue. Slots are initialized so LogicKernel skips them and
-// MaterialKernel immediately generates fresh camera rays. Later budget changes are handled by
-// resizing the pool in the render loop, with ResetSlotsKernel returning retired slots' pixels.
+// Runs once per reset: starts the path slots in use idle and queues every pixel
 export class PopulatePixelIndicesKernel extends ComputeKernel {
 
 	constructor( ) {
@@ -16,6 +13,7 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 		const params = {
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			pixelQueue: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ),
+			pixelQueueInfo: storage( new StorageBufferAttribute( 1, 1 ), pixelQueueInfoStruct ),
 			targetDimensions: uniform( new Vector2() ),
 			frameBudget: uniform( 0, 'uint' ),
 			globalId: globalId,
@@ -34,31 +32,21 @@ export class PopulatePixelIndicesKernel extends ComputeKernel {
 				}
 
 				let rayCount = min( frameBudget, arrayLength( rayDataStorage ) );
-				let pixelCount = targetDimensions.x * targetDimensions.y;
-				if ( globalId.x == 0u && globalId.y == 0u ) {
-
-					pixelQueue[ ${ PIXEL_QUEUE_CURRENT }u ] = 0u;
-					pixelQueue[ ${ PIXEL_QUEUE_ELEMENT_COUNT }u ] = select( 0u, pixelCount - rayCount, pixelCount >= rayCount );
-
-				}
-
-				let pixelHash = ( globalId.x << 16 ) | globalId.y;
 				let pixelIndex = globalId.x + globalId.y * targetDimensions.x;
 				if ( pixelIndex < rayCount ) {
 
-					rayDataStorage[ pixelIndex ].pixelIndex = pixelHash;
+					rayDataStorage[ pixelIndex ].pixelIndex = ${ NO_PIXEL }u;
 					rayDataStorage[ pixelIndex ].resultColor = vec4f( 0.0 );
 					rayDataStorage[ pixelIndex ].throughputColor = vec3f( 0.0 );
-					rayDataStorage[ pixelIndex ].objectIndex = - 1;
+					rayDataStorage[ pixelIndex ].hit.objectIndex = - 1;
 					rayDataStorage[ pixelIndex ].alphaDepth = 0u;
 					rayDataStorage[ pixelIndex ].rayIntersectionIndex = - 1;
 					rayDataStorage[ pixelIndex ].shadowRayIntersectionIndex = - 1;
 
-				} else {
-
-					pixelQueue[ ${ PIXEL_QUEUE_HEADER }u + pixelIndex - rayCount ] = pixelHash;
-
 				}
+
+				let queueIndex = atomicAdd( &${ params.pixelQueueInfo }[ 0 ].frontCount, 1u );
+				pixelQueue[ queueIndex ] = ( globalId.x << 16 ) | globalId.y;
 
 			}
 		`;

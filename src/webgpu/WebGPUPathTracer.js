@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -7,31 +7,42 @@ import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.j
 import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
+import { LightsInfoNode } from './LightsInfoNode.js';
+import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
+import { toHalfFloatArray } from '../utils/TextureUtils.js';
+import { FrameWatchdog } from '../utils/FrameWatchdog.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
 import { AuxDebugMaterial } from './materials/debug/AuxDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights } from '../core/utils/sceneUpdateUtils.js';
-import { GltfCompliantMaterial } from './materials/GltfCompliantMaterial.js';
+import { GLTFShadingModel } from './shadingModels/GLTFShadingModel.js';
+import { expandByNearPlane } from './shims/nearPlaneBounds.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
 /** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
 /** @import { FSRUpscaler } from './upscale/FSRUpscaler.js' */
-/** @import { PathtracingMaterial } from './materials/PathtracingMaterial.js' */
+/** @import { ShadingModel } from './shadingModels/ShadingModel.js' */
 
 /**
  * @typedef {Object} SampleCounts
  * @property {number} min - Lowest sample count of any pixel.
  * @property {number} max - Highest sample count of any pixel.
  * @property {number} avg - Mean sample count across the image.
- * @property {number} samplesPerSecond - Mean samples accumulated per second since the last reset.
+ * @property {number} samplesPerSecond - Mean samples accumulated per second of render time since the last reset.
+ * @property {number} renderTime - Milliseconds spent rendering samples since the last reset.
+ * @property {number} elapsedTime - Milliseconds since rendering started after the last reset, including pauses but
+ *   not the time the page is hidden.
  */
 
 const _resolution = new Vector2();
 const _color = new Color();
+const _originBounds = /* @__PURE__ */ new Box3();
+const _originToWorld = /* @__PURE__ */ new Matrix4();
+const _rotationMatrix = /* @__PURE__ */ new Matrix4();
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -47,12 +58,14 @@ const BUDGET_CHANGE_THRESHOLD = 1.15;
 const BUDGET_MAX_STEP = 2;
 const MIN_FRAME_BUDGET = 4096;
 
-// how much the adaptive preview scale must change before it's resized
-const LOW_RES_SCALE_CHANGE = 0.05;
-
 // the options the mesh geometry bvhs are built with and how many workers build them at once
 const MESH_BVH_OPTIONS = { strategy: SAH, targetLeafSize: 5 };
 const MAX_BVH_WORKERS = 4;
+
+// the stages before a scene renders, in order
+const STAGE_BUILDING = 0;
+const STAGE_COMPILING = 1;
+const STAGE_RENDERING = 2;
 
 // Builds a geometry's BVH in a worker without giving up its buffers. The workers transfer the position and
 // index buffers, which neuters them for every other array viewing them, such as the attributes of other
@@ -105,7 +118,9 @@ class TextureCache {
 		this.texture = null;
 		this.hash = null;
 
-		const colorTex = new DataTexture( new Uint8Array( [ 255, 255, 255, 255 ] ), 1, 1 );
+		// half float, since 8 bit linear data truncates dark colors (0x080808 becomes black)
+		const colorTex = new DataTexture( toHalfFloatArray( [ 1, 1, 1, 1 ] ), 1, 1 );
+		colorTex.type = HalfFloatType;
 		colorTex.minFilter = LinearFilter;
 		colorTex.magFilter = LinearFilter;
 		this.colorTex = colorTex;
@@ -130,10 +145,7 @@ class TextureCache {
 			const clearAlpha = renderer.getClearAlpha();
 			renderer.getClearColor( _color );
 
-			colorTex.image.data[ 0 ] = _color.r * 255;
-			colorTex.image.data[ 1 ] = _color.g * 255;
-			colorTex.image.data[ 2 ] = _color.b * 255;
-			colorTex.image.data[ 3 ] = clearAlpha * 255;
+			colorTex.image.data.set( toHalfFloatArray( [ _color.r, _color.g, _color.b, clearAlpha ] ) );
 
 			value = colorTex;
 			hash = colorTex.image.data.join();
@@ -141,10 +153,7 @@ class TextureCache {
 
 		} else if ( value.isColor ) {
 
-			colorTex.image.data[ 0 ] = value.r * 255;
-			colorTex.image.data[ 1 ] = value.g * 255;
-			colorTex.image.data[ 2 ] = value.b * 255;
-			colorTex.image.data[ 3 ] = 255;
+			colorTex.image.data.set( toHalfFloatArray( [ value.r, value.g, value.b, 1 ] ) );
 
 			value = colorTex;
 			hash = colorTex.image.data.join();
@@ -208,6 +217,13 @@ class TextureCache {
  */
 
 /**
+ * Fired as the render advances. `stage` is "building", "compiling", "rendering" or "denoising", and
+ * `progress` is the fraction of it done, or null when unknown. "rendering" also gives the sample
+ * counts as `samples`, reported a few times a second.
+ * @event WebGPUPathTracer#progress
+ */
+
+/**
  * Progressive path tracer running on WebGPU. Call {@link WebGPUPathTracer#setScene} once,
  * then {@link WebGPUPathTracer#renderSample} every frame to accumulate samples into the canvas.
  *
@@ -237,7 +253,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Number of path slots dispatched per {@link WebGPUPathTracer#renderSample} call,
+	 * Number of path steps dispatched per {@link WebGPUPathTracer#renderSample} call,
 	 * independent of resolution. Raising it trades frame rate for convergence speed.
 	 * @type {number}
 	 * @default 250000
@@ -305,6 +321,26 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Maximum number of times a path continues after scattering in fog. Light is still sampled at the
+	 * scatter that reaches it, so 0 renders single scattering, as Cycles' volume bounces do. Fog scatters
+	 * also count toward {@link WebGPUPathTracer#maxBounces}.
+	 * @type {number}
+	 * @default 0
+	 */
+	get maxFogBounces() {
+
+		return this._pathTracer.maxFogBounces;
+
+	}
+
+	set maxFogBounces( v ) {
+
+		this._pathTracer.maxFogBounces = v;
+		this.reset();
+
+	}
+
+	/**
 	 * Stops accumulating once every pixel reaches this many samples. A denoiser only runs once the
 	 * render has stopped, so it has no effect while this is `0`.
 	 * @type {number}
@@ -360,9 +396,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		counts.max = measured.max;
 		counts.avg = measured.avg;
 
-		// averaged over the whole render, and idle time counts against it
-		const elapsed = this.getRenderTime() / 1000;
-		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
+		// averaged over the time spent rendering
+		counts.renderTime = this.getRenderTime();
+		counts.elapsedTime = Math.max( this._resetTime, 0 );
+		counts.samplesPerSecond = counts.renderTime > 0 ? 1000 * counts.avg / counts.renderTime : 0;
 
 		return { ...counts };
 
@@ -551,7 +588,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	get textureAtlas() {
 
-		return this._bvhData.textureAtlas;
+		return this._shadingModel.textureAtlas;
 
 	}
 
@@ -571,20 +608,17 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.maxSamples = maxSamples;
 		this._timingCount = 0;
 		this._pathTracer.setBVHData( this._bvhData );
-		this._pathTracer.setMaterial( this.material );
-		this._pathTracer.setRandom( this.random );
+		this._pathTracer.setLightsInfo( this._lightsInfo );
+		this._pathTracer.setBackgroundInfo( this._backgroundInfo );
+		this._pathTracer.setShadingModel( this._shadingModel );
+		this._pathTracer.setRandom( this._random );
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
 		this._pathTracer.setFilterGlossy( this._filterGlossyFactor );
 		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
 		this._pathTracer.setAccumulateAux( Boolean( this._denoiser && this._denoiser.useAuxiliaryBuffers ) );
 		this.setCamera( this.camera );
-
-		// the new tracer has default environment and background maps so apply the cached scene textures
-		this._pathTracer.setEnvironment( this._environmentCache.texture );
-		this._pathTracer.setBackground( this._backgroundCache.texture );
-		this.updateEnvironment();
-		this.updateLights();
+		this.reset();
 
 	}
 
@@ -599,38 +633,80 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._renderer = renderer;
 		this._timer = new Timer();
 
+		// leaves out the time the page spends hidden
+		if ( typeof document !== 'undefined' ) {
+
+			this._timer.connect( document );
+
+		}
+
 		this._environmentCache = new TextureCache( renderer, 'environment' );
 		this._backgroundCache = new TextureCache( renderer, 'background' );
 
 		this._resetTime = - 1;
 		this._fadeState = 0;
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._size = new Vector2();
+
+		// the time spent rendering, and a watchdog that notices when the app stops calling "renderSample"
+		this._renderTime = 0;
+		this._renderedLastCall = false;
+		this._renderWatchdog = new FrameWatchdog( () => {
+
+			// count the last sample up to the frame it would have been followed by another call
+			this._timer.update();
+			if ( this._renderedLastCall ) {
+
+				this._renderTime += 1000 * this._timer.getDelta();
+
+			}
+
+			this._renderedLastCall = false;
+
+		} );
+
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// adaptive frame budget and preview state
 		this._timingCount = 0;
 		this._frameTimeTotal = 0;
 		this._frameTimeCount = 0;
-		this._lowResPixelTime = 0;
-		this._lowResScale = 0;
 		this._warnedTimestamps = false;
+
+		// the budget from before the first pixels finished, restored on reset. The last few pixels render
+		// quickly and inflate the budget
+		this._fullFrameBudget = null;
 
 		// avoid mipmap gen on copy, not always supported with float type
 		this._lowResTarget = new StorageTexture( 1, 1 );
 		this._lowResTarget.type = FloatType;
 		this._lowResTarget.generateMipmaps = false;
 
+		// the lights, environment and background, which the backends sample
+		this._lightsInfo = new LightsInfoNode();
+		this._backgroundInfo = new EquirectBackgroundInfo();
+
 		this._pathTracer = new WaveFrontPathTracer( renderer );
+		this._pathTracer.setLightsInfo( this._lightsInfo );
+		this._pathTracer.setBackgroundInfo( this._backgroundInfo );
 
 		// optional post passes, attached with "setDenoiser" / "setUpscaler"
 		this._denoiser = null;
 		this._upscaler = null;
 
+		// the attached denoiser's progress events are forwarded
+		this._onDenoiserProgress = e => this.dispatchEvent( { type: 'progress', stage: 'denoising', progress: e.progress } );
+
+		// the current stage. Only the latest "setSceneAsync" call sets its scene, and a geometry already building
+		// for an earlier call is awaited rather than built again
+		this._stage = STAGE_RENDERING;
+		this._sceneRequest = 0;
+		this._pendingBVHs = new WeakMap();
+
 		// options
 
 		/**
-		 * Samples every pixel must reach before the full resolution render is faded in.
+		 * Average samples per pixel the full resolution render must reach before it is faded in.
 		 * @type {number}
 		 * @default 1
 		 */
@@ -639,40 +715,24 @@ export class WebGPUPathTracer extends EventDispatcher {
 		/**
 		 * Milliseconds to show the low resolution preview for after a reset.
 		 * @type {number}
-		 * @default 500
+		 * @default 16
 		 */
-		this.renderDelay = 500;
+		this.renderDelay = 16;
 
 		/**
 		 * Milliseconds taken to cross fade from the preview to the full render.
 		 * @type {number}
-		 * @default 500
+		 * @default 250
 		 */
-		this.fadeDuration = 500;
+		this.fadeDuration = 250;
 
 		/**
-		 * Whether to render a low resolution preview while the camera is moving.
+		 * Whether to render a low resolution preview while the camera is moving, sized to the pixels a frame of
+		 * {@link WebGPUPathTracer#frameBudget} can render.
 		 * @type {boolean}
 		 * @default true
 		 */
 		this.dynamicLowRes = true;
-
-		/**
-		 * Resolution of the low resolution preview, as a fraction of the render size. The minimum when
-		 * {@link WebGPUPathTracer#adaptiveDynamicRes} is set. The preview never has more pixels than
-		 * {@link WebGPUPathTracer#frameBudget}.
-		 * @type {number}
-		 * @default 0.1
-		 */
-		this.lowResScale = 0.1;
-
-		/**
-		 * Whether the low resolution preview is sized to take {@link WebGPUPathTracer#targetFrameTime} per
-		 * frame. Requires a renderer created with `trackTimestamp: true`.
-		 * @type {boolean}
-		 * @default true
-		 */
-		this.adaptiveDynamicRes = true;
 
 		/**
 		 * Whether {@link WebGPUPathTracer#frameBudget} is adjusted to keep each
@@ -684,8 +744,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.adaptiveFrameBudget = true;
 
 		/**
-		 * GPU time in milliseconds per frame targeted by {@link WebGPUPathTracer#adaptiveFrameBudget} and
-		 * {@link WebGPUPathTracer#adaptiveDynamicRes}.
+		 * GPU time in milliseconds per frame targeted by {@link WebGPUPathTracer#adaptiveFrameBudget}.
 		 * @type {number}
 		 * @default 16
 		 */
@@ -698,6 +757,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @default 1
 		 */
 		this.renderScale = 1;
+
+		/**
+		 * Whether the render is interpolated when drawn to a canvas of a different size, such as with a
+		 * {@link WebGPUPathTracer#renderScale} below one or during the low resolution preview. Set to `false` to show
+		 * each rendered pixel as is. Not used by an upscaler.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.interpolateDisplay = true;
 
 		/**
 		 * Whether to track the canvas size automatically. Set to `false` to drive the render
@@ -765,14 +833,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @type {Object}
 		 * @private
 		 */
-		this.random = RANDOM_SOBOL;
+		this._random = RANDOM_SOBOL;
 
 		/**
-		 * Material model the kernels evaluate surfaces with.
-		 * @type {PathtracingMaterial}
+		 * Shading model the kernels evaluate surfaces with.
+		 * @type {ShadingModel}
 		 * @private
 		 */
-		this.material = new GltfCompliantMaterial();
+		this._shadingModel = new GLTFShadingModel();
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
 		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
@@ -786,8 +854,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._wasComplete = false;
 
 		// initialize the scene so it doesn't fail
-		this.setMaterial( this.material );
-		this.setRandom( this.random );
+		this.setShadingModel( this._shadingModel );
+		this.setRandom( this._random );
 		this.setScene( new Scene(), new PerspectiveCamera() );
 
 	}
@@ -815,11 +883,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// a detached instance stops receiving resets, so clear it rather than let it hold a
 		// result from a camera position that has since moved
 		this._denoiser?.reset();
+		this._denoiser?.removeEventListener( 'progress', this._onDenoiserProgress );
 		this._denoiser = denoiser;
 
 		if ( denoiser ) {
 
 			denoiser.init( this._renderer );
+			denoiser.addEventListener( 'progress', this._onDenoiserProgress );
 
 		}
 
@@ -900,15 +970,18 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} );
 
+		// the materials are written first since the bvh data writes their indices with the transforms
+		const { _shadingModel: shadingModel } = this;
+		shadingModel.updateMaterials( scene );
+
 		// Build TLAS and compute functions
-		const bvhData = new PathtracerBVHComputeData( scene );
+		const bvhData = new PathtracerBVHComputeData( scene, shadingModel );
 		bvhData.update();
-		bvhData.textureAtlas.setTextures( this._renderer, bvhData.textures );
+		shadingModel.updateTextures( this._renderer );
 
 		if ( this._bvhData ) {
 
 			this._bvhData.dispose();
-			this._bvhData.textureAtlas.dispose();
 
 		}
 
@@ -952,8 +1025,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._sceneRequest ++;
+
+		const request = this._sceneRequest;
+		const pendingBVHs = this._pendingBVHs;
+
 		// the worker doesn't support interleaved attributes, so those geometries are built in "setScene" instead
 		const geometries = new Set();
+		const pending = new Set();
 		scene.traverse( child => {
 
 			if ( child.isMesh && ! child.isSkinnedMesh && ! child.geometry.boundsTree ) {
@@ -965,7 +1044,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				}
 
-				geometries.add( geometry );
+				if ( pendingBVHs.has( geometry ) ) {
+
+					pending.add( pendingBVHs.get( geometry ) );
+
+				} else {
+
+					geometries.add( geometry );
+
+				}
 
 			}
 
@@ -973,6 +1060,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// each worker runs one job at a time so they pull from a shared queue
 		const queue = Array.from( geometries );
+
+		// build progress, weighted by triangle count
+		const getTriangleCount = geometry => ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
+		const totalTriangles = queue.reduce( ( sum, geometry ) => sum + getTriangleCount( geometry ), 0 );
+		let builtTriangles = 0;
+
 		const workers = [];
 		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
 
@@ -980,50 +1073,104 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		// stop rendering the previous scene while the next one builds, keeping the last frame. The denoiser runs
+		// its tiles on its own schedule, so it's reset separately
+		this._setStage( STAGE_BUILDING );
+		this._denoiser?.reset();
+
 		try {
 
-			await Promise.all( workers.map( async worker => {
+			await Promise.all( [ ...pending, ...workers.map( async worker => {
 
 				while ( queue.length > 0 ) {
 
 					const geometry = queue.shift();
-					geometry.boundsTree = await generateBVHInWorker( worker, geometry, MESH_BVH_OPTIONS );
+					const triangles = getTriangleCount( geometry );
+					let reported = 0;
+					const onProgress = progress => {
+
+						builtTriangles += ( progress - reported ) * triangles;
+						reported = progress;
+
+						// skip if a later call replaced this scene
+						if ( request === this._sceneRequest ) {
+
+							this.dispatchEvent( { type: 'progress', stage: 'building', progress: builtTriangles / totalTriangles } );
+
+						}
+
+					};
+
+					const promise = generateBVHInWorker( worker, geometry, { ...MESH_BVH_OPTIONS, onProgress } );
+					pendingBVHs.set( geometry, promise );
+
+					try {
+
+						geometry.boundsTree = await promise;
+						onProgress( 1 );
+
+					} finally {
+
+						pendingBVHs.delete( geometry );
+
+					}
 
 				}
 
-			} ) );
+			} ) ] );
 
 		} finally {
 
 			workers.forEach( worker => worker.dispose() );
+			if ( request === this._sceneRequest ) {
+
+				this._setStage( STAGE_COMPILING );
+
+			}
 
 		}
 
-		this.setScene( scene, camera );
+		// skip the scene if a later call replaced it while it built
+		if ( request === this._sceneRequest ) {
+
+			this.setScene( scene, camera );
+
+		}
 
 	}
 
 	/**
-	 * @returns {PathtracingMaterial}
+	 * @returns {ShadingModel}
 	 * @private
 	 */
-	// TODO: consider renaming these functions or removing them
-	getMaterial() {
+	getShadingModel() {
 
-		return this.material;
+		return this._shadingModel;
 
 	}
 
 	/**
-	 * Replaces the material model and recompiles the kernels.
+	 * Replaces the shading model and recompiles the kernels.
 	 *
-	 * @param {PathtracingMaterial} material
+	 * @param {ShadingModel} shadingModel
 	 * @private
 	 */
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
-		this.material = material;
-		this._pathTracer.setMaterial( material );
+		this._shadingModel = shadingModel;
+		shadingModel.updateFunctions();
+
+		// the shading model writes the materials, so rewrite them in its struct
+		const { _bvhData, _renderer, scene } = this;
+		if ( _bvhData ) {
+
+			shadingModel.updateMaterials( scene );
+			shadingModel.updateTextures( _renderer );
+			_bvhData.setShadingModel( shadingModel );
+
+		}
+
+		this._pathTracer.setShadingModel( shadingModel );
 		this.reset();
 
 	}
@@ -1035,7 +1182,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	setRandom( random ) {
 
-		this.random = random;
+		this._random = random;
 		this._pathTracer.setRandom( random );
 		this.reset();
 
@@ -1043,7 +1190,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Replaces the camera the rays are generated from. Cameras with a `getCameraRayFn`, such as
-	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation.
+	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation, and optionally
+	 * `getRayOriginBounds( box, boundsToWorld )`, the bounds of where their rays start in camera space.
 	 *
 	 * @param {Camera} camera
 	 */
@@ -1085,12 +1233,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 					}
 				`,
+				getRayOriginBounds: camera.isPerspectiveCamera || camera.isOrthographicCamera ? ( target, boundsToWorld ) => {
+
+					boundsToWorld.copy( camera.matrixWorld );
+					return expandByNearPlane( camera, target );
+
+				} : null,
 			};
 
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
+		this._updateCameraInVolume();
 		this._pathTracer.rebuild();
 		this.reset();
 
@@ -1102,9 +1257,18 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	updateMaterials() {
 
-		const { _bvhData, _renderer } = this;
-		_bvhData.updateMaterials();
-		_bvhData.textureAtlas.setTextures( _renderer, _bvhData.textures );
+		const { _bvhData, _renderer, _shadingModel, scene } = this;
+		_shadingModel.updateMaterials( scene );
+		_bvhData.updateMaterialIndices();
+
+		// the kernels size the texture info when they're built, so a new texture count needs a rebuild
+		if ( _shadingModel.updateTextures( _renderer ) ) {
+
+			this._pathTracer.rebuild();
+
+		}
+
+		this._updateCameraInVolume();
 		this.reset();
 
 	}
@@ -1118,6 +1282,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this.scene.updateMatrixWorld( true );
 		this._bvhData.updateTransforms();
+		this._updateCameraInVolume();
 		this.reset();
 
 	}
@@ -1134,7 +1299,43 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._updateCameraInVolume();
 		this.reset();
+
+	}
+
+	// Sets whether camera rays may start inside a volume, as in Cycles' "is_inside_volume"
+	_updateCameraInVolume() {
+
+		const { _cameraRayFnHandle, _bvhData, _shadingModel, _pathTracer, scene } = this;
+
+		// cameras without origin bounds always count as inside
+		const hasOriginBounds = Boolean( _cameraRayFnHandle.getRayOriginBounds );
+		if ( hasOriginBounds ) {
+
+			_cameraRayFnHandle.getRayOriginBounds( _originBounds.makeEmpty(), _originToWorld );
+
+		}
+
+		let cameraInVolume = false;
+		scene.traverse( child => {
+
+			if ( cameraInVolume || ! child.isMesh ) {
+
+				return;
+
+			}
+
+			const materials = Array.isArray( child.material ) ? child.material : [ child.material ];
+			if ( materials.some( material => _shadingModel.isVolumeMaterial( material ) ) ) {
+
+				cameraInVolume = ! hasOriginBounds || _bvhData.boxIntersectsMesh( _originBounds, _originToWorld, child );
+
+			}
+
+		} );
+
+		_pathTracer.cameraInVolume = cameraInVolume;
 
 	}
 
@@ -1145,37 +1346,39 @@ export class WebGPUPathTracer extends EventDispatcher {
 	updateEnvironment() {
 
 		const {
-			_pathTracer,
+			_lightsInfo,
+			_backgroundInfo,
 			scene,
 
 			_environmentCache,
 			_backgroundCache,
 		} = this;
 
-		// update the texture if they've changed
+		// update the texture if they've changed. The background info only owns its default map, which the first
+		// scene texture replaces
+		const { envInfo } = _lightsInfo;
 		if ( _environmentCache.setFromScene( scene ) ) {
 
-			_pathTracer.setEnvironment( _environmentCache.texture );
+			envInfo.updateFrom( _environmentCache.texture );
 
 		}
 
 		if ( _backgroundCache.setFromScene( scene ) ) {
 
-			_pathTracer.setBackground( _backgroundCache.texture );
+			_backgroundInfo.dispose();
+			_backgroundInfo.map = _backgroundCache.texture;
 
 		}
 
 		// update the params always since they're cheap
-		_pathTracer.setEnvironmentParams(
-			scene.environmentIntensity,
-			scene.environmentRotation,
-		);
+		_rotationMatrix.makeRotationFromEuler( scene.environmentRotation ).invert();
+		envInfo.rotationNode.value.setFromMatrix4( _rotationMatrix );
+		envInfo.intensityNode.value = scene.environmentIntensity;
 
-		_pathTracer.setBackgroundParams(
-			scene.backgroundIntensity,
-			scene.backgroundRotation,
-			scene.backgroundBlurriness,
-		);
+		_rotationMatrix.makeRotationFromEuler( scene.backgroundRotation ).invert();
+		_backgroundInfo.rotationNode.value.copy( _rotationMatrix );
+		_backgroundInfo.intensity = scene.backgroundIntensity;
+		_backgroundInfo.blur = scene.backgroundBlurriness;
 
 		this.reset();
 
@@ -1186,10 +1389,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	updateLights() {
 
-		const { _pathTracer, scene } = this;
+		const { _pathTracer, _lightsInfo, _renderer, scene } = this;
 
-		const lights = getLights( scene );
-		_pathTracer.setLights( lights );
+		// a new number of ies profiles changes the kernels
+		if ( _lightsInfo.updateFrom( _renderer, getLights( scene ) ) ) {
+
+			_pathTracer.rebuild();
+
+		}
+
 		this.reset();
 
 	}
@@ -1206,7 +1414,17 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( this._size.x !== x || this._size.y !== y ) {
 
 			this._size.set( x, y );
-			this.reset();
+
+			// cameras can depend on the size
+			if ( this._cameraRayFnHandle ) {
+
+				this.updateCamera();
+
+			} else {
+
+				this.reset();
+
+			}
 
 		}
 
@@ -1220,15 +1438,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.reset();
 		this._denoiser?.reset();
 		this._resetTime = - 1;
+		this._renderTime = 0;
+		this._renderedLastCall = false;
 		this._fadeState = 0;
 		this._timer.update();
 
 		// a fresh object rather than a clear, so measurements still in flight detach
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
-		this._frameTimeTotal = 0;
-		this._frameTimeCount = 0;
 
 		if ( this.stableNoise ) {
 
@@ -1236,16 +1454,84 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		// undo the adaptation's last changes, unless the app has since taken over the budget
+		if ( this.adaptiveFrameBudget && this._fullFrameBudget !== null ) {
+
+			this.frameBudget = this._fullFrameBudget;
+
+		}
+
+		this._fullFrameBudget = null;
+
 	}
 
-	// Adapts the frame budget and preview to the tracer's latest gpu time measurement
+	// Sets the stage, reporting when each one starts
+	_setStage( stage ) {
+
+		if ( this._stage === stage ) {
+
+			return;
+
+		}
+
+		this._stage = stage;
+		if ( stage === STAGE_BUILDING ) {
+
+			this.dispatchEvent( { type: 'progress', stage: 'building', progress: 0 } );
+
+		} else if ( stage === STAGE_COMPILING ) {
+
+			this.dispatchEvent( { type: 'progress', stage: 'compiling', progress: null } );
+
+		} else {
+
+			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 } );
+
+		}
+
+	}
+
+	// Measures the sample counts and reports them
+	_measureSamples() {
+
+		const counts = this._lastSampleCounts;
+		this.getSampleCountsAsync().then( samples => {
+
+			// skip if the render was reset or a new scene started building meanwhile
+			if ( counts === this._lastSampleCounts && this._stage === STAGE_RENDERING ) {
+
+				// save the adaptive budget once the first pixels finish, to undo the adaptation on reset
+				const { maxSamples } = this;
+				if ( this.adaptiveFrameBudget && this._fullFrameBudget === null && maxSamples > 0 && samples.max >= maxSamples ) {
+
+					this._fullFrameBudget = this.frameBudget;
+
+				}
+
+				this._dispatchRenderProgress( samples );
+
+			}
+
+		} );
+
+	}
+
+	_dispatchRenderProgress( samples ) {
+
+		const { maxSamples } = this;
+		const progress = maxSamples > 0 ? Math.min( samples.avg / maxSamples, 1 ) : null;
+		this.dispatchEvent( { type: 'progress', stage: 'rendering', progress, samples } );
+
+	}
+
+	// Adapts the frame budget to the tracer's latest gpu time measurement
 	_readTiming() {
 
 		const { timing } = this._pathTracer;
 		const { trackTimestamp } = this._renderer.backend;
-		if ( ( this.adaptiveFrameBudget || this.adaptiveDynamicRes ) && ! trackTimestamp && ! this._warnedTimestamps ) {
+		if ( this.adaptiveFrameBudget && ! trackTimestamp && ! this._warnedTimestamps ) {
 
-			console.warn( 'WebGPUPathTracer: "adaptiveFrameBudget" and "adaptiveDynamicRes" need timestamp queries. Create the renderer with "trackTimestamp: true" on a device that supports them.' );
+			console.warn( 'WebGPUPathTracer: "adaptiveFrameBudget" needs timestamp queries. Create the renderer with "trackTimestamp: true" on a device that supports them.' );
 			this._warnedTimestamps = true;
 
 		}
@@ -1257,14 +1543,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		this._timingCount = timing.count;
-
-		// preview measurements only size the preview
-		if ( timing.lowResMode ) {
-
-			this._lowResPixelTime = timing.frameTime / timing.pixelCount;
-			return;
-
-		}
 
 		// a measurement from before the budget changed doesn't describe the current one
 		const { frameBudget } = timing;
@@ -1297,12 +1575,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// scale the work done to land the average on the target. A budget past the pixel count does no
-		// more work, so it is capped there.
-		const { pixelCount } = timing;
-		const next = Math.min( frameBudget, pixelCount ) * targetFrameTime / average;
+		// scale the budget to land the average on the target
+		const next = frameBudget * targetFrameTime / average;
 		const stepped = MathUtils.clamp( next, frameBudget / BUDGET_MAX_STEP, frameBudget * BUDGET_MAX_STEP );
-		this.frameBudget = MathUtils.clamp( Math.round( stepped ), MIN_FRAME_BUDGET, Math.max( MIN_FRAME_BUDGET, pixelCount ) );
+		this.frameBudget = Math.max( Math.round( stepped ), MIN_FRAME_BUDGET );
 
 	}
 
@@ -1322,13 +1598,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 			dynamicLowRes,
 			synchronizeRenderSize,
 			renderScale,
-			lowResScale,
-			adaptiveDynamicRes,
 			minSamples,
 			maxSamples,
 		} = this;
 
 		timer.update();
+		this._renderWatchdog.markCalled();
 
 		if ( ! this._renderer._initialized ) {
 
@@ -1336,10 +1611,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		if ( ! this.material.initialized ) {
+		if ( ! this._shadingModel.initialized ) {
 
-			this.material.init( renderer );
-			this.material.initialized = true;
+			this._shadingModel.init( renderer );
+			this._shadingModel.initialized = true;
 
 		}
 
@@ -1372,27 +1647,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const lowResMode = this._resetTime < renderDelay || ( firstFrame && dynamicLowRes && minSamples !== 0 );
 		if ( lowResMode ) {
 
-			let scale = lowResScale;
-			if ( adaptiveDynamicRes && this._lowResPixelTime > 0 ) {
-
-				// the pixels that fit in "targetFrameTime"
-				const pixels = this.targetFrameTime / this._lowResPixelTime;
-				const fitScale = Math.min( Math.max( Math.sqrt( pixels / ( width * height ) ), lowResScale ), 1 );
-
-				// only resize as a preview starts so it isn't restarted
-				if ( firstFrame && Math.abs( fitScale - this._lowResScale ) > LOW_RES_SCALE_CHANGE ) {
-
-					this._lowResScale = fitScale;
-
-				}
-
-				scale = this._lowResScale > 0 ? this._lowResScale : lowResScale;
-
-			}
-
-			// at most the frame budget's pixels, checked every frame since the budget adapts separately.
-			// The wavefront traces that many paths, and pixels past them are never reached in a preview
-			scale = Math.min( scale, Math.sqrt( this.frameBudget / ( width * height ) ) );
+			// the most pixels a preview frame can render within the frame budget, checked every frame since the budget
+			// adapts. Pixels past it are never reached by the wavefront in a preview
+			const scale = Math.min( Math.sqrt( pathTracer.getPreviewPixelBudget() / ( width * height ) ), 1 );
 			width = Math.max( 1, Math.floor( scale * width ) );
 			height = Math.max( 1, Math.floor( scale * height ) );
 
@@ -1401,17 +1658,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// set the size if necessary
 		pathTracer.getSize( _resolution );
 
-		const resized = _resolution.x !== width || _resolution.y !== height;
-		if ( resized ) {
+		// copy the low res content when transitioning to the full resolution view so we can fade from
+		// it, including when the preview was already full size and nothing is resized
+		if ( ! lowResMode && pathTracer.lowResMode && dynamicLowRes ) {
 
-			if ( ! lowResMode && dynamicLowRes ) {
+			lowResTarget.setSize( _resolution.x, _resolution.y );
+			renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget );
 
-				// copy the low reset content if we're transitioning to the full
-				// resolution view so we can fade to it
-				lowResTarget.setSize( _resolution.x, _resolution.y );
-				renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget );
+		}
 
-			}
+		if ( _resolution.x !== width || _resolution.y !== height ) {
 
 			pathTracer.setSize( width, height );
 
@@ -1419,23 +1675,35 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// update the samples, stopping once every pixel has reached "maxSamples"
 		const samplesComplete = maxSamples > 0 && this._lastSampleCounts.min >= maxSamples;
-		if ( ! this.pause && ! samplesComplete && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
+		let rendered = false;
+		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.asyncCompile = this.asyncCompile;
 			pathTracer.update();
 			this._readTiming();
+			this._setStage( pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING );
+			rendered = this._stage === STAGE_RENDERING;
 
-			// nothing renders while the kernels compile, so hold the reset timer for the low res preview
-			// and leave the last frame on screen
-			// TODO: decide what to display while the kernels compile - the last frame goes stale when the
-			// camera moves, and a rasterized preview compiles its own materials
-			if ( pathTracer.compiling ) {
+		}
 
-				this._resetTime -= delta;
-				return;
+		// count the time since a call that rendered samples
+		if ( this._renderedLastCall ) {
 
-			}
+			this._renderTime += delta;
+
+		}
+
+		this._renderedLastCall = rendered;
+
+		// nothing renders while the next scene's BVHs build or the kernels compile, so restart the preview timer and
+		// keep the last frame
+		// TODO: decide what to display meanwhile - the last frame goes stale when the camera moves, and a
+		// rasterized preview compiles its own materials
+		if ( this._stage < STAGE_RENDERING ) {
+
+			this._resetTime = - 1;
+			return;
 
 		}
 
@@ -1447,24 +1715,25 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// counts every frame. A count of the camera rays dispatched would answer it in one value
 		const awaitingDenoise = Boolean( denoiser ) && ! denoiser.complete && ! denoiser.running && maxSamples > 0;
 
-		// Gate on the least converged pixel. Measuring is expensive so it stops once faded in, and
+		// Gate on the average pixel. Measuring is expensive so it stops once faded in, and
 		// the check reads the last measurement rather than waiting on this one.
 		if ( ! lowResMode ) {
 
-			if ( this._fadeState < 1 && minSamples > 0 ) {
+			// the counts can't change once every pixel has finished, so measuring stops
+			if ( ! samplesComplete && this._fadeState < 1 && minSamples > 0 ) {
 
-				this.getSampleCountsAsync();
+				this._measureSamples();
 
-			} else if ( maxSamples > 0 && this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
+			} else if ( ! samplesComplete && this._resetTime - this._lastCompleteCheck >= COMPLETE_CHECK_INTERVAL ) {
 
-				// the readback stalls the gpu pipeline, so a capped render only measures a few times
-				// a second. The "complete" event and the denoiser both key off it
+				// the readback stalls the gpu pipeline, so the render only measures a few times a second.
+				// The "progress" and "complete" events and the denoiser key off it
 				this._lastCompleteCheck = this._resetTime;
-				this.getSampleCountsAsync();
+				this._measureSamples();
 
 			}
 
-			if ( this._lastSampleCounts.min >= minSamples ) {
+			if ( this._lastSampleCounts.avg >= minSamples ) {
 
 				this._fadeState += delta / this.fadeDuration;
 				this._fadeState = Math.min( 1.0, this._fadeState ) || 1.0;
@@ -1492,16 +1761,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// fires once the render, and the denoiser if one is attached, has finished
-		const complete = this.complete;
-		if ( complete && ! this._wasComplete ) {
-
-			this.dispatchEvent( { type: 'complete' } );
-
-		}
-
-		this._wasComplete = complete;
-
 		// the upscale and the draw only serve the display
 		if ( this.renderToCanvas ) {
 
@@ -1514,9 +1773,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			}
 
+			// the preview stays under the render until it fades in, and with no "minSamples" until every pixel has a sample
+			const previewNeeded = this._fadeState < 1 || ( minSamples === 0 && this._lastSampleCounts.min < 1 );
 			renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
 			blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
+			blitQuad.material.showPreview = dynamicLowRes && ! lowResMode && previewNeeded;
 			blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
+			blitQuad.material.nearest = ! this.interpolateDisplay;
 			blitQuad.material.fromTexture = lowResTarget;
 			blitQuad.material.texture = texture;
 			blitQuad.render( renderer );
@@ -1526,6 +1789,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// reset the renderer
 		renderer.autoClear = originalAutoClear;
 		renderer.setRenderTarget( originalTarget );
+
+		// fires once the render, and the denoiser if one is attached, has finished and the result is drawn
+		const complete = this.complete;
+		if ( complete && ! this._wasComplete ) {
+
+			this.dispatchEvent( { type: 'complete' } );
+
+		}
+
+		this._wasComplete = complete;
 
 	}
 
@@ -1560,8 +1833,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		camera.updateMatrixWorld();
 
-		// (re)build the quad if it hasn't been built or the bvh data has changed
-		if ( this._debugBoundsQuad === undefined || this._debugBoundsData !== this._bvhData ) {
+		// (re)build the quad if it hasn't been built or the bvh data or shading model has changed
+		if ( this._debugBoundsQuad === undefined || this._debugBoundsData !== this._bvhData || this._debugBoundsShadingModel !== this._shadingModel ) {
 
 			this._buildDebugBoundsQuad();
 
@@ -1593,8 +1866,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	_buildDebugBoundsQuad() {
 
-		const bvhData = this._bvhData;
-		const debugBounds = getDebugBoundsFunction( bvhData );
+		const { _bvhData: bvhData, _shadingModel: shadingModel } = this;
+		const debugBounds = getDebugBoundsFunction( bvhData, shadingModel );
 
 		const material = new MeshBasicNodeMaterial();
 		material.colorNode = debugBounds( varying( uv() ) );
@@ -1612,6 +1885,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._debugBoundsUniforms = debugBounds.uniforms;
 		this._debugBoundsData = bvhData;
+		this._debugBoundsShadingModel = shadingModel;
 
 	}
 
@@ -1721,7 +1995,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser?.dispose();
 		this._upscaler?.dispose();
 		this._bvhData.dispose();
-		this._bvhData.textureAtlas.dispose();
+		this._lightsInfo.dispose();
+		this._shadingModel.dispose();
 		this._environmentCache.dispose();
 		this._backgroundCache.dispose();
 		this._lowResTarget.dispose();
@@ -1743,16 +2018,18 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._timer.dispose();
+		this._renderWatchdog.dispose();
+
 	}
 
 	/**
-	 * Milliseconds elapsed since the last reset.
+	 * Milliseconds spent rendering samples since the last reset.
 	 * @returns {number}
 	 */
-	// TODO: this is not completely accurate if the user has not called "renderSample" continuously
 	getRenderTime() {
 
-		return this._resetTime;
+		return this._renderTime;
 
 	}
 

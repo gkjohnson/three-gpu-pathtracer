@@ -9,8 +9,11 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GradientEquirectTexture } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { LoaderElement } from './src/LoaderElement.js';
+import { getScaledSettings } from './src/getScaledSettings.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/renderman-teapot/renderman-teapot.glb';
 const CREDITS = 'Model courtesy of RenderMan';
@@ -25,12 +28,35 @@ const scene = new Scene();
 const transformScene = new Scene();
 const camera = new PerspectiveCamera( 50, 1, 0.01, 100 );
 
-const renderer = new WebGPURenderer( { antialias: true } );
+const renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 renderer.toneMapping = ACESFilmicToneMapping;
 document.body.appendChild( renderer.domElement );
 
+const params = {
+	add,
+	remove,
+	color: '#44aaff',
+	roughness: 0.25,
+
+	// path tracer settings
+	enable: true,
+	maxSamples: 16,
+	renderScale: getScaledSettings().renderScale,
+};
+
 const pathTracer = new WebGPUPathTracer( renderer );
-pathTracer.maxSamples = 10;
+pathTracer.setBVHWorker( GenerateMeshBVHWorker );
+pathTracer.renderScale = params.renderScale;
+pathTracer.maxSamples = params.maxSamples;
+
+// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+const denoiser = new OIDNDenoiser( {
+	initUNetFromURL,
+	auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+	maxTileSize: 512,
+	dynamicTile: false,
+} );
+pathTracer.setDenoiser( denoiser );
 
 const environment = new GradientEquirectTexture();
 environment.topColor.set( 0x88aacc );
@@ -94,18 +120,31 @@ window.addEventListener( 'keydown', event => {
 const loader = new LoaderElement();
 loader.attach( document.body );
 
+pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+	loader.setStage( stage, progress, samples );
+
+} );
+
 const raycaster = new Raycaster();
 const pointer = new Vector2();
 const pointerStart = new Vector2();
 
-const params = {
-	add,
-	remove,
-	color: '#44aaff',
-	roughness: 0.25,
-};
-
 const gui = new GUI();
+const ptFolder = gui.addFolder( 'Path Tracer' );
+ptFolder.add( params, 'enable' );
+ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
+
+	pathTracer.maxSamples = v;
+
+} );
+ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+
+	pathTracer.renderScale = v;
+
+} );
+ptFolder.close();
+
 const addController = gui.add( params, 'add' ).name( 'Add' );
 const removeController = gui.add( params, 'remove' ).name( 'Delete' );
 const colorController = gui.addColor( params, 'color' ).onChange( updateMaterial );
@@ -286,9 +325,15 @@ function animate() {
 
 	}
 
-	pathTracer.renderSample();
+	if ( params.enable ) {
 
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
+		pathTracer.renderSample();
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 	if ( selected ) {
 
@@ -382,7 +427,7 @@ async function init() {
 	orbit.target.copy( center );
 	orbit.update();
 
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );

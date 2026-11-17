@@ -9,6 +9,7 @@ export class FogVolumeMaterial extends MeshStandardMaterial {
 		this.isFogVolumeMaterial = true;
 
 		this.density = 0.015;
+		this.scatterAnisotropy = 0.0;
 		this.emissive = new Color();
 		this.emissiveIntensity = 0.0;
 		this.opacity = 0.15;

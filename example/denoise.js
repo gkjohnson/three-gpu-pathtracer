@@ -17,6 +17,7 @@ import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { initUNetFromURL } from 'oidn-webgpu';
 import { Upscaler } from '@pmndrs/upscaler';
 import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 
 // the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
 const WEIGHTS_AUX_URL = new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString();
@@ -48,14 +49,20 @@ async function init() {
 	loader = new LoaderElement();
 	loader.attach( document.body );
 
-	renderer = new WebGPURenderer( { antialias: true } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	document.body.appendChild( renderer.domElement );
 
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.maxSamples = params.maxSamples;
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// Denoising and upscaling are opt in - construct the instance, set anything it exposes, and
 	// hand it to the path tracer. It runs both as part of "renderSample".
@@ -110,7 +117,7 @@ async function init() {
 	backdrop.position.set( center.x, box.min.y - 1e-3, box.min.z );
 	scene.add( backdrop );
 
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
@@ -131,7 +138,7 @@ async function init() {
 		pathTracer.renderScale = v;
 
 	} );
-	ptFolder.add( params, 'maxSamples', 1, 50, 1 ).onChange( v => {
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
 
@@ -199,7 +206,5 @@ function animate() {
 	}
 
 	pathTracer.renderSample();
-
-	pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 
 }

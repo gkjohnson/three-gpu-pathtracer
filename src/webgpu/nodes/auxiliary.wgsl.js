@@ -1,5 +1,5 @@
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { scatterRecordStruct, surfaceRecordStruct } from './structs.wgsl.js';
+import { scatterRecordStruct } from './structs.wgsl.js';
 
 // The denoiser's auxiliary images, the first hit albedo and normal, accumulate in an "r32uint" array
 // texture, the one kind of storage texture core WebGPU can both read and write. Each layer packs two
@@ -11,10 +11,10 @@ const AUX_MIRROR_MAX_ROUGHNESS = 0.02;
 const AUX_MIRROR_MIN_METALNESS = 0.98;
 
 // whether a scatter shows its surface in the auxiliary images, rather than looking past it through a
-// transmission or a mirror
+// transmission or a mirror. Takes the surface by name since the shading model defines its struct
 export const isAuxSurfaceFn = wgslTagFn/* wgsl */`
 
-	fn isAuxSurface( surface: ${ surfaceRecordStruct }, scatterRec: ${ scatterRecordStruct } ) -> bool {
+	fn isAuxSurface( surface: SurfaceRecord, scatterRec: ${ scatterRecordStruct } ) -> bool {
 
 		let isMirror = surface.roughness <= ${ AUX_MIRROR_MAX_ROUGHNESS } && surface.metalness >= ${ AUX_MIRROR_MIN_METALNESS };
 		return ! scatterRec.isTransmissive && ! isMirror;

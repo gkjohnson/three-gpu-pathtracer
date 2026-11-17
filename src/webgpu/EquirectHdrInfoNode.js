@@ -1,6 +1,8 @@
-import { Matrix3, StorageBufferAttribute } from 'three/webgpu';
-import { texture, sampler, uniform, storage, PI } from 'three/tsl';
+import { Matrix3, RedFormat, FloatType } from 'three/webgpu';
+import { texture, sampler, uniform, PI } from 'three/tsl';
 import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
+import { LinearDataTexture } from './LinearDataTexture.js';
+import { readCdfFn, searchCdfFn } from './nodes/cdf.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { environmentSampleStruct } from './nodes/structs.wgsl.js';
 import { equirectDirectionToUvFn, equirectUvToDirectionFn } from './nodes/sampling.wgsl.js';
@@ -14,7 +16,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		// environment map with a sampler, and the importance sampling CDFs for the default 1x1 map
 		this.mapNode = texture( this.map );
 		this.mapSampler = sampler( this.mapNode );
-		this.cdfNode = storage( new StorageBufferAttribute( new Float32Array( [ 0, 1, 0, 1 ] ), 1 ), 'float' ).toReadOnly();
+		this.cdfTextureNode = texture( new LinearDataTexture( new Float32Array( [ 0, 1, 0, 1 ] ), 1, RedFormat, FloatType ) ).setName( 'envCdf' );
 
 		// scalar parameters that assemble into the EnvironmentInfo struct in the shader
 		this.rotationNode = uniform( new Matrix3() );
@@ -39,7 +41,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 		const {
 			mapNode,
-			cdfNode,
+			cdfTextureNode,
 			totalSumNode,
 		} = this;
 
@@ -59,14 +61,15 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 		}
 
-		cdfNode.value = new StorageBufferAttribute( cdf, 1 );
+		cdfTextureNode.value.dispose();
+		cdfTextureNode.value = new LinearDataTexture( cdf, 1, RedFormat, FloatType );
 
 	}
 
 	dispose() {
 
 		super.dispose();
-		this.cdfNode.value.dispose();
+		this.cdfTextureNode.value.dispose();
 
 	}
 
@@ -75,43 +78,11 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		const {
 			mapNode,
 			mapSampler,
-			cdfNode,
+			cdfTextureNode,
 			totalSumNode,
 			rotationNode,
 			intensityNode,
 		} = this;
-
-		// Binary searches the "count" pixel ranges from "offset" for the one holding "r", writing where
-		// "r" falls within it to "fraction". See:
-		// https://pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#Piecewise-Constant2DDistributions
-		// https://github.com/blender/cycles/blob/main/src/kernel/light/background.h
-		const searchCdfFn = wgslTagFn/* wgsl */`
-			fn searchEnvCdf( r: f32, offset: u32, count: u32, fraction: ptr<function, f32> ) -> u32 {
-
-				var lower = 0u;
-				var upper = count - 1u;
-				while ( lower < upper ) {
-
-					let mid = ( lower + upper ) >> 1u;
-					if ( ${ cdfNode }[ offset + mid + 1u ] <= r ) {
-
-						lower = mid + 1u;
-
-					} else {
-
-						upper = mid;
-
-					}
-
-				}
-
-				let start = ${ cdfNode }[ offset + lower ];
-				let end = ${ cdfNode }[ offset + lower + 1u ];
-				*fraction = select( 0.5, saturate( ( r - start ) / ( end - start ) ), end > start );
-				return lower;
-
-			}
-		`;
 
 		// the solid angle pdf of a direction at "v" in the given pixel, which is sampled uniformly over its area
 		const getTexelPdfFn = wgslTagFn/* wgsl */`
@@ -119,8 +90,8 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 
 				let resolution = textureDimensions( ${ mapNode } );
 				let rowOffset = resolution.y + 1u + texel.y * ( resolution.x + 1u );
-				let rowPdf = ${ cdfNode }[ texel.y + 1u ] - ${ cdfNode }[ texel.y ];
-				let pixelPdf = ${ cdfNode }[ rowOffset + texel.x + 1u ] - ${ cdfNode }[ rowOffset + texel.x ];
+				let rowPdf = ${ readCdfFn }( ${ cdfTextureNode }, texel.y + 1u ) - ${ readCdfFn }( ${ cdfTextureNode }, texel.y );
+				let pixelPdf = ${ readCdfFn }( ${ cdfTextureNode }, rowOffset + texel.x + 1u ) - ${ readCdfFn }( ${ cdfTextureNode }, rowOffset + texel.x );
 
 				// the equirect projection stretches each pixel by 1 / sin( theta ) over the sphere
 				let sinTheta = sin( ${ PI } * v );
@@ -151,8 +122,8 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 				let resolution = textureDimensions( ${ mapNode } );
 				var rowFraction = 0.0;
 				var columnFraction = 0.0;
-				let row = ${ searchCdfFn }( r.x, 0u, resolution.y, &rowFraction );
-				let column = ${ searchCdfFn }( r.y, resolution.y + 1u + row * ( resolution.x + 1u ), resolution.x, &columnFraction );
+				let row = ${ searchCdfFn }( ${ cdfTextureNode }, r.x, 0u, resolution.y, &rowFraction );
+				let column = ${ searchCdfFn }( ${ cdfTextureNode }, r.y, resolution.y + 1u + row * ( resolution.x + 1u ), resolution.x, &columnFraction );
 				let texel = vec2u( column, row );
 				let uv = ( vec2f( texel ) + vec2f( columnFraction, rowFraction ) ) / vec2f( resolution );
 

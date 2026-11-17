@@ -1,6 +1,6 @@
 import { ColorManagement, FloatType, HalfFloatType, RGBAFormat } from 'three';
 import { RedIntegerFormat, StorageArrayTexture, StorageTexture, UnsignedIntType } from 'three/webgpu';
-import { AUX_LAYERS } from '../nodes/aux.wgsl.js';
+import { AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
 
 // The storage textures the backends accumulate into. The kernels are created with these too, so
 // their pipelines are compiled against the formats they are dispatched with.
@@ -30,7 +30,7 @@ export function createSampleCountTarget( name = '' ) {
 
 }
 
-// the denoiser's first hit albedo and normal, packed as halves into the layers. See "aux.wgsl.js"
+// the denoiser's first hit albedo and normal, packed as halves into the layers. See "auxiliary.wgsl.js"
 export function createAuxTarget( name = '' ) {
 
 	const target = new StorageArrayTexture( 1, 1, AUX_LAYERS );

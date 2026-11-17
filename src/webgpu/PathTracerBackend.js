@@ -1,7 +1,8 @@
 import { TimestampQuery } from 'three/webgpu';
+import { uniform } from 'three/tsl';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
-import { AUX_LAYERS } from './nodes/aux.wgsl.js';
+import { AUX_LAYERS } from './nodes/auxiliary.wgsl.js';
 
 // the async compile state of a compute node. A node with no state has not been requested.
 const COMPILE_STARTED = 0;
@@ -20,7 +21,15 @@ export class PathTracerBackend {
 
 		this.maxTransparentBounces = 15;
 		this.maxSubsurfaceBounces = 256;
+		this.maxFogBounces = 0;
 		this.lowResMode = false;
+
+		// whether camera rays may start inside a volume
+		this.cameraInVolume = true;
+
+		// the light clamping values, shared with the kernels through their context
+		this.clampDirect = uniform( 0 );
+		this.clampIndirect = uniform( 10 );
 
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
@@ -31,8 +40,8 @@ export class PathTracerBackend {
 		// whether the render task is waiting on its kernels to compile, during which nothing renders
 		this.compiling = false;
 
-		// the gpu time of the last timed update and what it ran with. "count" increments per measurement
-		this.timing = { count: 0, frameTime: 0, frameBudget: 0, lowResMode: false, pixelCount: 0 };
+		// the gpu time of the last timed update and the budget it ran with. "count" increments per measurement
+		this.timing = { count: 0, frameTime: 0, frameBudget: 0 };
 
 		this._renderTask = null;
 		this._compileState = new WeakMap();
@@ -93,7 +102,7 @@ export class PathTracerBackend {
 
 	}
 
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
 	}
 
@@ -101,28 +110,19 @@ export class PathTracerBackend {
 
 	}
 
-	setClamping( _direct, _indirect ) {
+	setClamping( direct, indirect ) {
+
+		this.clampDirect.value = direct;
+		this.clampIndirect.value = indirect;
+		this.reset();
 
 	}
 
-	setEnvironment(
-		envMap,
-		envMapIntensity,
-		envMapRotation,
-	) {
+	setLightsInfo( lightsInfo ) {
 
 	}
 
-	setLights( lights ) {
-
-	}
-
-	setBackground(
-		background,
-		backgroundIntensity,
-		backgroundRotation,
-		backgroundBlurriness,
-	) {
+	setBackgroundInfo( backgroundInfo ) {
 
 	}
 
@@ -145,6 +145,10 @@ export class PathTracerBackend {
 		const computeNodes = kernels.map( kernel => kernel.kernel );
 		const requested = computeNodes.filter( computeNode => ! _compileState.has( computeNode ) );
 		if ( requested.length > 0 ) {
+
+			// let a frame present before the compile blocks the main thread
+			this.compiling = true;
+			yield;
 
 			requested.forEach( computeNode => _compileState.set( computeNode, COMPILE_STARTED ) );
 			renderer.compileComputeAsync( requested )
@@ -219,6 +223,13 @@ export class PathTracerBackend {
 
 	}
 
+	// the most pixels a preview frame can render within the frame budget
+	getPreviewPixelBudget() {
+
+		return this.frameBudget;
+
+	}
+
 	update() {
 
 		const { renderer } = this;
@@ -263,9 +274,8 @@ export class PathTracerBackend {
 	async _measureFrameTime( uids ) {
 
 		// what the update ran with, read before the readback since it may change meanwhile
-		const { renderer, timing, frameBudget, lowResMode } = this;
+		const { renderer, timing, frameBudget } = this;
 		const { backend } = renderer;
-		const { width, height } = this.outputTarget;
 
 		this._timingFrame = true;
 		await renderer.resolveTimestampsAsync( TimestampQuery.COMPUTE );
@@ -280,8 +290,6 @@ export class PathTracerBackend {
 
 		timing.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
 		timing.frameBudget = frameBudget;
-		timing.lowResMode = lowResMode;
-		timing.pixelCount = width * height;
 		timing.count ++;
 
 	}

@@ -1,12 +1,12 @@
 import { float } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { PathtracingMaterial } from './PathtracingMaterial.js';
+import { ShadingModel } from './ShadingModel.js';
 import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc } from '../nodes/material.wgsl.js';
 import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
 import { sheenColorFunc, sheenAlbedoScalingFunc } from '../nodes/sheen.wgsl.js';
 import { getLobeWeightsFunc } from '../nodes/sampling.wgsl.js';
 import { ggxDirectionFunc, ggxReflectionAdjustedPDFFunc, ggxRefractionAdjustedPDFFunc } from '../nodes/ggx.wgsl.js';
-import { bxdfContextStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
+import { bxdfContextStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
 import { TurquinTexture } from '../TurquinTexture.js';
 import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
@@ -14,7 +14,7 @@ import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresn
 const CLEARCOAT_IOR = float( 1.5 );
 const SINGULAR_EVENT_SCALE = float( 1e6 );
 
-export class GltfCompliantMaterial extends PathtracingMaterial {
+export class GLTFShadingModel extends ShadingModel {
 
 	constructor( options = {} ) {
 
@@ -48,9 +48,20 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 	}
 
-	getBsdfNode() {
+	dispose() {
 
-		this._bsdfEvalFunc = wgslTagFn/* wgsl */`
+		super.dispose();
+		this.turquinTexture.dispose();
+
+	}
+
+	updateFunctions() {
+
+		super.updateFunctions();
+
+		const { structs, fns } = this;
+		const surfaceRecordStruct = structs.surfaceRecord;
+		const bsdfEvalFunc = wgslTagFn/* wgsl */`
 
 			// The material is organized as one scoped block per lobe in cascade order - clearcoat,
 			// sheen, transmission, specular, diffuse - each accumulating into a shared result and
@@ -230,11 +241,15 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 					let metallic = metallicSpecular * metallicReflectance;
 					let dielectric = dielectricSpecular * dielectricReflectance;
 
-					// the energy the specular interface takes from the layers below
-					let fresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior ) * dielectricBoost;
+					// The energy the specular interface takes from the layers below, at the lobe's specular color
+					// and intensity. The table holds the albedo at the ior's f0, and the Schlick albedo is linear
+					// in f0, so the tinted albedo slides from it toward the conductor albedo at f0 = 1
+					let iorEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior );
+					let tintedEnergySS = iorEnergySS + ( dielectricF0 - surf.f0 ) * ( energySS - iorEnergySS ) / ( 1.0 - surf.f0 );
+					let fresnelEnergySS = surf.specularIntensity * tintedEnergySS * dielectricBoost;
 
 					result += attenuation * mix( ( 1.0 - surf.transmission ) * dielectric, metallic, surf.metalness );
-					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, 1.0 - filmFresnelMax, surf.iridescence );
+					attenuation *= ( 1.0 - surf.metalness ) * mix( 1.0 - fresnelEnergySS, vec3f( 1.0 - filmFresnelMax ), surf.iridescence );
 
 				}
 
@@ -257,11 +272,9 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		`;
 
-		const bsdfEvalPdfFn = this.getBsdfEvalPdfNode();
+		fns.bsdfSample = wgslTagFn/* wgsl */`
 
-		return wgslTagFn/* wgsl */`
-
-			fn bsdfSample( worldWo: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
+			fn bsdfSample( hit: ${ hitRecordStruct }, surf: ${ surfaceRecordStruct }, worldWo: vec3f ) -> ${ scatterRecordStruct } {
 
 				var result: ${ scatterRecordStruct };
 				result.color = vec3f( 0.0 );
@@ -387,6 +400,13 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 						wi = refract( - wo, wh, surf.eta );
 
+						// "refract" returns zero on total internal reflection, so reflect instead and let "isDead" drop it
+						if ( dot( wi, wi ) == 0.0 ) {
+
+							wi = - normalize( reflect( wo, wh ) );
+
+						}
+
 					}
 
 					// the facet choice must agree with the resulting hemisphere - reflection above,
@@ -430,7 +450,7 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 					// evaluate the shared eval / pdf function for the sampled direction so the sample
 					// and light-sampling paths can never disagree on color or pdf
-					result = ${ bsdfEvalPdfFn }( worldWo, worldWi, surf );
+					result = ${ fns.bsdfEvalPdf }( hit, surf, worldWo, worldWi );
 
 				}
 
@@ -445,31 +465,12 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 
 		`;
 
-	}
+		// Evaluates the BSDF and its sampling pdf for an arbitrary light direction ( both world space ).
+		// Used by next event estimation to weight a chosen light/environment direction. Shares the same
+		// bsdfEval and lobe-mixture pdf as bsdfSample so MIS weights stay consistent.
+		fns.bsdfEvalPdf = wgslTagFn/* wgsl */`
 
-	// Evaluates the BSDF and its sampling pdf for an arbitrary light direction ( both world space ).
-	// Used by next event estimation to weight a chosen light/environment direction. Shares the same
-	// bsdfEval and lobe-mixture pdf as bsdfSample so MIS weights stay consistent.
-	getBsdfEvalPdfNode() {
-
-		// bsdfSample embeds this node so both share a single instance
-		if ( this._bsdfEvalPdfNode ) {
-
-			return this._bsdfEvalPdfNode;
-
-		}
-
-		if ( ! this._bsdfEvalFunc ) {
-
-			this.getBsdfNode();
-
-		}
-
-		const bsdfEvalFunc = this._bsdfEvalFunc;
-
-		this._bsdfEvalPdfNode = wgslTagFn/* wgsl */`
-
-			fn bsdfEvalPdf( worldWo: vec3f, worldWi: vec3f, surf: ${ surfaceRecordStruct } ) -> ${ scatterRecordStruct } {
+			fn bsdfEvalPdf( hit: ${ hitRecordStruct }, surf: ${ surfaceRecordStruct }, worldWo: vec3f, worldWi: vec3f ) -> ${ scatterRecordStruct } {
 
 				var result: ${ scatterRecordStruct };
 				result.color = vec3f( 0.0 );
@@ -603,8 +604,6 @@ export class GltfCompliantMaterial extends PathtracingMaterial {
 			}
 
 		`;
-
-		return this._bsdfEvalPdfNode;
 
 	}
 

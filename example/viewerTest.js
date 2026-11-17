@@ -18,6 +18,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { WebGPUPathTracer, OIDNDenoiser, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { initUNetFromURL } from 'oidn-webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './src/LoaderElement.js';
 
 const RANDOM_STRATEGIES = {
@@ -41,13 +42,11 @@ const params = {
 	showAtlas: - 1,
 
 	enable: true,
-	maxBounces: 15,
-	maxSamples: parseInt( urlParams.get( 'samples' ) ) || 25,
+	maxSamples: parseInt( urlParams.get( 'samples' ) ) || 16,
+	renderScale: scale,
 	pause: false,
-	multipleImportanceSampling: true,
 	acesToneMapping: true,
 	frameBudget: frameBudget,
-	scale: scale,
 	randomStrategy: 'Sobol',
 	denoise: urlParams.get( 'denoise' ) !== '0',
 
@@ -68,7 +67,6 @@ let pathTracer, renderer, camera, scene, controls, denoiser;
 let loadingModel = false;
 let delaySamples = 0;
 let modelDatabase;
-let detailedSampleCount = null;
 
 init();
 
@@ -136,7 +134,7 @@ async function init() {
 async function createRenderer() {
 
 	// renderer - WebGPU version
-	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: false } );
+	renderer = new WebGPURenderer( { antialias: true, trackTimestamp: true } );
 	await renderer.init();
 	renderer.toneMapping = ACESFilmicToneMapping;
 	renderer.setClearAlpha( 0 );
@@ -144,10 +142,16 @@ async function createRenderer() {
 
 	// path tracer - WebGPU version
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.useMegakernel( params.useMegakernel );
 	pathTracer.frameBudget = params.frameBudget;
 	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.setRandom( RANDOM_STRATEGIES[ params.randomStrategy ] );
+	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
+
+		loader.setStage( stage, progress, samples );
+
+	} );
 
 	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
 	denoiser = new OIDNDenoiser( {
@@ -158,15 +162,12 @@ async function createRenderer() {
 	} );
 	pathTracer.setDenoiser( params.denoise ? denoiser : null );
 
-	// forwarded for the screenshot tooling, with the final counts shown
+	// forwarded for the screenshot tooling
 	pathTracer.addEventListener( 'complete', () => {
 
-		pathTracer.getSampleCountsAsync().then( counts => loader.setSamples( counts ) );
 		window.dispatchEvent( new Event( 'render-complete' ) );
 
 	} );
-
-	detailedSampleCount = null;
 
 }
 
@@ -185,16 +186,6 @@ function animate() {
 	if ( pathTracer.complete ) {
 
 		return;
-
-	}
-
-	if ( pathTracer.getSampleCountsAsync ) {
-
-		pathTracer.getSampleCountsAsync().then( counts => {
-
-			detailedSampleCount = { ...counts };
-
-		} );
 
 	}
 
@@ -230,8 +221,6 @@ function animate() {
 
 	}
 
-	loader.setSamples( detailedSampleCount );
-
 }
 
 function onModelChange() {
@@ -256,9 +245,7 @@ function onParamsChange() {
 
 	}
 
-	pathTracer.multipleImportanceSampling = params.multipleImportanceSampling;
-	pathTracer.maxBounces = params.maxBounces;
-	pathTracer.renderScale = params.scale;
+	pathTracer.renderScale = params.renderScale;
 
 	const model = modelDatabase[ params.model ];
 	scene.background = model && model.renderSkybox ? scene.environment : null;
@@ -320,24 +307,16 @@ function buildGui() {
 	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
 
 		pathTracer.useMegakernel( params.useMegakernel );
-		detailedSampleCount = null;
 
 	} );
 	pathTracingFolder.add( params, 'showAtlas', atlasOptions );
-	pathTracingFolder.add( params, 'scale', 0.1, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'multipleImportanceSampling' ).onChange( onParamsChange );
+	pathTracingFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
 	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
 
 		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
-	pathTracingFolder.add( params, 'frameBudget', 50000, 2000000, 50000 ).onChange( v => {
-
-		pathTracer.frameBudget = v;
-
-	} );
-	pathTracingFolder.add( params, 'maxBounces', 1, 50, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'maxSamples', 1, 500, 1 ).onChange( v => {
+	pathTracingFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
 
@@ -521,7 +500,7 @@ async function updateModel() {
 	controls.target.set( 0, 0, 0 );
 	controls.update();
 
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setCredits( modelInfo.credit || '' );
 	containerEl.style.display = 'flex';

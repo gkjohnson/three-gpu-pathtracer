@@ -1,10 +1,14 @@
 import { ArrayCamera, Matrix4, Vector4, WebGPUCoordinateSystem } from 'three';
 import { uniformArray, int } from 'three/tsl';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { expandByNearPlane } from './nearPlaneBounds.js';
+
+const _worldToArrayCamera = /* @__PURE__ */ new Matrix4();
+const _cameraToArrayCamera = /* @__PURE__ */ new Matrix4();
 
 ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 
-	const result = { fn: null, update: null };
+	const result = { fn: null, update: null, getRayOriginBounds: null };
 
 	const cameraCount = int( 0 );
 	const invViewProjectionMatrices = uniformArray( [], 'mat4' );
@@ -66,6 +70,22 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 		}
 
 		return needsRebuild;
+
+	};
+
+	// the near planes of every camera, in the array camera's space
+	result.getRayOriginBounds = ( target, boundsToWorld ) => {
+
+		boundsToWorld.copy( this.matrixWorld );
+		_worldToArrayCamera.copy( this.matrixWorld ).invert();
+		for ( const camera of this.cameras ) {
+
+			_cameraToArrayCamera.multiplyMatrices( _worldToArrayCamera, camera.matrixWorld );
+			expandByNearPlane( camera, target, _cameraToArrayCamera );
+
+		}
+
+		return target;
 
 	};
 

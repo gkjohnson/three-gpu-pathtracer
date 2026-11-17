@@ -1,21 +1,22 @@
-import { Matrix4, StorageBufferAttribute, Vector2 } from 'three/webgpu';
+import { StorageBufferAttribute, Vector2 } from 'three/webgpu';
 import { PopulatePixelIndicesKernel } from './compute/wavefront/PopulatePixelIndicesKernel.js';
 import { LogicKernel } from './compute/wavefront/LogicKernel.js';
 import { MaterialKernel } from './compute/wavefront/MaterialKernel.js';
 import { TraceRayKernel } from './compute/wavefront/TraceRayKernel.js';
 import { TraceShadowRayKernel } from './compute/wavefront/TraceShadowRayKernel.js';
-import { MediumKernel } from './compute/wavefront/MediumKernel.js';
+import { SubsurfaceKernel } from './compute/wavefront/SubsurfaceKernel.js';
 import { QueueMediumWalksKernel } from './compute/wavefront/QueueMediumWalksKernel.js';
+import { CameraRayKernel } from './compute/wavefront/CameraRayKernel.js';
+import { CameraMediumKernel } from './compute/wavefront/CameraMediumKernel.js';
 import { QueueLengthToDispatchKernel } from './compute/wavefront/QueueLengthToDispatchKernel.js';
 import { ResetSlotsKernel } from './compute/wavefront/ResetSlotsKernel.js';
+import { PixelQueueRebuildDispatchKernel } from './compute/wavefront/PixelQueueRebuildDispatchKernel.js';
+import { RebuildPixelQueueKernel } from './compute/wavefront/RebuildPixelQueueKernel.js';
 import { ZeroOutBufferKernel } from './compute/ZeroOutBufferKernel.js';
 import { CopyBufferKernel } from './compute/CopyBufferKernel.js';
-import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
-import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
-import { LightsInfoNode } from './LightsInfoNode.js';
 import {
-	rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, shadowTraceResultStruct,
-	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, QUEUE_COUNTER_COUNT, PIXEL_QUEUE_HEADER,
+	rayDataStruct, traceQueuedRayStruct, intersectionResultStruct, shadowTraceResultStruct, pixelQueueInfoStruct,
+	RAY_QUEUE_LENGTH, SHADOW_RAY_QUEUE_LENGTH, QUEUE_COUNTER_COUNT,
 	MEDIUM_QUEUE_LENGTH, MEDIUM_QUEUE_HEADER,
 } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
@@ -49,14 +50,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		super( renderer );
 
 		// options
-		this.seed = 0;
+		this.globalSeed = 0;
 
 		// scatter events a medium walk takes per pass
 		this.mediumStepsPerPass = 16;
-
-		this.envInfo = new EquirectHdrInfoNode();
-		this.backgroundInfo = new EquirectBackgroundInfo();
-		this.lightsInfo = new LightsInfoNode();
 
 		// The path slot pool, sized to the frame budget and resized in the render loop as the budget
 		// changes. Every per-slot buffer is allocated to the same count so a full pool can never
@@ -80,8 +77,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// the slots walking a medium this pass
 		this.mediumQueue = null;
 
-		// pixel indices waiting for a free path slot, sized to the resolution
+		// pixel indices waiting for a free path slot, sized to the resolution, and the queue's counters
 		this.pixelQueue = null;
+		this.pixelQueueInfo = new StorageBufferAttribute( new Uint32Array( pixelQueueInfoStruct.getLength() ), pixelQueueInfoStruct.getLength() );
+		this.pixelQueueInfo.name = 'Pixel Queue Info';
 
 		// reduction target for the per pixel sample counts, read back asynchronously
 		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
@@ -94,8 +93,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.materialKernel = new MaterialKernel().setWorkgroupSize( 64, 1, 1 );
 		this.traceRayKernel = new TraceRayKernel().setWorkgroupSize( 64, 1, 1 );
 		this.traceShadowRayKernel = new TraceShadowRayKernel().setWorkgroupSize( 64, 1, 1 );
-		this.mediumKernel = new MediumKernel().setWorkgroupSize( 64, 1, 1 );
+		this.subsurfaceKernel = new SubsurfaceKernel().setWorkgroupSize( 64, 1, 1 );
 		this.queueMediumWalksKernel = new QueueMediumWalksKernel().setWorkgroupSize( 64, 1, 1 );
+		this.cameraRayKernel = new CameraRayKernel().setWorkgroupSize( 64, 1, 1 );
+		this.cameraMediumKernel = new CameraMediumKernel().setWorkgroupSize( 64, 1, 1 );
 		this.rayDispatchConverter = new QueueLengthToDispatchKernel( RAY_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
 		this.shadowDispatchConverter = new QueueLengthToDispatchKernel( SHADOW_RAY_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
 		this.mediumDispatchConverter = new QueueLengthToDispatchKernel( MEDIUM_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
@@ -106,10 +107,18 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.resetSlotsKernel = new ResetSlotsKernel().setWorkgroupSize( 64, 1, 1 );
 		this.copyRayDataKernel = new CopyBufferKernel( rayDataStruct ).setWorkgroupSize( 64, 1, 1 );
 
-		// bind the shared env / lights providers so the kernels' proxies resolve even before they're set
-		this.logicKernel.envInfo = this.envInfo;
-		this.logicKernel.backgroundInfo = this.backgroundInfo;
-		this.logicKernel.lightsInfo = this.lightsInfo;
+		// rebuilds the pixel queue after each pass through it
+		this.pixelQueueRebuildDispatchKernel = new PixelQueueRebuildDispatchKernel( 8 ).setWorkgroupSize( 1, 1, 1 );
+		this.rebuildPixelQueueKernel = new RebuildPixelQueueKernel().setWorkgroupSize( 8, 8, 1 );
+
+		this.cameraRayKernel.pixelQueueInfo = this.pixelQueueInfo;
+		this.populatePixelIndicesKernel.pixelQueueInfo = this.pixelQueueInfo;
+		this.pixelQueueRebuildDispatchKernel.pixelQueueInfo = this.pixelQueueInfo;
+		this.rebuildPixelQueueKernel.pixelQueueInfo = this.pixelQueueInfo;
+
+		// the logic kernel clamps the light it gathers
+		this.logicKernel.context.clampDirect = this.clampDirect;
+		this.logicKernel.context.clampIndirect = this.clampIndirect;
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
@@ -118,13 +127,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	resetSeed() {
 
-		this.seed = 0;
+		this.globalSeed = 0;
 
 	}
 
 	reset() {
 
 		super.reset();
+		this.globalSeed ++;
 		this._samplesPromise = null;
 
 	}
@@ -132,18 +142,12 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	setBVHData( bvhData ) {
 
 		this.materialKernel.context.bvhData = bvhData;
-		this.materialKernel.needsUpdate = true;
-
 		this.traceRayKernel.context.bvhData = bvhData;
-		this.traceRayKernel.needsUpdate = true;
-
 		this.traceShadowRayKernel.context.bvhData = bvhData;
-		this.traceShadowRayKernel.needsUpdate = true;
-
-		this.mediumKernel.context.bvhData = bvhData;
-		this.mediumKernel.needsUpdate = true;
-
-		this.reset();
+		this.subsurfaceKernel.context.bvhData = bvhData;
+		this.cameraRayKernel.context.bvhData = bvhData;
+		this.cameraMediumKernel.context.bvhData = bvhData;
+		this.rebuild();
 
 	}
 
@@ -151,8 +155,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		super.rebuild();
 
-		// MaterialKernel bakes in the camera ray function, so a camera swap needs a recompile
+		// recompile the kernels that bake in the scene, camera, random and shading model functions
+		this.logicKernel.needsUpdate = true;
 		this.materialKernel.needsUpdate = true;
+		this.traceRayKernel.needsUpdate = true;
+		this.traceShadowRayKernel.needsUpdate = true;
+		this.subsurfaceKernel.needsUpdate = true;
+		this.cameraRayKernel.needsUpdate = true;
+		this.cameraMediumKernel.needsUpdate = true;
 		this.reset();
 
 	}
@@ -160,29 +170,25 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	setRandom( random ) {
 
 		this.logicKernel.context.random = random;
-		this.logicKernel.needsUpdate = true;
-
 		this.materialKernel.context.random = random;
-		this.materialKernel.needsUpdate = true;
-
+		this.cameraRayKernel.context.random = random;
 		this.traceRayKernel.context.random = random;
-		this.traceRayKernel.needsUpdate = true;
-
 		this.traceShadowRayKernel.context.random = random;
-		this.traceShadowRayKernel.needsUpdate = true;
-
-		this.mediumKernel.context.random = random;
-		this.mediumKernel.needsUpdate = true;
-
-		this.reset();
+		this.subsurfaceKernel.context.random = random;
+		this.cameraMediumKernel.context.random = random;
+		this.rebuild();
 
 	}
 
-	setMaterial( material ) {
+	setShadingModel( shadingModel ) {
 
-		this.materialKernel.material = material.getData();
-		this.materialKernel.needsUpdate = true;
-		this.reset();
+		// the ray traversal reads the shading model's materials
+		this.materialKernel.context.shadingModel = shadingModel;
+		this.traceRayKernel.context.shadingModel = shadingModel;
+		this.traceShadowRayKernel.context.shadingModel = shadingModel;
+		this.subsurfaceKernel.context.shadingModel = shadingModel;
+		this.cameraMediumKernel.context.shadingModel = shadingModel;
+		this.rebuild();
 
 	}
 
@@ -194,14 +200,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setClamping( direct, indirect ) {
-
-		this.logicKernel.clampDirect = direct;
-		this.logicKernel.clampIndirect = indirect;
-		this.reset();
-
-	}
-
 	setTransmissiveBackground( value ) {
 
 		this.logicKernel.transmissiveBackground = value;
@@ -209,25 +207,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setEnvironment( envMap ) {
+	setLightsInfo( lightsInfo ) {
 
-		this.envInfo.updateFrom( envMap );
-
-	}
-
-	setLights( lights ) {
-
-		this.lightsInfo.updateFrom( this.renderer, lights );
-		this.reset();
-
-	}
-
-	setEnvironmentParams( envMapIntensity, envMapRotation ) {
-
-		const { envInfo } = this;
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( envMapRotation ).invert();
-		envInfo.rotationNode.value.setFromMatrix4( rotationMatrix );
-		envInfo.intensityNode.value = envMapIntensity;
+		this.logicKernel.lightsInfo = lightsInfo;
+		this.logicKernel.envInfo = lightsInfo.envInfo;
+		this.rebuild();
 
 	}
 
@@ -238,34 +222,16 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	setBackground( background ) {
+	setBackgroundInfo( backgroundInfo ) {
 
-		const { backgroundInfo } = this;
-		backgroundInfo.dispose();
-		backgroundInfo.map = background;
-
-	}
-
-	setBackgroundParams(
-		backgroundIntensity,
-		backgroundRotation,
-		backgroundBlurriness,
-	) {
-
-		const { backgroundInfo } = this;
-		const rotationMatrix = new Matrix4().makeRotationFromEuler( backgroundRotation ).invert();
-		backgroundInfo.rotationNode.value.copy( rotationMatrix );
-		backgroundInfo.intensity = backgroundIntensity;
-		backgroundInfo.blur = backgroundBlurriness;
+		this.logicKernel.backgroundInfo = backgroundInfo;
+		this.rebuild();
 
 	}
 
 	dispose() {
 
 		super.dispose();
-
-		this.envInfo.dispose();
-		this.lightsInfo.dispose();
 
 		this.rayDataStorage?.dispose();
 		this.rayQueue?.dispose();
@@ -276,19 +242,23 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.mediumQueue?.dispose();
 		this.sampleCountersStorage.dispose();
 		this.pixelQueue?.dispose();
+		this.pixelQueueInfo.dispose();
 
 		// TODO: the dispatch converters own their indirect dispatch buffers, they should dispose of them themselves
 		this.rayDispatchConverter.outputDispatch.dispose();
 		this.shadowDispatchConverter.outputDispatch.dispose();
 		this.mediumDispatchConverter.outputDispatch.dispose();
+		this.pixelQueueRebuildDispatchKernel.outputDispatch.dispose();
 
 		this.populatePixelIndicesKernel.dispose();
 		this.logicKernel.dispose();
 		this.materialKernel.dispose();
 		this.traceRayKernel.dispose();
 		this.traceShadowRayKernel.dispose();
-		this.mediumKernel.dispose();
+		this.subsurfaceKernel.dispose();
 		this.queueMediumWalksKernel.dispose();
+		this.cameraRayKernel.dispose();
+		this.cameraMediumKernel.dispose();
 		this.rayDispatchConverter.dispose();
 		this.shadowDispatchConverter.dispose();
 		this.mediumDispatchConverter.dispose();
@@ -297,31 +267,34 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.resetSlotsKernel.dispose();
 		this.copyRayDataKernel.dispose();
 		this.zeroDispatchKernel.dispose();
+		this.pixelQueueRebuildDispatchKernel.dispose();
+		this.rebuildPixelQueueKernel.dispose();
 
 	}
 
-	// The queue holds every pixel not owned by a slot. It is sized to the full pixel count so slots
-	// retired by a shrink can always return theirs.
+	// The queue is sized to the pixel count so it can hold every pixel. A low res preview keeps a larger
+	// queue rather than reallocate it on every switch to and from full resolution.
 	_updatePixelQueue( width, height ) {
 
-		const size = PIXEL_QUEUE_HEADER + Math.max( width * height, 1 );
-		if ( ! this.pixelQueue || this.pixelQueue.array.length < size ) {
+		const size = Math.max( width * height, 1 );
+		const length = this.pixelQueue ? this.pixelQueue.array.length : 0;
+		if ( length < size || ( length !== size && ! this.lowResMode ) ) {
 
 			this.pixelQueue?.dispose();
 			this.pixelQueue = new StorageBufferAttribute( new Float32Array( size ), size );
 			this.pixelQueue.name = 'Pixel Queue';
 
 			// three rebinds a swapped buffer, so the kernels keep their compiled pipelines
-			this.materialKernel.pixelQueue = this.pixelQueue;
+			this.cameraRayKernel.pixelQueue = this.pixelQueue;
 			this.populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
-			this.resetSlotsKernel.pixelQueue = this.pixelQueue;
+			this.rebuildPixelQueueKernel.pixelQueue = this.pixelQueue;
 
 		}
 
 	}
 
 	// Reallocates the per slot buffers to "count" slots. Slots that survive carry their ray data
-	// over, dropped slots return their pixel to the queue, and added slots take one from it. Only
+	// over, dropped slots clear their pixel's active flag, and added slots start idle. Only
 	// the slots in use, up to the pixel count, hold pixels. The trace queues and results only live
 	// within a frame, so they start empty.
 	_resizePool( count, pixelCount ) {
@@ -331,7 +304,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const previousActive = Math.min( previousCount, pixelCount );
 		const active = Math.min( count, pixelCount );
 
-		resetSlotsKernel.pixelQueue = this.pixelQueue;
+		resetSlotsKernel.sampleCountTarget = this.sampleCountTarget;
 		if ( active < previousActive ) {
 
 			resetSlotsKernel.rayDataStorage = this.rayDataStorage;
@@ -351,7 +324,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const shadowRayQueue = new StorageBufferAttribute( count, traceQueuedRayStruct.getLength() );
 		shadowRayQueue.name = 'Shadow Ray Queue';
 
-		// Traced rays fill the results from the front at their queue index, and MediumKernel fills them from the
+		// Traced rays fill the results from the front at their queue index, and SubsurfaceKernel fills them from the
 		// back with the hits of medium walks. In a round each path slot either queues one ray or walks a medium,
 		// never both, so the two ranges together never exceed the slot count and can't overlap
 		const rayIntersectionsStorage = new StorageBufferAttribute( count, intersectionResultStruct.getLength() );
@@ -408,6 +381,20 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	// a preview runs at least this many iterations so its samples finish within the frame
+	_getPreviewIterations() {
+
+		return Math.max( 1, Math.min( this.maxBounces, LOW_RES_ITERATIONS ) );
+
+	}
+
+	// a preview steps every path several times, so it covers that many fewer pixels than the budget
+	getPreviewPixelBudget() {
+
+		return Math.min( this.frameBudget / this._getPreviewIterations(), MAX_RAY_DATA_COUNT );
+
+	}
+
 	// Resizes the pool when the budget changes. Paths in flight past a smaller budget are dropped.
 	_applyBudget( pixelCount ) {
 
@@ -430,14 +417,41 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			materialKernel,
 			traceRayKernel,
 			traceShadowRayKernel,
-			mediumKernel,
+			subsurfaceKernel,
 			queueMediumWalksKernel,
+			cameraRayKernel,
+			cameraMediumKernel,
 			rayDispatchConverter,
 			shadowDispatchConverter,
 			mediumDispatchConverter,
 			zeroDispatchKernel,
 			populatePixelIndicesKernel,
+			resetSlotsKernel,
+			copyRayDataKernel,
+			pixelQueueRebuildDispatchKernel,
+			rebuildPixelQueueKernel,
 		} = this;
+
+		// compile the kernels before their first dispatch, including the pool resize's below
+		yield* this.compileKernels( [
+			logicKernel,
+			materialKernel,
+			traceRayKernel,
+			traceShadowRayKernel,
+			subsurfaceKernel,
+			queueMediumWalksKernel,
+			cameraRayKernel,
+			cameraMediumKernel,
+			rayDispatchConverter,
+			shadowDispatchConverter,
+			mediumDispatchConverter,
+			zeroDispatchKernel,
+			populatePixelIndicesKernel,
+			resetSlotsKernel,
+			copyRayDataKernel,
+			pixelQueueRebuildDispatchKernel,
+			rebuildPixelQueueKernel,
+		] );
 
 		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
 		// lifetime. The slot pool starts tight, at the budget, and is resized in the loop below.
@@ -451,41 +465,35 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		const pixelCount = targetDimensions.x * targetDimensions.y;
 		this._applyBudget( pixelCount );
 
-		// compile the kernels before their first dispatch
-		yield* this.compileKernels( [
-			logicKernel,
-			materialKernel,
-			traceRayKernel,
-			traceShadowRayKernel,
-			mediumKernel,
-			queueMediumWalksKernel,
-			rayDispatchConverter,
-			shadowDispatchConverter,
-			mediumDispatchConverter,
-			zeroDispatchKernel,
-			populatePixelIndicesKernel,
-		] );
-
 		// reset the trace queues — only their lengths need zeroing
 		zeroDispatchKernel.target = this.queueCounters;
 		this.dispatch( zeroDispatchKernel, [ QUEUE_COUNTER_COUNT ] );
 
-		// assign every path slot in use a pixel and park the overflow pixels in the pixel queue
+		zeroDispatchKernel.target = this.pixelQueueInfo;
+		this.dispatch( zeroDispatchKernel, [ pixelQueueInfoStruct.getLength() ] );
+
+		// start the path slots in use idle and queue every pixel
 		populatePixelIndicesKernel.rayDataStorage = this.rayDataStorage;
 		populatePixelIndicesKernel.pixelQueue = this.pixelQueue;
 		populatePixelIndicesKernel.frameBudget = Math.min( this.rayCount, pixelCount );
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
 		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
-		// advance the sequence once per task so each render pass starts from fresh
-		// noise unless "stableNoise" has reset it
-		this.seed ++;
+		// the sample count indexes each pixel's sequence, and the global seed gives each render its own
+		logicKernel.globalSeed = this.globalSeed;
+		materialKernel.globalSeed = this.globalSeed;
+		cameraRayKernel.globalSeed = this.globalSeed;
+		traceRayKernel.globalSeed = this.globalSeed;
+		traceShadowRayKernel.globalSeed = this.globalSeed;
+		subsurfaceKernel.globalSeed = this.globalSeed;
+		cameraMediumKernel.globalSeed = this.globalSeed;
 
 		while ( true ) {
 
-			// TODO: this only makes sense if we can cap the number rays per iteration to the full
-			// frame
-			const iter = this.lowResMode ? Math.min( this.maxBounces, LOW_RES_ITERATIONS ) : 1;
+			// the iterations that spend the budget over the slots in use
+			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount );
+			const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
+			const iter = Math.max( minIterations, Math.round( this.frameBudget / activeSlots ) );
 
 			for ( let i = 0; i < iter; i ++ ) {
 
@@ -500,6 +508,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.sampleCountTarget = this.sampleCountTarget;
 				logicKernel.auxTarget = this.auxTarget ?? this._auxPlaceholder;
 				logicKernel.accumulateAux = this.auxTarget ? 1 : 0;
+				logicKernel.lowResMode = this.lowResMode ? 1 : 0;
 
 				// Step 1: resolve last frame's trace results — accumulate NEE / emission / env, terminate
 				// finished paths into the output, and pick the next NEE light for each live path
@@ -533,21 +542,44 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				zeroDispatchKernel.target = mediumQueue;
 				this.dispatch( zeroDispatchKernel, [ MEDIUM_QUEUE_HEADER ] );
 
-				// Step 3: evaluate materials — spawn camera rays for freed slots, sample the bsdf, and
-				// enqueue this frame's bounce + shadow rays
+				// Step 3: evaluate materials — sample the bsdf, and enqueue this frame's bounce + shadow rays
 				materialKernel.rayDataStorage = rayDataStorage;
 				materialKernel.rayQueue = rayQueue;
 				materialKernel.shadowRayQueue = shadowRayQueue;
 				materialKernel.queueCounters = queueCounters;
-				materialKernel.pixelQueue = this.pixelQueue;
-				materialKernel.sampleCountTarget = this.sampleCountTarget;
-				materialKernel.seed = this.seed;
-				materialKernel.maxSamples = this.maxSamples;
 				materialKernel.rayCount = rayCount;
 				materialKernel.maxTransparentBounces = maxTransparentBounces;
 				materialKernel.maxBounces = this.maxBounces;
-				materialKernel.targetDimensions.copy( targetDimensions );
+				materialKernel.maxFogBounces = this.maxFogBounces;
 				this.dispatch( materialKernel, materialKernel.getDispatchSize( rayCount, 1, 1 ) );
+
+				// rebuild the pixel queue once the slots have popped all of it
+				pixelQueueRebuildDispatchKernel.targetDimensions.copy( targetDimensions );
+				this.dispatch( pixelQueueRebuildDispatchKernel, [ 1, 1, 1 ] );
+
+				rebuildPixelQueueKernel.pixelQueue = this.pixelQueue;
+				rebuildPixelQueueKernel.sampleCountTarget = this.sampleCountTarget;
+				rebuildPixelQueueKernel.maxSamples = this.maxSamples;
+				rebuildPixelQueueKernel.targetDimensions.copy( targetDimensions );
+				this.dispatch( rebuildPixelQueueKernel, pixelQueueRebuildDispatchKernel.outputDispatch );
+
+				// spawn camera rays for the freed slots, then find the volumes they start inside of and queue them
+				// TODO: merge these two kernels, which needs one more storage buffer than the limit allows until the
+				// queue counters can be dropped
+				cameraRayKernel.rayDataStorage = rayDataStorage;
+				cameraRayKernel.pixelQueue = this.pixelQueue;
+				cameraRayKernel.sampleCountTarget = this.sampleCountTarget;
+				cameraRayKernel.maxSamples = this.maxSamples;
+				cameraRayKernel.rayCount = rayCount;
+				cameraRayKernel.targetDimensions.copy( targetDimensions );
+				this.dispatch( cameraRayKernel, cameraRayKernel.getDispatchSize( rayCount, 1, 1 ) );
+
+				cameraMediumKernel.rayDataStorage = rayDataStorage;
+				cameraMediumKernel.rayQueue = rayQueue;
+				cameraMediumKernel.queueCounters = queueCounters;
+				cameraMediumKernel.rayCount = rayCount;
+				cameraMediumKernel.cameraInVolume = Number( this.cameraInVolume );
+				this.dispatch( cameraMediumKernel, cameraMediumKernel.getDispatchSize( rayCount, 1, 1 ) );
 
 				// Step 4: convert the queue lengths into indirect dispatch sizes and trace
 				rayDispatchConverter.queueCounters = queueCounters;
@@ -576,13 +608,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				mediumDispatchConverter.queueCounters = mediumQueue;
 				this.dispatch( mediumDispatchConverter, [ 1, 1, 1 ] );
 
-				mediumKernel.rayDataStorage = rayDataStorage;
-				mediumKernel.mediumQueue = mediumQueue;
-				mediumKernel.rayIntersectionsStorage = rayIntersectionsStorage;
-				mediumKernel.rayCount = rayCount;
-				mediumKernel.maxSubsurfaceBounces = this.maxSubsurfaceBounces;
-				mediumKernel.stepsPerPass = this.mediumStepsPerPass;
-				this.dispatch( mediumKernel, mediumDispatchConverter.outputDispatch );
+				subsurfaceKernel.rayDataStorage = rayDataStorage;
+				subsurfaceKernel.mediumQueue = mediumQueue;
+				subsurfaceKernel.rayIntersectionsStorage = rayIntersectionsStorage;
+				subsurfaceKernel.rayCount = rayCount;
+				subsurfaceKernel.maxSubsurfaceBounces = this.maxSubsurfaceBounces;
+				subsurfaceKernel.stepsPerPass = this.mediumStepsPerPass;
+				this.dispatch( subsurfaceKernel, mediumDispatchConverter.outputDispatch );
 
 			}
 

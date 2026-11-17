@@ -2,16 +2,18 @@ import { storage, uniform, uniformArray, texture } from 'three/tsl';
 import { StorageBufferAttribute, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { AtlasTexture } from './AtlasTexture.js';
+import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
-import { sampleTexelFunc } from './nodes/utils.wgsl.js';
-import { luminanceFn } from './nodes/sampling.wgsl.js';
+import { sampleTexelFunc, clampPathContributionFunc } from './nodes/utils.wgsl.js';
+import { luminanceFn, misHeuristicFn } from './nodes/sampling.wgsl.js';
 import {
 	RECT_AREA_LIGHT_TYPE,
 	CIRC_AREA_LIGHT_TYPE,
 	SPOT_LIGHT_TYPE,
 	DIR_LIGHT_TYPE,
 	POINT_LIGHT_TYPE,
+	ENVIRONMENT_LIGHT_TYPE,
 	LIGHT_FAR_DISTANCE,
 	intersectsRectangleFn,
 	intersectsCircleFn,
@@ -20,6 +22,7 @@ import {
 	getSpotAttenuationFn,
 	getDistanceAttenuationFn,
 	getSpotLightNearestFn,
+	isMISWeightLightFn,
 } from './nodes/lights.wgsl.js';
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
@@ -27,6 +30,10 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 	constructor() {
 
 		super();
+
+		// the environment, sampled as one more light
+		// TODO: own the environment's escape radiance here too
+		this.envInfo = new EquirectHdrInfoNode();
 
 		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
@@ -42,12 +49,15 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	}
 
+	// Returns whether the number of ies profiles changed, so the kernels need rebuilding
 	updateFrom( renderer, lights ) {
 
 		// the unique set of ies textures referenced by the lights' "iesMap" fields
 		const iesTextures = Array.from( new Set( lights.map( l => l.iesMap ).filter( t => t ) ) );
-		const changed = super.updateFrom( lights, iesTextures );
+		super.updateFrom( lights, iesTextures );
 
+		// the atlas refills its texture info array in place, but the kernels size it when they're built
+		const { length } = this.iesAtlas.textureInfo;
 		this.iesAtlas.setTextures( renderer, iesTextures );
 		this.iesProfilesNode.value = this.iesAtlas.texture;
 
@@ -82,13 +92,13 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.buffer.needsUpdate = true;
 		this.countNode.value = this.count;
 
-		return changed;
+		return this.iesAtlas.textureInfo.length !== length;
 
 	}
 
 	_initFns() {
 
-		const { bufferNode, countNode, iesProfilesNode, iesInfoNode } = this;
+		const { bufferNode, countNode, iesProfilesNode, iesInfoNode, envInfo } = this;
 
 		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
 		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
@@ -155,10 +165,11 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
+		// the total estimated weight of the lights and the environment at the position
 		this.getLightsWeight = wgslTagFn/* wgsl */`
 			fn getLightsWeight( position: vec3f ) -> f32 {
 
-				var total = 0.0;
+				var total = ${ envInfo.getWeight }();
 				for ( var i = 0u; i < ${ countNode }; i ++ ) {
 
 					total += ${ this.getLightWeight }( i, position );
@@ -170,13 +181,31 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
+		// Returns the pdf of the light sampling choosing the environment and then the direction, which paths escaping
+		// to the environment are weighted against. Zero without an environment
+		this.getEnvironmentPdf = wgslTagFn/* wgsl */`
+			fn getEnvironmentPdf( position: vec3f, direction: vec3f ) -> f32 {
+
+				let envWeight = ${ envInfo.getWeight }();
+				if ( envWeight <= 0.0 ) {
+
+					return 0.0;
+
+				}
+
+				return ${ envInfo.getDirPdf }( direction ) * envWeight / ${ this.getLightsWeight }( position );
+
+			}
+		`;
+
 		// Chooses a light, or the environment when the returned index equals the light count, in
 		// proportion to the estimated weights. The pdf is zero when nothing can light the position.
 		this.selectLight = wgslTagFn/* wgsl */`
-			fn selectLight( position: vec3f, envWeight: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
+			fn selectLight( position: vec3f, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
 
 				let count = ${ countNode };
-				let totalWeight = ${ this.getLightsWeight }( position ) + envWeight;
+				let envWeight = ${ envInfo.getWeight }();
+				let totalWeight = ${ this.getLightsWeight }( position );
 				if ( totalWeight <= 0.0 ) {
 
 					*selectionPdf = 0.0;
@@ -301,6 +330,42 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
+		// Picks one light or the environment by its estimated contribution at the position, and samples a direction
+		// to it. The record's pdf includes the selection's, and is zero when nothing is picked
+		this.sampleLight = wgslTagFn/* wgsl */`
+			fn sampleLight( position: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
+
+				var lightRec: ${ lightRecordStruct };
+				var selectionPdf = 0.0;
+				let lightIndex = ${ this.selectLight }( position, ruv.x, &selectionPdf );
+				if ( selectionPdf <= 0.0 ) {
+
+					return lightRec;
+
+				}
+
+				if ( lightIndex == ${ countNode } ) {
+
+					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
+					let envSample = ${ envInfo.sampleDir }( ruv.yz );
+					lightRec.direction = envSample.direction;
+					lightRec.emission = envSample.color;
+					lightRec.pdf = envSample.pdf;
+					lightRec.dist = ${ LIGHT_FAR_DISTANCE };
+					lightRec.lightType = ${ ENVIRONMENT_LIGHT_TYPE };
+
+				} else {
+
+					lightRec = ${ this.randomLightSample }( lightIndex, position, ruv.yz );
+
+				}
+
+				lightRec.pdf *= selectionPdf;
+				return lightRec;
+
+			}
+		`;
+
 		// forward intersection of a ray with a single area light ( rect / circ only ), used for MIS
 		// TODO: support hitting the spot light disk here and move spot lights into the
 		// MIS-weighted set so they appear in sharp reflections
@@ -349,6 +414,75 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
+		// Returns the light a shadow ray lets through to its vertex: the light sample, evaluated at the vertex, scaled by
+		// the transmittance along the ray. Env + area lights are also found by bsdf rays, so they are MIS weighted.
+		// Punctual lights, and lights past the bounce limit, take full weight. Bsdf rays stopped by faces the shadow ray
+		// skipped can't find the light, so their share of the weight moves to the light sample. "bounce" is the shadow
+		// ray's depth, one past its vertex, which clamps it
+		this.getDirectLight = wgslTagFn/* wgsl */`
+			fn getDirectLight(
+				lightPdf: f32, lightEmission: vec3f, lightType: i32, evalColor: vec3f, evalPdf: f32,
+				transmittance: vec3f, skippedOcclusion: f32, throughput: vec3f, bounce: u32, maxBounces: u32,
+			) -> vec3f {
+
+				let isMISWeighted = ${ isMISWeightLightFn }( lightType ) && bounce < maxBounces;
+				let misWeight = select( 1.0, mix( ${ misHeuristicFn }( lightPdf, evalPdf ), 1.0, skippedOcclusion ), isMISWeighted );
+				let directLight = throughput * lightEmission * transmittance * evalColor * misWeight / lightPdf;
+				return ${ clampPathContributionFunc }( directLight, bounce );
+
+			}
+		`;
+
+		// Returns the light of the area lights a ray passes between "start" and "end" along it, each clamped at the
+		// segment's depth, as in Cycles. When "isMISWeighted" each is weighted against the light sampling at the ray's
+		// origin. Camera rays only see visibleToCameraRays lights. The alpha is one if a light was hit
+		this.getLightHits = wgslTagFn/* wgsl */`
+			fn getLightHits(
+				origin: vec3f, direction: vec3f, start: f32, end: f32,
+				throughput: vec3f, scatterPdf: f32, isMISWeighted: bool, bounce: u32,
+			) -> vec4f {
+
+				// NEE's total weight at the ray's origin
+				var lightTotalWeight = 0.0;
+				if ( isMISWeighted ) {
+
+					lightTotalWeight = ${ this.getLightsWeight }( origin );
+
+				}
+
+				var light = vec3f( 0.0 );
+				var didHit = false;
+				for ( var i = 0u; i < ${ countNode }; i ++ ) {
+
+					if ( bounce == 0u && ! ${ this.isLightVisibleToCamera }( i ) ) {
+
+						continue;
+
+					}
+
+					var lightRec: ${ lightRecordStruct };
+					if ( ${ this.intersectLightAtIndex }( origin, direction, i, &lightRec ) && lightRec.dist > start && lightRec.dist < end ) {
+
+						var misWeight = 1.0;
+						if ( isMISWeighted ) {
+
+							let selectionPdf = ${ this.getLightWeight }( i, origin ) / lightTotalWeight;
+							misWeight = ${ misHeuristicFn }( scatterPdf, lightRec.pdf * selectionPdf );
+
+						}
+
+						light += ${ clampPathContributionFunc }( lightRec.emission * throughput * misWeight, bounce );
+						didHit = true;
+
+					}
+
+				}
+
+				return vec4f( light, select( 0.0, 1.0, didHit ) );
+
+			}
+		`;
+
 	}
 
 	dispose() {
@@ -356,6 +490,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.tex.dispose();
 		this.buffer.dispose();
 		this.iesAtlas.dispose();
+		this.envInfo.dispose();
 
 	}
 

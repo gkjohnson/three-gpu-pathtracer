@@ -6,28 +6,65 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Added
+- WebGPUPathTracer: Support for bump maps, with "bumpScale" as a height in object units.
+- WebGPUPathTracer: "interpolateDisplay", set to false to show the render without interpolation when it's drawn at a different size than the canvas.
+- WebGPUPathTracer: "renderTime" and "elapsedTime" in the sample counts, the milliseconds spent rendering and the milliseconds since rendering started.
+
+### Changed
+- WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
+- WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
+- WebGPUPathTracer: "setSize" updates the camera, so camera ray functions that depend on the render size follow it.
+- WebGPUPathTracer: Vertex colors are only stored on the GPU when the scene has them, reducing memory use.
+- WebGPUPathTracer: Russian roulette starts at the second vertex, as in Cycles, so paths end sooner and samples are cheaper.
+- WebGPUPathTracer: The wavefront path tracer rebuilds its pixel queue after each pass, skipping finished pixels and the ones the camera declines and sampling the pixels that fall behind first, so renders with "maxSamples" finish sooner and more evenly. The queue shrinks with the render size, except during the low res preview.
+- WebGPUPathTracer: The render fades in over the low res preview, which shows through the pixels the render hasn't reached yet. With a "minSamples" of 0 the preview stays until every pixel has a sample.
+
+### Removed
+- WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.
+
+### Fixed
+- WebGPUPathTracer: "getRenderTime" and "samplesPerSecond" counting the time spent paused, finished, with the page hidden or between "renderSample" calls, such as after "maxSamples" is reached and then raised.
+- WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
+- WebGPUPathTracer: Rays parallel to an axis missing bounds they lie on the face of.
+- WebGPUPathTracer: "reset" restoring an old "frameBudget" when "adaptiveFrameBudget" is off.
+- WebGPUPathTracer: Alpha test not working correctly when "transparent" is not set.
+- WebGPUPathTracer: The wavefront path tracer failing to compile in Safari.
+- WebGPUPathTracer, WebGLPathTracer: Materials without a "color" field, such as NodeMaterial and ShaderMaterial, throwing an error.
+- WebGPUPathTracer: "sheenRoughnessMap" being read from the red channel instead of alpha.
+- WebGPUPathTracer: Dark background and clear colors rendering darker than set, quantized to 8 bits.
+- WebGPUPathTracer: Pixels staying flagged as active after a smaller frame budget drops their path.
+
+## [0.0.28] - 2026.11.02
+### Added
 - WebGPUPathTracer: "setBVHWorker" and "setSceneAsync" to build the mesh BVHs in workers without blocking the page.
 - WebGPUPathTracer: A "complete" event and flag once every pixel has reached "maxSamples" and the denoiser, if any, has run.
+- WebGPUPathTracer: A "progress" event with the stage the render is in, "building", "compiling", "rendering" or "denoising", and how far along it is.
 - WebGPUPathTracer: "renderToCanvas" flag to skip drawing the result to the render target.
-- OIDNDenoiser: An "error" event when a pass started by "update" fails, such as the weights failing to download.
+- OIDNDenoiser: An "error" event when a pass started by "update" fails, such as the weights failing to download, and a "progress" event as each tile finishes.
 - WebGPUPathTracer: The scene data is available to kernels and camera ray functions through the TSL context as "bvhData".
 - WebGPUPathTracer: "renderAuxBuffer" draws the albedo or normal auxiliary buffer given to the denoiser.
-- WebGPUPathTracer: "adaptiveFrameBudget" and "targetFrameTime" to tune "frameBudget" toward a GPU frame time, measured as "frameTime". Enabled by default, and requires a renderer created with "trackTimestamp".
-- WebGPUPathTracer: "adaptiveDynamicRes" sizes the low resolution preview from its measured GPU time to take about "targetFrameTime", from "lowResScale" up to the full render size.
+- WebGPUPathTracer: "adaptiveFrameBudget" and "targetFrameTime" to tune "frameBudget" toward a GPU frame time, measured as "frameTime". Enabled by default, and requires a renderer created with "trackTimestamp". A reset restores the budget from before the last pixels of a capped render finished.
+- WebGPUPathTracer: "adaptiveDynamicRes" adjusts "lowResScale" to the pixels a frame of "frameBudget" can render.
 - WebGPUPathTracer: Subsurface scattering through volumes, with "scatterStrength", "multiscatterColor" and "scatterAnisotropy" material properties following the "KHR_materials_scatter" proposal, and "maxSubsurfaceBounces".
+- WebGPUPathTracer: A medium stack, so nested and overlapping volumes, like liquid in a glass, absorb and scatter together, including when the camera is inside one.
+- WebGPUPathTracer: "FogVolumeMaterial" support, with light sampled inside the fog, shadows through it, a "scatterAnisotropy" phase setting, and "maxFogBounces", single scattering by default as in Cycles.
+- FogVolumeNodeMaterial: A fog volume material for the WebGPU path tracer that also renders as haze when rasterized.
 
 ### Changed
 - WebGPUPathTracer: Requires three.js r187, which binds every storage buffer as an array.
 - WebGPUPathTracer: Sobol is the default random strategy instead of Blue Dither.
+- WebGPUPathTracer: "renderDelay" defaults to 16 and "fadeDuration" to 250, and the fade starts once the average pixel reaches "minSamples", so the full render shows sooner after the camera stops.
 - OIDNDenoiser: Uses "oidn-webgpu" 0.6.0, the renamed "oidn-web" package, and paces denoising tiles to display frames.
 - OIDNDenoiser: The albedo and normal auxiliary buffers are accumulated by the path tracer from the first scatter of every sample instead of rasterized, so they match the image under depth of field and transparency. "setScene" is gone and "update" takes the auxiliary buffer.
 - AtlasTexture: Pages grow to the device texture size limit instead of 4096, so larger textures are no longer downsampled.
 - WebGPUPathTracer: Pixels a camera declines count as finished once "maxSamples" is set.
-- WebGPUPathTracer: Kernels are compiled asynchronously before the first render, so the page no longer freezes while they compile (requires three.js r186).
+- WebGPUPathTracer: Kernels are compiled asynchronously before the first render, so the page no longer freezes while they compile.
 - WebGPUPathTracer: "updateEnvironment" no longer rebuilds an unchanged environment map on every call.
 - WebGPUPathTracer: Shadow rays pass through partially transparent surfaces, attenuated by their opacity, and stop at the first opaque hit.
 
 ### Fixed
+- WebGPUPathTracer: Rough transmission at the critical angle producing a NaN direction, which could stall the GPU for minutes inside subsurface scattering volumes.
+- WebGPUPathTracer: Diffuse surfaces losing energy when "specularIntensity" or "specularColor" is lowered.
 - WebGPUPathTracer: Light through partially transparent objects hidden with "visibleToShadowRays" no longer being counted twice.
 - WebGPUPathTracer: Environment map importance sampling accuracy.
 - WebGPUPathTracer: Nearest filtered environment and background textures no longer fail to compile.
@@ -37,6 +74,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Diffuse surfaces losing indirect light when viewed almost head-on.
 - WebGPUPathTracer: Area and environment light being lost at the last bounce.
 - WebGPUPathTracer: Transmissive volumes being tinted by the square of their color, now matching Blender.
+- PathTracingSceneGenerator: ReferenceError when regenerating a scene whose geometry hasn't changed.
 
 ## [0.0.27] - 2026.10.08
 ### Added

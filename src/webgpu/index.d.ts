@@ -1,5 +1,5 @@
 import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
-import { StorageArrayTexture, WebGPURenderer } from 'three/webgpu';
+import { StorageArrayTexture, WebGPURenderer, MeshBasicNodeMaterial, MeshBasicNodeMaterialParameters } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
 // three.js type augmentation
@@ -77,6 +77,18 @@ export class BlurredEnvMapGenerator {
 
 }
 
+// materials
+
+export class FogVolumeNodeMaterial extends MeshBasicNodeMaterial {
+
+	constructor( parameters?: MeshBasicNodeMaterialParameters & { density?: number, scatterAnisotropy?: number } );
+
+	readonly isFogVolumeMaterial: true;
+	density: number;
+	scatterAnisotropy: number;
+
+}
+
 // upscaler
 
 export interface FSRUpscalerOptions {
@@ -115,6 +127,7 @@ export interface OIDNDenoiserOptions {
 export interface OIDNDenoiserEventMap {
 
 	'error': { error: Error };
+	'progress': { progress: number };
 
 }
 
@@ -149,6 +162,8 @@ export interface SampleCounts {
 	max: number;
 	avg: number;
 	samplesPerSecond: number;
+	renderTime: number;
+	elapsedTime: number;
 
 }
 
@@ -173,6 +188,7 @@ export interface DebugBoundsOptions {
 export interface WebGPUPathTracerEventMap {
 
 	'complete': {};
+	'progress': { stage: 'building' | 'compiling' | 'rendering' | 'denoising', progress: number | null, samples?: SampleCounts };
 
 }
 
@@ -186,6 +202,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	targetFrameTime: number;
 	maxTransparentBounces: number;
 	maxSubsurfaceBounces: number;
+	maxFogBounces: number;
 	maxSamples: number;
 	transmissiveBackground: TransmissiveBackgroundMode;
 	filterGlossyFactor: number;
@@ -197,9 +214,8 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	renderDelay: number;
 	fadeDuration: number;
 	dynamicLowRes: boolean;
-	lowResScale: number;
-	adaptiveDynamicRes: boolean;
 	renderScale: number;
+	interpolateDisplay: boolean;
 	synchronizeRenderSize: boolean;
 	renderToCanvas: boolean;
 	asyncCompile: boolean;
