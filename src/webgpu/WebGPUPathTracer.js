@@ -33,6 +33,8 @@ import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
  * @property {number} max - Highest sample count of any pixel.
  * @property {number} avg - Mean sample count across the image.
  * @property {number} samplesPerSecond - Mean samples accumulated per second of render time since the last reset.
+ * @property {number} renderTime - Milliseconds spent rendering samples since the last reset.
+ * @property {number} elapsedTime - Milliseconds since the last reset, including any time not spent rendering.
  */
 
 const _resolution = new Vector2();
@@ -394,8 +396,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		counts.avg = measured.avg;
 
 		// averaged over the time spent rendering
-		const elapsed = this.getRenderTime() / 1000;
-		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
+		counts.renderTime = this.getRenderTime();
+		counts.elapsedTime = performance.now() - this._startTime;
+		counts.samplesPerSecond = counts.renderTime > 0 ? 1000 * counts.avg / counts.renderTime : 0;
 
 		return { ...counts };
 
@@ -641,10 +644,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._resetTime = - 1;
 		this._fadeState = 0;
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._size = new Vector2();
 
-		// the time spent rendering, and a watchdog that notices when the app stops calling "renderSample"
+		// the time since the last reset, the time spent rendering, and a watchdog that notices when the app stops
+		// calling "renderSample"
+		this._startTime = performance.now();
 		this._renderTime = 0;
 		this._renderedLastCall = false;
 		this._renderWatchdog = new FrameWatchdog( () => {
@@ -1434,13 +1439,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.reset();
 		this._denoiser?.reset();
 		this._resetTime = - 1;
+		this._startTime = performance.now();
 		this._renderTime = 0;
 		this._renderedLastCall = false;
 		this._fadeState = 0;
 		this._timer.update();
 
 		// a fresh object rather than a clear, so measurements still in flight detach
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
 
@@ -1481,7 +1487,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} else {
 
-			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0 } );
+			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 } );
 
 		}
 
