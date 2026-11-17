@@ -1602,7 +1602,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		timer.update();
 
 		this._calledSinceCheck = true;
-		if ( this._callCheckFrame === null ) {
+		if ( this._callCheckFrame === null && typeof requestAnimationFrame !== 'undefined' ) {
 
 			this._callCheckFrame = requestAnimationFrame( this._checkCalls );
 
