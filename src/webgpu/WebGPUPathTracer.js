@@ -649,6 +649,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._renderedLastCall = false;
 		this._renderWatchdog = new FrameWatchdog( () => {
 
+			// count the last sample up to the frame it would have been followed by another call
+			this._timer.update();
+			if ( this._renderedLastCall ) {
+
+				this._renderTime += 1000 * this._timer.getDelta();
+
+			}
+
 			this._renderedLastCall = false;
 
 		} );
@@ -1427,6 +1435,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser?.reset();
 		this._resetTime = - 1;
 		this._renderTime = 0;
+		this._renderedLastCall = false;
 		this._fadeState = 0;
 		this._timer.update();
 
@@ -1674,8 +1683,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// count the time between two calls that both rendered samples
-		if ( rendered && this._renderedLastCall ) {
+		// count the time since a call that rendered samples
+		if ( this._renderedLastCall ) {
 
 			this._renderTime += delta;
 
