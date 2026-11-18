@@ -26,7 +26,7 @@ const debugBoundsResultStruct = new StructTypeNode( {
 // driving it are attached as `.uniforms` so the caller can update them each frame.
 export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
-	const { transforms } = bvhData.storage;
+	const { objects } = bvhData.storage;
 	const { getTriangleIndices, getVertexPosition } = bvhData.fns;
 	const { materials } = shadingModel.storage;
 
@@ -151,10 +151,10 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 	// the scale factor, exactly like the raycast ), record the material side, and mark that we are
 	// now descending a BLAS
 	const transformRay = wgslTagFn/* wgsl */`
-		fn debugTransformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
+		fn debugTransformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> bool {
 
-			let object = ${ transforms }[ objectIndex ];
-			let toLocal = object.inverseMatrixWorld;
+			let objectInfo = ${ objects }[ objectIndex ];
+			let toLocal = objectInfo.inverseMatrixWorld;
 			ray.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
 			ray.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
 
@@ -162,8 +162,9 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 			ray.direction = ray.direction / len;
 			${ rayScalar } = 1.0 / len;
 
-			${ materialSide } = ${ materials }[ object.materialIndex ].side;
+			${ materialSide } = ${ materials }[ objectInfo.materialIndex ].side;
 			${ level } = 1u;
+			return true;
 
 		}
 	`;

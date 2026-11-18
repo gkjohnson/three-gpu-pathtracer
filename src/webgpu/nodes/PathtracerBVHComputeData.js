@@ -420,7 +420,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			`,
 			transformShapeFn: wgslTagFn/* wgsl */`
-				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
+				fn transformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> bool {
 
 					let toLocal = ${ storage.objects }[ objectIndex ].inverseMatrixWorld;
 					ray.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
@@ -443,6 +443,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						${ baseOpacityScalar } = 1.0;
 
 					}
+
+					return true;
 
 				}
 			`,
@@ -671,13 +673,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					let material = &${ materialsStorage }[ ${ storage.objects }[ objectIndex ].materialIndex ];
 					let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
-					if ( isVolume ) {
-
-						${ raycastOptions.transformShapeFn }( ray, objectIndex );
-
-					}
-
-					return isVolume;
+					return isVolume && ${ raycastOptions.transformShapeFn }( ray, objectIndex );
 
 				}
 			`,
