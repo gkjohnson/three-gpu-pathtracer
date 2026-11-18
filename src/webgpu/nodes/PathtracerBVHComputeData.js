@@ -712,28 +712,26 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	updateMaterialIndices() {
 
-		const { storage, bvh } = this;
-		const objectsStorage = storage.objects.proxyNode;
-		this._getTransformMap( bvh ).forEach( info => {
+		const objectsStorage = this.storage.objects.proxyNode;
+		this.getAllObjectInfo().forEach( ( { object, instanceId, group, objectIndex } ) => {
 
-			this.writeMaterialData( info, info.slot, objectsStorage.value.array.buffer );
+			this.writeMaterialData( object, instanceId, group, objectIndex, objectsStorage.value.array.buffer );
 
 		} );
 		objectsStorage.value.needsUpdate = true;
 
 	}
 
-	writeMaterialData( info, writeOffset, targetBuffer ) {
+	writeMaterialData( object, instanceId, group, writeOffset, targetBuffer ) {
 
 		// write material data to the object record
 		const { shadingModel } = this;
-		const { object, instanceId, root } = info;
 
 		// get the material associated with the bvh group
 		let material = object.material;
 		if ( Array.isArray( material ) ) {
 
-			const { materialIndex } = object.geometry.groups[ root ];
+			const { materialIndex } = object.geometry.groups[ group ];
 			material = material[ materialIndex ];
 
 		}
@@ -777,7 +775,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	writeObjectRecord( info, premultiplyMatrix, writeOffset, targetBuffer ) {
 
 		super.writeObjectRecord( info, premultiplyMatrix, writeOffset, targetBuffer );
-		this.writeMaterialData( info, writeOffset, targetBuffer );
+		this.writeMaterialData( info.object, info.instanceId, info.root, writeOffset, targetBuffer );
 
 		// whether shadow rays see the object
 		const recordBufferU32 = new Uint32Array( targetBuffer );
