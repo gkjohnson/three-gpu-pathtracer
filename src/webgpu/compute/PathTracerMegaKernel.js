@@ -7,13 +7,13 @@ import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
 import {
 	mediumStackStruct, addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn,
-	getMediumStackAtPointFn, getShadowMediumStackFn, getShadowMediumDepthFn, getShadowTransmittanceFn, sampleFogDistanceFn,
+	getEmptyMediumStackFn, getMediumStackAtPointFn, getShadowMediumStackFn, getShadowMediumDepthFn, getShadowTransmittanceFn, sampleFogDistanceFn,
 	getMediumSegmentWeightFn, walkMediumStepFn, MEDIUM_WALK_SURFACE, MEDIUM_WALK_TERMINATED,
 } from '../nodes/medium.wgsl.js';
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
-import { LIGHT_FAR_DISTANCE, LIGHT_EPSILON } from '../nodes/lights.wgsl.js';
+import { LIGHT_FAR_DISTANCE, getShadowRayFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
 
@@ -42,6 +42,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			maxTransparentBounces: uniform( 5, 'uint' ),
 			maxSubsurfaceBounces: uniform( 256, 'uint' ),
 			maxFogBounces: uniform( 0, 'uint' ),
+			cameraInVolume: uniform( 1, 'uint' ),
 			misEnabled: uniform( 1, 'uint' ),
 			maxSamples: uniform( 0, 'uint' ),
 			filterGlossy: uniform( 1 ),
@@ -86,10 +87,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 
 		// Returns the light a light sample adds at a path vertex, given the vertex evaluated toward the light: the
-		// shadow ray the wavefront queues, traces and resolves, starting at the origin in the given media
+		// shadow ray the wavefront queues, traces and resolves, from the hit point and its normal ( zero in fog ) in
+		// the given media
 		const getLightContributionFn = wgslTagFn/* wgsl */`
 			fn getLightContribution(
-				lightRec: ${ lightRecordStruct }, evalColor: vec3f, evalPdf: f32, origin: vec3f, stack: ${ mediumStackStruct },
+				lightRec: ${ lightRecordStruct }, evalColor: vec3f, evalPdf: f32, hitPoint: vec3f, hitNormal: vec3f, stack: ${ mediumStackStruct },
 				throughput: vec3f, bounce: u32, maxBounces: u32,
 			) -> vec3f {
 
@@ -99,11 +101,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				// the shadow ray toward the light, up to the light distance
+				// the shadow ray toward the light
 				var shadowRay: ${ rayStruct };
-				shadowRay.origin = origin;
-				shadowRay.direction = lightRec.direction;
-				shadowRay.maxDist = lightRec.dist * ( 1.0 - ${ LIGHT_EPSILON } );
+				${ getShadowRayFn }( hitPoint, hitNormal, lightRec.direction, lightRec.dist, &shadowRay );
 				let mediumDepth = ${ getShadowMediumDepthFn }( stack, shadowRay.maxDist );
 
 				// opaque occlusion, and the light let through by the partially transparent surfaces and the volumes passed
@@ -142,6 +142,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				maxTransparentBounces: u32,
 				maxSubsurfaceBounces: u32,
 				maxFogBounces: u32,
+				cameraInVolume: u32,
 				misEnabled: u32,
 				maxSamples: u32,
 				filterGlossy: f32,
@@ -222,7 +223,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				// CameraMediumKernel
 				// the medium the camera ray starts in
-				var medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( ray.origin ) );
+				var cameraStack = ${ getEmptyMediumStackFn }();
+				if ( cameraInVolume != 0u ) {
+
+					cameraStack = ${ getMediumStackAtPointFn }( ray.origin );
+
+				}
+
+				var medium = ${ getCombinedMediumFn }( cameraStack );
 
 				// added last, a camera miss overwrites the pixel with the background
 				var lightHitColor = vec3f( 0.0 );
@@ -414,12 +422,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					}
 
 					// MaterialKernel
-					// the vertex: its light evaluation, next direction, and where the bounce and shadow rays start
+					// the vertex: its light evaluation, next direction, and where the bounce and shadow rays start. The shadow
+					// ray leaves the hit point, offset off the surface along its normal, which stays zero in fog
 					var scatterRec: ${ scatterRecordStruct };
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
 					var bounceOrigin = position;
-					var shadowOrigin = position;
+					var shadowHitPoint = position;
+					var shadowHitNormal = vec3f( 0.0 );
 					var shadowStack = medium.stack;
 					var emission = vec3f( 0.0 );
 					var isTerminated = false;
@@ -539,7 +549,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							let evalRec = ${ bsdfEvalPdfFn }( hit, surface, view, lightRec.direction );
 							lightEvalColor = evalRec.color;
 							lightEvalPdf = evalRec.pdf;
-							shadowOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, lightRec.direction, hit.normal );
+							shadowHitPoint = vertexData.position.xyz;
+							shadowHitNormal = hit.normal;
 							shadowStack = ${ getShadowMediumStackFn }(
 								medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall,
 								ray.direction, lightRec.direction, hit.normal,
@@ -598,9 +609,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					let newBounce = hit.bounce + 1u;
 					isTerminated = isTerminated || newBounce >= maxBounces;
 
-					// russian roulette from the fourth vertex on, "hit.bounce" being zero at the camera hit in both
-					// backends. Matches Cycles path_state_continuation_probability
-					if ( ! isTerminated && hit.bounce >= 3u ) {
+					// Russian roulette from the second vertex on, as in Cycles' path_state_continuation_probability
+					if ( ! isTerminated && hit.bounce >= 1u ) {
 
 						let rrThroughput = throughputColor * scatterRec.color / scatterRec.pdf;
 						let rrProb = saturate( sqrt( max( max( rrThroughput.r, rrThroughput.g ), rrThroughput.b ) ) );
@@ -618,7 +628,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// the vertex's light sample and emission, with the pre-scatter throughput, clamped at the segment's depth
 					if ( lightRec.pdf > 0.0 ) {
 
-						let directLight = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowOrigin, shadowStack, throughputColor, bounce, maxBounces );
+						let directLight = ${ getLightContributionFn }( lightRec, lightEvalColor, lightEvalPdf, shadowHitPoint, shadowHitNormal, shadowStack, throughputColor, bounce, maxBounces );
 						resultColor += vec4f( directLight, 0.0 );
 
 					}

@@ -3,7 +3,7 @@ import { uniform, storage, globalId } from 'three/tsl';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand2, RNG_INDEX_MEDIUM_DISTANCE } from '../../nodes/random.wgsl.js';
-import { getCombinedMediumFn, getMediumStackAtPointFn, sampleFogDistanceFn } from '../../nodes/medium.wgsl.js';
+import { getCombinedMediumFn, getEmptyMediumStackFn, getMediumStackAtPointFn, sampleFogDistanceFn } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH } from './structs.js';
 
 // Sets the medium of the camera rays CameraRayKernel spawned from the volumes around their origin, then queues
@@ -17,6 +17,9 @@ export class CameraMediumKernel extends ComputeKernel {
 			globalSeed: uniform( 0, 'uint' ),
 			rayCount: uniform( 0, 'uint' ),
 
+			// whether camera rays may start inside a volume
+			cameraInVolume: uniform( 1, 'uint' ),
+
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayQueue: storage( new StorageBufferAttribute( 1, 1 ), traceQueuedRayStruct ),
 			queueCounters: storage( new StorageBufferAttribute( 1, 1 ), 'uint' ).toAtomic(),
@@ -26,7 +29,7 @@ export class CameraMediumKernel extends ComputeKernel {
 
 		const fn = wgslTagFn/* wgsl */`
 
-			fn compute( globalSeed: u32, rayCount: u32, globalId: vec3u ) -> void {
+			fn compute( globalSeed: u32, rayCount: u32, cameraInVolume: u32, globalId: vec3u ) -> void {
 
 				let rayDataStorage = &${ params.rayDataStorage };
 				let rayQueue = &${ params.rayQueue };
@@ -48,8 +51,16 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				}
 
+				// the medium the camera ray starts in
+				var cameraStack = ${ getEmptyMediumStackFn }();
+				if ( cameraInVolume != 0u ) {
+
+					cameraStack = ${ getMediumStackAtPointFn }( input.origin );
+
+				}
+
 				// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
-				let medium = ${ getCombinedMediumFn }( ${ getMediumStackAtPointFn }( input.origin ) );
+				let medium = ${ getCombinedMediumFn }( cameraStack );
 				${ params.rayDataStorage }[ index ].medium = medium;
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );

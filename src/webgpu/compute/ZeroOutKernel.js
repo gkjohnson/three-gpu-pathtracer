@@ -17,7 +17,7 @@ export class ZeroOutKernel extends ComputeKernel {
 		const fn = wgslTagFn/* wgsl */`
 			fn compute( globalId: vec3u ) -> void {
 
-				textureStore( ${ params.outputTarget }, ${ coord }, vec4( 0, 0, 0, 1 ) );
+				textureStore( ${ params.outputTarget }, ${ coord }, vec4( 0, 0, 0, 0 ) );
 
 			}
 		`;

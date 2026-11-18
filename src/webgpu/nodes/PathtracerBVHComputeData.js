@@ -1,10 +1,25 @@
-import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix3, Matrix4, Raycaster, Vector3, MeshBasicMaterial, DoubleSide } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
-import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL } from 'three-mesh-bvh';
+import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
 import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.js';
+/** @import { Box3, Mesh } from 'three/webgpu' */
 
 const _colorVec = new Vector4();
+const _instanceMatrix = /* @__PURE__ */ new Matrix4();
+const _boxToMesh = /* @__PURE__ */ new Matrix4();
+const _orientedBox = /* @__PURE__ */ new OrientedBox();
+const _normalMatrix = /* @__PURE__ */ new Matrix3();
+const _rayOrigin = /* @__PURE__ */ new Vector3();
+const _rayDirection = /* @__PURE__ */ new Vector3( 0, 0, 1 );
+
+// raycasts a mesh instance from both sides
+const _raycaster = /* @__PURE__ */ new Raycaster();
+const _raycastTarget = {
+	matrixWorld: _instanceMatrix,
+	material: /* @__PURE__ */ new MeshBasicMaterial( { side: DoubleSide } ),
+};
+
 const transformStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
 	inverseMatrixWorld: 'mat4x4f',
@@ -31,14 +46,14 @@ const intersectionResultStruct = new StructTypeNode( {
 	occlusion: 'float',
 }, 'PathTracerIntersectionResult' );
 
-// the volumes a ray hits, by material index, with each one's nearest hit distance and side
-const VOLUME_HITS_SIZE = 32;
-const volumeHitsStruct = new StructTypeNode( {
-	ids: `array<u32, ${ VOLUME_HITS_SIZE }>`,
-	dist: `array<f32, ${ VOLUME_HITS_SIZE }>`,
-	side: `array<f32, ${ VOLUME_HITS_SIZE }>`,
-	count: 'uint',
-}, 'VolumeHits' );
+// a ray's nearest volume hit past "minDist"
+const volumeHitStruct = new StructTypeNode( {
+	didHit: 'bool',
+	materialIndex: 'uint',
+	dist: 'float',
+	side: 'float',
+	minDist: 'float',
+}, 'VolumeHit' );
 
 // Pathtracer-specific version of the BVHComputeData tht includes material mapping, property structs
 export class PathtracerBVHComputeData extends BVHComputeData {
@@ -58,6 +73,71 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		this.shadingModel = shadingModel;
 		this.structs.transform = transformStruct;
 		this.bvhMap = new Map();
+
+	}
+
+	/**
+	 * Returns whether the box, in the space "boxToWorld" maps from, overlaps the mesh's closed volume.
+	 *
+	 * @param {Box3} box
+	 * @param {Matrix4} boxToWorld
+	 * @param {Mesh} mesh
+	 * @returns {boolean}
+	 */
+	boxIntersectsMesh( box, boxToWorld, mesh ) {
+
+		const instanceBVHs = this.bvh.bvhMap.get( mesh ) || [];
+		for ( let instance = 0; instance < instanceBVHs.length; instance ++ ) {
+
+			const instanceBVH = instanceBVHs[ instance ];
+			if ( ! instanceBVH ) {
+
+				continue;
+
+			}
+
+			_instanceMatrix.copy( mesh.matrixWorld );
+			if ( mesh.isInstancedMesh || mesh.isBatchedMesh ) {
+
+				mesh.getMatrixAt( instance, _instanceMatrix ).premultiply( mesh.matrixWorld );
+
+			}
+
+			_boxToMesh.copy( _instanceMatrix ).invert().multiply( boxToWorld );
+			_orientedBox.set( box.min, box.max, _boxToMesh );
+			_orientedBox.needsUpdate = true;
+
+			// the volume's surface passes through the box
+			const crossesSurface = instanceBVH.shapecast( {
+				intersectsBounds: bounds => _orientedBox.intersectsBox( bounds ),
+				intersectsTriangle: triangle => _orientedBox.intersectsTriangle( triangle ),
+			} );
+
+			if ( crossesSurface ) {
+
+				return true;
+
+			}
+
+			// otherwise the box is inside if the nearest hit is a back face
+			box.getCenter( _rayOrigin ).applyMatrix4( boxToWorld );
+			_raycaster.set( _rayOrigin, _rayDirection );
+			_raycaster.firstHitOnly = true;
+			const hit = instanceBVH.raycastObject3D( _raycastTarget, _raycaster )[ 0 ];
+			if ( hit ) {
+
+				_normalMatrix.getNormalMatrix( _instanceMatrix );
+				if ( hit.face.normal.applyMatrix3( _normalMatrix ).dot( _rayDirection ) > 0 ) {
+
+					return true;
+
+				}
+
+			}
+
+		}
+
+		return false;
 
 	}
 
@@ -196,8 +276,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		// the opacity of a hit triangle at its barycentric coordinate, from the object's opacity, the vertex
 		// colors and the alpha of the map and alpha map
 		const getHitOpacity = wgslTagFn/* wgsl */`
-			fn getHitOpacity( material: ${ contextProxy( 'shadingModel.structs.material' ) }, i0: u32, i1: u32, i2: u32, barycoord: vec3f ) -> f32 {
+			fn getHitOpacity( materialIndex: u32, i0: u32, i1: u32, i2: u32, barycoord: vec3f ) -> f32 {
 
+				let material = &${ materialsStorage }[ materialIndex ];
 				var opacity = ${ baseOpacityScalar };
 				if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
@@ -343,7 +424,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					let object = ${ storage.transforms }[ objectIndex ];
 					${ currentObjectIndex } = objectIndex;
 
-					let material = ${ materialsStorage }[ object.materialIndex ];
+					let material = &${ materialsStorage }[ object.materialIndex ];
 					if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
 
 						${ baseOpacityScalar } = material.opacity * object.color.a;
@@ -395,7 +476,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
 							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
-							let material = ${ materialsStorage }[ object.materialIndex ];
+							let material = &${ materialsStorage }[ object.materialIndex ];
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
 							if ( material.side != 0 && triResult.side != material.side ) {
@@ -406,7 +487,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							// partial opacity is resolved at surface processing, but fully transparent and alpha
 							// tested surfaces are skipped here
-							let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
+							let opacity = ${ getHitOpacity }( object.materialIndex, indices.x, indices.y, indices.z, triResult.barycoord );
 							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 								continue;
@@ -454,7 +535,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) ) {
 
 							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
-							let material = ${ materialsStorage }[ object.materialIndex ];
+							let material = &${ materialsStorage }[ object.materialIndex ];
 
 							// pass fog volume boundaries, in any order: entering adds the fog's optical depth back from
 							// the fog shadow distance, and leaving takes it away
@@ -467,7 +548,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							}
 
-							let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
+							let opacity = ${ getHitOpacity }( object.materialIndex, indices.x, indices.y, indices.z, triResult.barycoord );
 							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 								continue;
@@ -511,20 +592,19 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 			`,
 		} );
 
-		// The nearest hit of every volume along the ray, skipping the objects that aren't volumes
-		// TODO: accumulating the volume hits through the shapecast hooks this way is a bit brittle
+		// The nearest volume hit past "minDist"
 		// TODO: three-mesh-bvh has no clear way to skip an object during traversal, so a flag set when the ray is
 		// transformed is checked in both the bounds and range tests. A dedicated hook would be good
 		const skipObject = uint( 0 ).toVar( 'bvh_skipObject' );
 
-		fns.collectVolumeHits = this.getShapecastFn( {
-			name: 'collectVolumeHits',
+		fns.raycastVolumeHit = this.getShapecastFn( {
+			name: 'raycastVolumeHit',
 			shapeStruct: rayStruct,
-			resultStruct: volumeHitsStruct,
+			resultStruct: volumeHitStruct,
 
 			boundsOrderFn: raycastOptions.boundsOrderFn,
 			intersectsBoundsFn: wgslTagFn/* wgsl */`
-				fn volumeRayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
+				fn volumeRayIntersectsBounds( ray: ${ rayStruct }, bounds: ${ bvhNodeBoundsStruct }, result: ptr<function, ${ volumeHitStruct }> ) -> u32 {
 
 					if ( ${ skipObject } != 0u ) {
 
@@ -532,12 +612,19 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					}
 
-					return select( 0u, 1u, ${ rayBoundsDistance }( ray, bounds ) >= 0.0 );
+					let dist = ${ rayBoundsDistance }( ray, bounds );
+					if ( dist < 0.0 || ( result.didHit && dist >= result.dist ) ) {
+
+						return 0u;
+
+					}
+
+					return 1u;
 
 				}
 			`,
 			intersectRangeFn: wgslTagFn/* wgsl */`
-				fn intersectVolumeRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ volumeHitsStruct }> ) -> u32 {
+				fn intersectVolumeRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ volumeHitStruct }> ) -> u32 {
 
 					if ( ${ skipObject } != 0u ) {
 
@@ -546,26 +633,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					}
 
 					let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
-					let material = ${ materialsStorage }[ object.materialIndex ];
-
-					// the material's entry in the hits, or the next free one
-					var entry = result.count;
-					for ( var i = 0u; i < result.count; i ++ ) {
-
-						if ( result.ids[ i ] == object.materialIndex ) {
-
-							entry = i;
-							break;
-
-						}
-
-					}
-
-					if ( entry == ${ VOLUME_HITS_SIZE }u ) {
-
-						return ${ NOT_INTERSECTED }u;
-
-					}
+					let material = &${ materialsStorage }[ object.materialIndex ];
 
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
@@ -577,24 +645,24 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 						var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 						triResult.dist *= ${ scratchRayScalar };
-						if ( ! triResult.didHit || ( entry < result.count && triResult.dist >= result.dist[ entry ] ) ) {
+						if ( ! triResult.didHit || triResult.dist <= result.minDist || ( result.didHit && triResult.dist >= result.dist ) ) {
 
 							continue;
 
 						}
 
 						// fully transparent and alpha tested surfaces are passed, as by the first hit traversal
-						let opacity = ${ getHitOpacity }( material, indices.x, indices.y, indices.z, triResult.barycoord );
+						let opacity = ${ getHitOpacity }( object.materialIndex, indices.x, indices.y, indices.z, triResult.barycoord );
 						if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
 
 							continue;
 
 						}
 
-						result.ids[ entry ] = object.materialIndex;
-						result.dist[ entry ] = triResult.dist;
-						result.side[ entry ] = triResult.side;
-						result.count = max( result.count, entry + 1u );
+						result.didHit = true;
+						result.materialIndex = object.materialIndex;
+						result.dist = triResult.dist;
+						result.side = triResult.side;
 
 						didHit = true;
 
@@ -609,7 +677,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					${ raycastOptions.transformShapeFn }( ray, objectIndex );
 
-					let material = ${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
+					let material = &${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
 					let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
 					${ skipObject } = select( 1u, 0u, isVolume );
 

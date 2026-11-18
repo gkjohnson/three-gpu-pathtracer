@@ -26,7 +26,9 @@ import { LDrawUtils } from 'three/examples/jsm/utils/LDrawUtils.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
+import { initUNetFromURL } from 'oidn-webgpu';
 import { QuiltPreviewNodeMaterial } from './src/materials/QuiltPreviewNodeMaterial.js';
 import { LoaderElement } from './src/LoaderElement.js';
 
@@ -66,10 +68,12 @@ const modelName = decodeURI( window.location.hash.replace( /^#/, '' ) );
 const params = {
 
 	model: modelName in MODELS ? modelName : 'X-Wing',
-	renderScale: 1,
 	frameBudget: 100000,
 
+	enable: true,
 	pause: false,
+	maxSamples: 16,
+	renderScale: 1,
 
 	tiltingPreview: true,
 	animationSpeed: 1,
@@ -120,14 +124,25 @@ async function init() {
 	// initialize the path tracer. The quilt has its own fixed resolution, independent
 	// of the preview canvas, so automatic and low-resolution resizing must be disabled.
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.synchronizeRenderSize = false;
 	pathTracer.dynamicLowRes = false;
 	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.maxSamples = params.maxSamples;
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
 		loader.setStage( stage, progress, samples );
 
 	} );
+
+	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
+	const denoiser = new OIDNDenoiser( {
+		initUNetFromURL,
+		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
+		maxTileSize: 512,
+		dynamicTile: false,
+	} );
+	pathTracer.setDenoiser( denoiser );
 
 	// initialize quads
 	previewQuad = new FullScreenQuad( new QuiltPreviewNodeMaterial( {
@@ -245,7 +260,7 @@ async function init() {
 		scene.environment = envTexture;
 		scene.background = envTexture;
 
-		pathTracer.setScene( scene, quiltCamera );
+		await pathTracer.setSceneAsync( scene, quiltCamera );
 
 		loader.setPercentage( 1 );
 		renderer.domElement.style.visibility = 'visible';
@@ -261,6 +276,14 @@ async function init() {
 }
 
 function animate() {
+
+	// the rasterized scene from the preview camera, for comparison against the path traced quilt
+	if ( ! params.enable ) {
+
+		renderer.render( scene, camera );
+		return;
+
+	}
 
 	pathTracer.pause = params.pause;
 	pathTracer.renderSample();
@@ -439,10 +462,16 @@ function buildGui() {
 		window.location.reload();
 
 	} );
-	gui.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onLkgParamsChange );
 
-	const ptFolder = gui.addFolder( 'Path Tracing' );
+	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' );
 	ptFolder.add( params, 'pause' );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
+
+		pathTracer.maxSamples = v;
+
+	} );
+	ptFolder.add( params, 'renderScale', 0.1, 1.0, 0.01 ).onChange( onLkgParamsChange );
 
 	const lkgFolder = gui.addFolder( 'Looking Glass Views' );
 	lkgFolder.add( params, 'numViews', 1, 100, 1 ).onChange( onLkgParamsChange );

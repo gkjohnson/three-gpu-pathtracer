@@ -162,6 +162,8 @@ export interface SampleCounts {
 	max: number;
 	avg: number;
 	samplesPerSecond: number;
+	renderTime: number;
+	elapsedTime: number;
 
 }
 
@@ -212,9 +214,8 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	renderDelay: number;
 	fadeDuration: number;
 	dynamicLowRes: boolean;
-	lowResScale: number;
-	adaptiveDynamicRes: boolean;
 	renderScale: number;
+	interpolateDisplay: boolean;
 	synchronizeRenderSize: boolean;
 	renderToCanvas: boolean;
 	asyncCompile: boolean;

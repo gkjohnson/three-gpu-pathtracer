@@ -2,6 +2,7 @@ import { storage, uniform, uniformArray, texture } from 'three/tsl';
 import { StorageBufferAttribute, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { AtlasTexture } from './AtlasTexture.js';
+import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
 import { sampleTexelFunc, clampPathContributionFunc } from './nodes/utils.wgsl.js';
@@ -26,13 +27,13 @@ import {
 
 export class LightsInfoNode extends LightsInfoUniformStruct {
 
-	constructor( envInfo ) {
+	constructor() {
 
 		super();
 
 		// the environment, sampled as one more light
 		// TODO: own the environment's escape radiance here too
-		this.envInfo = envInfo;
+		this.envInfo = new EquirectHdrInfoNode();
 
 		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
@@ -489,6 +490,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.tex.dispose();
 		this.buffer.dispose();
 		this.iesAtlas.dispose();
+		this.envInfo.dispose();
 
 	}
 

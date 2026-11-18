@@ -24,6 +24,9 @@ export class PathTracerBackend {
 		this.maxFogBounces = 0;
 		this.lowResMode = false;
 
+		// whether camera rays may start inside a volume
+		this.cameraInVolume = true;
+
 		// the light clamping values, shared with the kernels through their context
 		this.clampDirect = uniform( 0 );
 		this.clampIndirect = uniform( 10 );
@@ -115,24 +118,11 @@ export class PathTracerBackend {
 
 	}
 
-	setEnvironment(
-		envMap,
-		envMapIntensity,
-		envMapRotation,
-	) {
+	setLightsInfo( lightsInfo ) {
 
 	}
 
-	setLights( lights ) {
-
-	}
-
-	setBackground(
-		background,
-		backgroundIntensity,
-		backgroundRotation,
-		backgroundBlurriness,
-	) {
+	setBackgroundInfo( backgroundInfo ) {
 
 	}
 

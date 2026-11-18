@@ -174,13 +174,13 @@ export function convertEmissivePlanesToLights( model ) {
 		let light;
 		if ( isCircular ) {
 
-			light = new ShapedAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
+			light = new ShapedAreaLight( material.emissive, material.emissiveIntensity, width, height );
 			light.isCircular = true;
 
 		} else {
 
 			// use a rect area light so the three.js rasterization path works
-			light = new RectAreaLight( material.emissive, material.emissiveIntensity * 0.5, width, height );
+			light = new RectAreaLight( material.emissive, material.emissiveIntensity, width, height );
 
 		}
 

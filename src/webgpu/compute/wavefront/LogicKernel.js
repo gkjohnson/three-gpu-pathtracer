@@ -14,7 +14,7 @@ import {
 } from '../../nodes/random.wgsl.js';
 import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
-import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct } from './structs.js';
+import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, NO_PIXEL } from './structs.js';
 import { getMediumSegmentWeightFn } from '../../nodes/medium.wgsl.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
@@ -46,6 +46,7 @@ export class LogicKernel extends ComputeKernel {
 			maxBounces: uniform( 5, 'uint' ),
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 			accumulateAux: uniform( 0, 'uint' ),
+			lowResMode: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
@@ -77,6 +78,7 @@ export class LogicKernel extends ComputeKernel {
 				maxBounces: u32,
 				transmissiveBackground: u32,
 				accumulateAux: u32,
+				lowResMode: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -356,11 +358,12 @@ export class LogicKernel extends ComputeKernel {
 					}
 
 					rayDataStorage[ index ].hit.objectIndex = - 1;
+					rayDataStorage[ index ].pixelIndex = ${ NO_PIXEL }u;
 
 				} else {
 
-					// show the path so far, which the first sample overwrites
-					if ( storedSamples == 0u ) {
+					// the low res preview shows the path so far, which the first sample overwrites
+					if ( lowResMode != 0u && storedSamples == 0u ) {
 
 						textureStore( ${ params.outputTarget }, colorIndex, resultColor );
 

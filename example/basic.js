@@ -12,6 +12,7 @@ import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
 import { WebGPUPathTracer } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/chinese_garden_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/terrarium-robots/scene.gltf';
@@ -39,6 +40,7 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.renderScale = renderScale;
 	pathTracer.frameBudget = frameBudget;
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
@@ -99,7 +101,7 @@ async function init() {
 	scene.add( gltf.scene );
 
 	// initialize the path tracer
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );

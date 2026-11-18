@@ -7,8 +7,11 @@ import { RenderToScreenNodeMaterial } from './materials/RenderToScreenMaterial.j
 import { getDebugBoundsFunction } from './nodes/debugBounds.wgsl.js';
 import { MegaKernelPathTracer } from './MegaKernelPathTracer.js';
 import { WaveFrontPathTracer } from './WaveFrontPathTracer.js';
+import { LightsInfoNode } from './LightsInfoNode.js';
+import { EquirectBackgroundInfo } from './EquirectBackgroundInfo.js';
 import { CubeToEquirectGenerator } from '../utils/CubeToEquirectGenerator.js';
 import { toHalfFloatArray } from '../utils/TextureUtils.js';
+import { FrameWatchdog } from '../utils/FrameWatchdog.js';
 import { PathtracerBVHComputeData } from './nodes/PathtracerBVHComputeData.js';
 import { AtlasDebugMaterial } from './materials/debug/AtlasDebugMaterial.js';
 import { SampleDensityMaterial } from './materials/debug/SampleDensityMaterial.js';
@@ -16,6 +19,7 @@ import { AuxDebugMaterial } from './materials/debug/AuxDebugMaterial.js';
 import { setCommonAttributes } from '../core/utils/GeometryPreparationUtils.js';
 import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GLTFShadingModel } from './shadingModels/GLTFShadingModel.js';
+import { expandByNearPlane } from './shims/nearPlaneBounds.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
@@ -28,11 +32,17 @@ import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
  * @property {number} min - Lowest sample count of any pixel.
  * @property {number} max - Highest sample count of any pixel.
  * @property {number} avg - Mean sample count across the image.
- * @property {number} samplesPerSecond - Mean samples accumulated per second since the last reset.
+ * @property {number} samplesPerSecond - Mean samples accumulated per second of render time since the last reset.
+ * @property {number} renderTime - Milliseconds spent rendering samples since the last reset.
+ * @property {number} elapsedTime - Milliseconds since rendering started after the last reset, including pauses but
+ *   not the time the page is hidden.
  */
 
 const _resolution = new Vector2();
 const _color = new Color();
+const _originBounds = /* @__PURE__ */ new Box3();
+const _originToWorld = /* @__PURE__ */ new Matrix4();
+const _rotationMatrix = /* @__PURE__ */ new Matrix4();
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -386,9 +396,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		counts.max = measured.max;
 		counts.avg = measured.avg;
 
-		// averaged over the whole render, and idle time counts against it
-		const elapsed = this.getRenderTime() / 1000;
-		counts.samplesPerSecond = elapsed > 0 ? counts.avg / elapsed : 0;
+		// averaged over the time spent rendering
+		counts.renderTime = this.getRenderTime();
+		counts.elapsedTime = Math.max( this._resetTime, 0 );
+		counts.samplesPerSecond = counts.renderTime > 0 ? 1000 * counts.avg / counts.renderTime : 0;
 
 		return { ...counts };
 
@@ -597,6 +608,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.maxSamples = maxSamples;
 		this._timingCount = 0;
 		this._pathTracer.setBVHData( this._bvhData );
+		this._pathTracer.setLightsInfo( this._lightsInfo );
+		this._pathTracer.setBackgroundInfo( this._backgroundInfo );
 		this._pathTracer.setShadingModel( this._shadingModel );
 		this._pathTracer.setRandom( this._random );
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
@@ -605,12 +618,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.setClamping( this._clampDirect, this._clampIndirect );
 		this._pathTracer.setAccumulateAux( Boolean( this._denoiser && this._denoiser.useAuxiliaryBuffers ) );
 		this.setCamera( this.camera );
-
-		// the new tracer has default environment and background maps so apply the cached scene textures
-		this._pathTracer.setEnvironment( this._environmentCache.texture );
-		this._pathTracer.setBackground( this._backgroundCache.texture );
-		this.updateEnvironment();
-		this.updateLights();
+		this.reset();
 
 	}
 
@@ -625,13 +633,38 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._renderer = renderer;
 		this._timer = new Timer();
 
+		// leaves out the time the page spends hidden
+		if ( typeof document !== 'undefined' ) {
+
+			this._timer.connect( document );
+
+		}
+
 		this._environmentCache = new TextureCache( renderer, 'environment' );
 		this._backgroundCache = new TextureCache( renderer, 'background' );
 
 		this._resetTime = - 1;
 		this._fadeState = 0;
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._size = new Vector2();
+
+		// the time spent rendering, and a watchdog that notices when the app stops calling "renderSample"
+		this._renderTime = 0;
+		this._renderedLastCall = false;
+		this._renderWatchdog = new FrameWatchdog( () => {
+
+			// count the last sample up to the frame it would have been followed by another call
+			this._timer.update();
+			if ( this._renderedLastCall ) {
+
+				this._renderTime += 1000 * this._timer.getDelta();
+
+			}
+
+			this._renderedLastCall = false;
+
+		} );
+
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
 
 		// adaptive frame budget and preview state
@@ -649,7 +682,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lowResTarget.type = FloatType;
 		this._lowResTarget.generateMipmaps = false;
 
+		// the lights, environment and background, which the backends sample
+		this._lightsInfo = new LightsInfoNode();
+		this._backgroundInfo = new EquirectBackgroundInfo();
+
 		this._pathTracer = new WaveFrontPathTracer( renderer );
+		this._pathTracer.setLightsInfo( this._lightsInfo );
+		this._pathTracer.setBackgroundInfo( this._backgroundInfo );
 
 		// optional post passes, attached with "setDenoiser" / "setUpscaler"
 		this._denoiser = null;
@@ -688,28 +727,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.fadeDuration = 250;
 
 		/**
-		 * Whether to render a low resolution preview while the camera is moving.
-		 * @type {boolean}
-		 * @default true
-		 */
-		this.dynamicLowRes = true;
-
-		/**
-		 * Resolution of the low resolution preview, as a fraction of the render size. Adjusted when
-		 * {@link WebGPUPathTracer#adaptiveDynamicRes} is set. The preview never has more pixels than a
-		 * frame of {@link WebGPUPathTracer#frameBudget} can render.
-		 * @type {number}
-		 * @default 0.1
-		 */
-		this.lowResScale = 0.1;
-
-		/**
-		 * Whether {@link WebGPUPathTracer#lowResScale} is adjusted to the pixels a frame of
+		 * Whether to render a low resolution preview while the camera is moving, sized to the pixels a frame of
 		 * {@link WebGPUPathTracer#frameBudget} can render.
 		 * @type {boolean}
 		 * @default true
 		 */
-		this.adaptiveDynamicRes = true;
+		this.dynamicLowRes = true;
 
 		/**
 		 * Whether {@link WebGPUPathTracer#frameBudget} is adjusted to keep each
@@ -734,6 +757,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 		 * @default 1
 		 */
 		this.renderScale = 1;
+
+		/**
+		 * Whether the render is interpolated when drawn to a canvas of a different size, such as with a
+		 * {@link WebGPUPathTracer#renderScale} below one or during the low resolution preview. Set to `false` to show
+		 * each rendered pixel as is. Not used by an upscaler.
+		 * @type {boolean}
+		 * @default true
+		 */
+		this.interpolateDisplay = true;
 
 		/**
 		 * Whether to track the canvas size automatically. Set to `false` to drive the render
@@ -1158,7 +1190,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Replaces the camera the rays are generated from. Cameras with a `getCameraRayFn`, such as
-	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation.
+	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation, and optionally
+	 * `getRayOriginBounds( box, boundsToWorld )`, the bounds of where their rays start in camera space.
 	 *
 	 * @param {Camera} camera
 	 */
@@ -1201,12 +1234,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 					}
 				`,
+				getRayOriginBounds: camera.isPerspectiveCamera || camera.isOrthographicCamera ? ( target, boundsToWorld ) => {
+
+					boundsToWorld.copy( camera.matrixWorld );
+					return expandByNearPlane( camera, target );
+
+				} : null,
 			};
 
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
+		this._updateCameraInVolume();
 		this._pathTracer.rebuild();
 		this.reset();
 
@@ -1229,6 +1269,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._updateCameraInVolume();
 		this.reset();
 
 	}
@@ -1242,6 +1283,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this.scene.updateMatrixWorld( true );
 		this._bvhData.updateTransforms();
+		this._updateCameraInVolume();
 		this.reset();
 
 	}
@@ -1258,7 +1300,43 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._updateCameraInVolume();
 		this.reset();
+
+	}
+
+	// Sets whether camera rays may start inside a volume, as in Cycles' "is_inside_volume"
+	_updateCameraInVolume() {
+
+		const { _cameraRayFnHandle, _bvhData, _shadingModel, _pathTracer, scene } = this;
+
+		// cameras without origin bounds always count as inside
+		const hasOriginBounds = Boolean( _cameraRayFnHandle.getRayOriginBounds );
+		if ( hasOriginBounds ) {
+
+			_cameraRayFnHandle.getRayOriginBounds( _originBounds.makeEmpty(), _originToWorld );
+
+		}
+
+		let cameraInVolume = false;
+		scene.traverse( child => {
+
+			if ( cameraInVolume || ! child.isMesh ) {
+
+				return;
+
+			}
+
+			const materials = Array.isArray( child.material ) ? child.material : [ child.material ];
+			if ( materials.some( material => _shadingModel.isVolumeMaterial( material ) ) ) {
+
+				cameraInVolume = ! hasOriginBounds || _bvhData.boxIntersectsMesh( _originBounds, _originToWorld, child );
+
+			}
+
+		} );
+
+		_pathTracer.cameraInVolume = cameraInVolume;
 
 	}
 
@@ -1269,37 +1347,39 @@ export class WebGPUPathTracer extends EventDispatcher {
 	updateEnvironment() {
 
 		const {
-			_pathTracer,
+			_lightsInfo,
+			_backgroundInfo,
 			scene,
 
 			_environmentCache,
 			_backgroundCache,
 		} = this;
 
-		// update the texture if they've changed
+		// update the texture if they've changed. The background info only owns its default map, which the first
+		// scene texture replaces
+		const { envInfo } = _lightsInfo;
 		if ( _environmentCache.setFromScene( scene ) ) {
 
-			_pathTracer.setEnvironment( _environmentCache.texture );
+			envInfo.updateFrom( _environmentCache.texture );
 
 		}
 
 		if ( _backgroundCache.setFromScene( scene ) ) {
 
-			_pathTracer.setBackground( _backgroundCache.texture );
+			_backgroundInfo.dispose();
+			_backgroundInfo.map = _backgroundCache.texture;
 
 		}
 
 		// update the params always since they're cheap
-		_pathTracer.setEnvironmentParams(
-			scene.environmentIntensity,
-			scene.environmentRotation,
-		);
+		_rotationMatrix.makeRotationFromEuler( scene.environmentRotation ).invert();
+		envInfo.rotationNode.value.setFromMatrix4( _rotationMatrix );
+		envInfo.intensityNode.value = scene.environmentIntensity;
 
-		_pathTracer.setBackgroundParams(
-			scene.backgroundIntensity,
-			scene.backgroundRotation,
-			scene.backgroundBlurriness,
-		);
+		_rotationMatrix.makeRotationFromEuler( scene.backgroundRotation ).invert();
+		_backgroundInfo.rotationNode.value.copy( _rotationMatrix );
+		_backgroundInfo.intensity = scene.backgroundIntensity;
+		_backgroundInfo.blur = scene.backgroundBlurriness;
 
 		this.reset();
 
@@ -1310,10 +1390,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	updateLights() {
 
-		const { _pathTracer, scene } = this;
+		const { _pathTracer, _lightsInfo, _renderer, scene } = this;
 
-		const lights = getLights( scene );
-		_pathTracer.setLights( lights );
+		// a new number of ies profiles changes the kernels
+		if ( _lightsInfo.updateFrom( _renderer, getLights( scene ) ) ) {
+
+			_pathTracer.rebuild();
+
+		}
+
 		this.reset();
 
 	}
@@ -1354,11 +1439,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.reset();
 		this._denoiser?.reset();
 		this._resetTime = - 1;
+		this._renderTime = 0;
+		this._renderedLastCall = false;
 		this._fadeState = 0;
 		this._timer.update();
 
 		// a fresh object rather than a clear, so measurements still in flight detach
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
 
@@ -1399,7 +1486,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} else {
 
-			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0 } );
+			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 } );
 
 		}
 
@@ -1512,12 +1599,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 			dynamicLowRes,
 			synchronizeRenderSize,
 			renderScale,
-			adaptiveDynamicRes,
 			minSamples,
 			maxSamples,
 		} = this;
 
 		timer.update();
+		this._renderWatchdog.markCalled();
 
 		if ( ! this._renderer._initialized ) {
 
@@ -1561,18 +1648,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const lowResMode = this._resetTime < renderDelay || ( firstFrame && dynamicLowRes && minSamples !== 0 );
 		if ( lowResMode ) {
 
-			// the most pixels a preview frame can render within the frame budget. Pixels past it are never
-			// reached by the wavefront in a preview
-			const budgetScale = Math.min( Math.sqrt( pathTracer.getPreviewPixelBudget() / ( width * height ) ), 1 );
-
-			if ( adaptiveDynamicRes ) {
-
-				this.lowResScale = budgetScale;
-
-			}
-
-			// checked every frame since the budget adapts separately
-			const scale = Math.min( this.lowResScale, budgetScale );
+			// the most pixels a preview frame can render within the frame budget, checked every frame since the budget
+			// adapts. Pixels past it are never reached by the wavefront in a preview
+			const scale = Math.min( Math.sqrt( pathTracer.getPreviewPixelBudget() / ( width * height ) ), 1 );
 			width = Math.max( 1, Math.floor( scale * width ) );
 			height = Math.max( 1, Math.floor( scale * height ) );
 
@@ -1598,6 +1676,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// update the samples, stopping once every pixel has reached "maxSamples"
 		const samplesComplete = maxSamples > 0 && this._lastSampleCounts.min >= maxSamples;
+		let rendered = false;
 		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
@@ -1605,8 +1684,18 @@ export class WebGPUPathTracer extends EventDispatcher {
 			pathTracer.update();
 			this._readTiming();
 			this._setStage( pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING );
+			rendered = this._stage === STAGE_RENDERING;
 
 		}
+
+		// count the time since a call that rendered samples
+		if ( this._renderedLastCall ) {
+
+			this._renderTime += delta;
+
+		}
+
+		this._renderedLastCall = rendered;
 
 		// nothing renders while the next scene's BVHs build or the kernels compile, so restart the preview timer and
 		// keep the last frame
@@ -1685,9 +1774,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			}
 
+			// the preview stays under the render until it fades in, and with no "minSamples" until every pixel has a sample
+			const previewNeeded = this._fadeState < 1 || ( minSamples === 0 && this._lastSampleCounts.min < 1 );
 			renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
 			blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
+			blitQuad.material.showPreview = dynamicLowRes && ! lowResMode && previewNeeded;
 			blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
+			blitQuad.material.nearest = ! this.interpolateDisplay;
 			blitQuad.material.fromTexture = lowResTarget;
 			blitQuad.material.texture = texture;
 			blitQuad.render( renderer );
@@ -1903,6 +1996,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser?.dispose();
 		this._upscaler?.dispose();
 		this._bvhData.dispose();
+		this._lightsInfo.dispose();
 		this._shadingModel.dispose();
 		this._environmentCache.dispose();
 		this._backgroundCache.dispose();
@@ -1925,16 +2019,18 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._timer.dispose();
+		this._renderWatchdog.dispose();
+
 	}
 
 	/**
-	 * Milliseconds elapsed since the last reset.
+	 * Milliseconds spent rendering samples since the last reset.
 	 * @returns {number}
 	 */
-	// TODO: this is not completely accurate if the user has not called "renderSample" continuously
 	getRenderTime() {
 
-		return this._resetTime;
+		return this._renderTime;
 
 	}
 

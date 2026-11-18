@@ -18,6 +18,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { LoaderElement } from './src/LoaderElement.js';
 import { WebGPUPathTracer, OIDNDenoiser } from 'three-gpu-pathtracer/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { initUNetFromURL } from 'oidn-webgpu';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
@@ -31,6 +32,7 @@ const CREDITS = 'Model courtesy of NASA/Caltech-JPL';
 const DESCRIPTION = window.matchMedia( '(dynamic-range: high)' ).matches ? 'HDR display supported' : 'HDR display not supported';
 
 const params = {
+	enable: true,
 	pause: false,
 	maxSamples: 16,
 	hdr: true,
@@ -65,6 +67,7 @@ async function init() {
 
 	// path tracer
 	pathTracer = new WebGPUPathTracer( renderer );
+	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.minSamples = 1;
 	pathTracer.renderScale = params.renderScale;
 	pathTracer.frameBudget = params.frameBudget;
@@ -144,27 +147,29 @@ async function init() {
 	scene.add( floorPlane );
 
 	// initialize the path tracer
-	pathTracer.setScene( scene, camera );
+	await pathTracer.setSceneAsync( scene, camera );
 
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );
 	loader.setPercentage( 1 );
 
 	const gui = new GUI();
-	gui.add( params, 'hdr' ).onChange( v => {
-
-		renderer.toneMapping = v ? NoToneMapping : ACESFilmicToneMapping;
-
-	} );
-	gui.add( params, 'pause' );
-	gui.add( params, 'maxSamples', 0, 500, 1 ).onChange( v => {
+	const ptFolder = gui.addFolder( 'Path Tracer' );
+	ptFolder.add( params, 'enable' );
+	ptFolder.add( params, 'pause' );
+	ptFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
 
 	} );
-	gui.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
+	ptFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
 		pathTracer.renderScale = v;
+
+	} );
+	gui.add( params, 'hdr' ).onChange( v => {
+
+		renderer.toneMapping = v ? NoToneMapping : ACESFilmicToneMapping;
 
 	} );
 	gui.add( params, 'environmentIntensity', 0, 30 ).onChange( v => {
@@ -234,8 +239,16 @@ function animate() {
 
 	requestAnimationFrame( animate );
 
-	// a paused render still takes its first sample
-	pathTracer.pause = params.pause && averageSamples >= 1;
-	pathTracer.renderSample();
+	if ( params.enable ) {
+
+		// a paused render still takes its first sample
+		pathTracer.pause = params.pause && averageSamples >= 1;
+		pathTracer.renderSample();
+
+	} else {
+
+		renderer.render( scene, camera );
+
+	}
 
 }
