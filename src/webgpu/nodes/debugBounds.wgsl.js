@@ -109,17 +109,17 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
 	// range hook: intersect the leaf triangles to track the nearest surface
 	const intersectRange = wgslTagFn/* wgsl */`
-		fn debugIntersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ debugBoundsResultStruct }> ) -> bool {
+		fn debugIntersectRange( ray: ${ rayStruct }, offset: u32, count: u32, indexOffset: u32, attributesOffset: u32, result: ptr<function, ${ debugBoundsResultStruct }> ) -> bool {
 
 			var didHit = false;
 			if ( ${ stopAtSurface } > 0.5 ) {
 
 				for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
-					let indices = ${ getTriangleIndices }( ti );
-					let a = ${ getVertexPosition }( indices.x );
-					let b = ${ getVertexPosition }( indices.y );
-					let c = ${ getVertexPosition }( indices.z );
+					let indices = ${ getTriangleIndices }( ti, indexOffset );
+					let a = ${ getVertexPosition }( indices.x, attributesOffset );
+					let b = ${ getVertexPosition }( indices.y, attributesOffset );
+					let c = ${ getVertexPosition }( indices.z, attributesOffset );
 
 					var triResult = ${ intersectsTriangle }( ray, a, b, c );
 					triResult.dist *= ${ rayScalar };
