@@ -239,7 +239,7 @@ export class EmissiveTrianglesInfo {
 
 		// TODO: read the packed geometry and object records with three-mesh-bvh's "readStorage" (three-mesh-bvh#996)
 		// instead of the storage buffers' CPU arrays, which won't exist once the data is GPU-resident
-		const { storage: bvhStorage, structs, bvh } = bvhData;
+		const { storage: bvhStorage, structs } = bvhData;
 		const geometryU32 = bvhStorage.geometry.proxyNode.value.array;
 		const geometryF32 = new Float32Array( geometryU32.buffer, geometryU32.byteOffset, geometryU32.length );
 		const recordsU32 = bvhStorage.objects.proxyNode.value.array;
@@ -255,16 +255,16 @@ export class EmissiveTrianglesInfo {
 		// Every triangle of each emissive object, in order so a hit triangle's place in the list follows from its
 		// object's first one: its object and triangle index, area, bounds and power for the tree. Triangles without
 		// area are kept, with no power
-		const objectSlots = bvhData._getTransformMap( bvh );
+		const allObjectInfo = bvhData.getAllObjectInfo();
 		const triangles = [];
 		const areas = [];
 		const bounds = [];
 		const powers = [];
-		const objects = new Uint32Array( objectSlots.size * 2 );
-		objectSlots.forEach( ( { object, instanceId, root, slot } ) => {
+		const objects = new Uint32Array( allObjectInfo.length * 2 );
+		allObjectInfo.forEach( ( { objectIndex, indexOffset, attributesOffset, primitiveOffset, primitiveCount } ) => {
 
 			// skip objects that are hidden or don't emit
-			const recordOffset = slot * recordLength;
+			const recordOffset = objectIndex * recordLength;
 			const material = shadingModel.materials[ recordsU32[ recordOffset + RECORD_MATERIAL_INDEX_WORD ] ];
 			if ( recordsU32[ recordOffset + RECORD_VISIBLE_WORD ] === 0 || ! material || ! material.emissive ) {
 
@@ -282,9 +282,8 @@ export class EmissiveTrianglesInfo {
 
 			// the object's first triangle in the list, plus one so zero means it doesn't emit, and its first triangle
 			// in its geometry's packed index, which triangle indices count from
-			const { indexOffset, attributesOffset, primitiveOffset, primitiveCount } = bvhData.getObjectInfo( object, instanceId, root );
-			objects[ slot * 2 ] = areas.length + 1;
-			objects[ slot * 2 + 1 ] = primitiveOffset;
+			objects[ objectIndex * 2 ] = areas.length + 1;
+			objects[ objectIndex * 2 + 1 ] = primitiveOffset;
 
 			_matrix.fromArray( recordsF32, recordOffset );
 			for ( let t = primitiveOffset; t < primitiveOffset + primitiveCount; t ++ ) {
@@ -303,7 +302,7 @@ export class EmissiveTrianglesInfo {
 					Math.max( _a.x, _b.x, _c.x ), Math.max( _a.y, _b.y, _c.y ), Math.max( _a.z, _b.z, _c.z ),
 				);
 				powers.push( area * luminance );
-				triangles.push( slot, t );
+				triangles.push( objectIndex, t );
 				areas.push( area );
 
 			}
