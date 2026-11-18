@@ -1,13 +1,20 @@
 import { texture, uniform } from 'three/tsl';
 import { Matrix4, Vector3, RGBAFormat, RGIntegerFormat, RGBAIntegerFormat, FloatType, UnsignedIntType } from 'three/webgpu';
+import { BVH } from 'three-mesh-bvh';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { getAttributeLayout } from 'three-mesh-bvh/src/webgpu/utils/packBVHBufferUtils.js';
 import { LinearDataTexture } from './LinearDataTexture.js';
 import { lightRecordStruct } from './nodes/structs.wgsl.js';
 import { EMISSIVE_TRIANGLE_LIGHT_TYPE } from './nodes/lights.wgsl.js';
+import { RECORD_VISIBLE_WORD, RECORD_MATERIAL_INDEX_WORD } from './nodes/PathtracerBVHComputeData.js';
 
-// where an object's visibility and material index sit in its transform, after its two matrices
-const TRANSFORM_VISIBLE_WORD = 32;
-const TRANSFORM_MATERIAL_WORD = 33;
+// three-mesh-bvh's packed node: 8 words, the bounds' min and max, then the right child's offset from the node or
+// the leaf's primitive offset, and the split axis or the leaf's primitive count and flag in two 16-bit halves
+const BVH_NODE_WORDS = 8;
+const BVH_LEAF_FLAG = 0xffff;
+
+// the bins each axis is split into when picking a light tree node's split
+const SPLIT_BIN_COUNT = 12;
 
 // The floats of a light tree node, two texels:
 // - its bounds' min and its power
@@ -25,6 +32,185 @@ const _c = /* @__PURE__ */ new Vector3();
 const _edge1 = /* @__PURE__ */ new Vector3();
 const _edge2 = /* @__PURE__ */ new Vector3();
 const _cross = /* @__PURE__ */ new Vector3();
+
+// per bin power, primitive count and bounds, and the same for the union of the bins from each one to the last
+const _binPower = /* @__PURE__ */ new Float32Array( SPLIT_BIN_COUNT );
+const _binCount = /* @__PURE__ */ new Uint32Array( SPLIT_BIN_COUNT );
+const _binBounds = /* @__PURE__ */ new Float32Array( SPLIT_BIN_COUNT * 6 );
+const _rightPower = /* @__PURE__ */ new Float32Array( SPLIT_BIN_COUNT );
+const _rightCount = /* @__PURE__ */ new Uint32Array( SPLIT_BIN_COUNT );
+const _rightBounds = /* @__PURE__ */ new Float32Array( SPLIT_BIN_COUNT * 6 );
+const _leftBounds = /* @__PURE__ */ new Float32Array( 6 );
+const _split = { axis: - 1, pos: 0 };
+
+function resetBounds( bounds, offset ) {
+
+	for ( let d = 0; d < 3; d ++ ) {
+
+		bounds[ offset + d ] = Infinity;
+		bounds[ offset + d + 3 ] = - Infinity;
+
+	}
+
+}
+
+function unionBounds( source, sourceOffset, target, targetOffset ) {
+
+	for ( let d = 0; d < 3; d ++ ) {
+
+		target[ targetOffset + d ] = Math.min( target[ targetOffset + d ], source[ sourceOffset + d ] );
+		target[ targetOffset + d + 3 ] = Math.max( target[ targetOffset + d + 3 ], source[ sourceOffset + d + 3 ] );
+
+	}
+
+}
+
+// half the surface area, which is all the split cost compares
+function getHalfSurfaceArea( bounds, offset ) {
+
+	const x = bounds[ offset + 3 ] - bounds[ offset ];
+	const y = bounds[ offset + 4 ] - bounds[ offset + 1 ];
+	const z = bounds[ offset + 5 ] - bounds[ offset + 2 ];
+	return x * y + y * z + z * x;
+
+}
+
+// The light tree over the emissive triangles, built by three-mesh-bvh with one triangle per leaf. Its primitive
+// buffer holds the triangle indices, reordered into leaf order by the build
+class LightTreeBVH extends BVH {
+
+	constructor( bounds, powers ) {
+
+		super();
+
+		const count = powers.length;
+		this.bounds = bounds;
+		this.powers = powers;
+		this.primitiveBuffer = new Uint32Array( count ).map( ( v, i ) => i );
+		this.primitiveBufferStride = 1;
+		this.init( {
+			strategy: ( ...args ) => this.splitByPower( ...args ),
+			targetLeafSize: 1,
+			_strictLeafSize: 1,
+			maxDepth: Infinity,
+			verbose: false,
+		} );
+
+	}
+
+	getRootRanges() {
+
+		return [ { offset: 0, count: this.powers.length } ];
+
+	}
+
+	writePrimitiveBounds( i, target, offset ) {
+
+		for ( let k = 0; k < 6; k ++ ) {
+
+			target[ offset + k ] = this.bounds[ i * 6 + k ];
+
+		}
+
+	}
+
+	// Splits a node where the sum of each child's power times its surface area is least: a surface area heuristic
+	// weighted by power, like pbrt-v4's light BVH without its emission cones. The node is split in half when its
+	// triangles' centers don't spread
+	splitByPower( nodeBounds, centroidBounds, primitiveBounds, offset, count ) {
+
+		const { primitiveBuffer, powers } = this;
+		const boundsOffset = primitiveBounds.offset || 0;
+		let bestCost = Infinity;
+		_split.axis = - 1;
+		_split.pos = 0;
+
+		for ( let axis = 0; axis < 3; axis ++ ) {
+
+			const min = centroidBounds[ axis ];
+			const width = centroidBounds[ axis + 3 ] - min;
+			if ( ! ( width > 0 ) ) {
+
+				continue;
+
+			}
+
+			// bin the triangles by their centers
+			_binPower.fill( 0 );
+			_binCount.fill( 0 );
+			for ( let b = 0; b < SPLIT_BIN_COUNT; b ++ ) {
+
+				resetBounds( _binBounds, b * 6 );
+
+			}
+
+			for ( let i = offset, end = offset + count; i < end; i ++ ) {
+
+				const base = ( i - boundsOffset ) * 6;
+				const center = primitiveBounds[ base + axis * 2 ];
+				const bin = Math.min( Math.floor( ( center - min ) / width * SPLIT_BIN_COUNT ), SPLIT_BIN_COUNT - 1 );
+				_binPower[ bin ] += powers[ primitiveBuffer[ i ] ];
+				_binCount[ bin ] ++;
+
+				// the primitive bounds are stored as a center and half extent per axis
+				for ( let d = 0; d < 3; d ++ ) {
+
+					const c = primitiveBounds[ base + d * 2 ];
+					const h = primitiveBounds[ base + d * 2 + 1 ];
+					_binBounds[ bin * 6 + d ] = Math.min( _binBounds[ bin * 6 + d ], c - h );
+					_binBounds[ bin * 6 + d + 3 ] = Math.max( _binBounds[ bin * 6 + d + 3 ], c + h );
+
+				}
+
+			}
+
+			// accumulate the bins from the last one down
+			resetBounds( _rightBounds, ( SPLIT_BIN_COUNT - 1 ) * 6 );
+			unionBounds( _binBounds, ( SPLIT_BIN_COUNT - 1 ) * 6, _rightBounds, ( SPLIT_BIN_COUNT - 1 ) * 6 );
+			_rightPower[ SPLIT_BIN_COUNT - 1 ] = _binPower[ SPLIT_BIN_COUNT - 1 ];
+			_rightCount[ SPLIT_BIN_COUNT - 1 ] = _binCount[ SPLIT_BIN_COUNT - 1 ];
+			for ( let b = SPLIT_BIN_COUNT - 2; b >= 0; b -- ) {
+
+				_rightBounds.copyWithin( b * 6, ( b + 1 ) * 6, ( b + 2 ) * 6 );
+				unionBounds( _binBounds, b * 6, _rightBounds, b * 6 );
+				_rightPower[ b ] = _rightPower[ b + 1 ] + _binPower[ b ];
+				_rightCount[ b ] = _rightCount[ b + 1 ] + _binCount[ b ];
+
+			}
+
+			// test a split before each bin, keeping both sides non-empty
+			let leftPower = 0;
+			let leftCount = 0;
+			resetBounds( _leftBounds, 0 );
+			for ( let b = 1; b < SPLIT_BIN_COUNT; b ++ ) {
+
+				unionBounds( _binBounds, ( b - 1 ) * 6, _leftBounds, 0 );
+				leftPower += _binPower[ b - 1 ];
+				leftCount += _binCount[ b - 1 ];
+				if ( leftCount === 0 || _rightCount[ b ] === 0 ) {
+
+					continue;
+
+				}
+
+				const cost = leftPower * getHalfSurfaceArea( _leftBounds, 0 ) + _rightPower[ b ] * getHalfSurfaceArea( _rightBounds, b * 6 );
+				if ( cost < bestCost ) {
+
+					bestCost = cost;
+					_split.axis = axis;
+					_split.pos = min + width * b / SPLIT_BIN_COUNT;
+
+				}
+
+			}
+
+		}
+
+		return _split;
+
+	}
+
+}
 
 // The scene's emissive triangles, sampled as a light. A light tree picks a triangle for a point: each node holds
 // the bounds and total power of the triangles under it, and the walk from the root picks each child by its power
@@ -51,32 +237,36 @@ export class EmissiveTrianglesInfo {
 	// transforms change
 	update( bvhData, shadingModel ) {
 
-		// TODO: read the packed geometry and object records with three-mesh-bvh's async read function
-		// (three-mesh-bvh#996) instead of the storage buffers' CPU arrays, which won't exist once the data is GPU-resident
-		const { storage: bvhStorage, structs, triangleRanges } = bvhData;
-		const index = bvhStorage.index.proxyNode.value.array;
-		const attributes = new Float32Array( bvhStorage.attributes.proxyNode.value.array.buffer );
-		const transformsU32 = bvhStorage.transforms.proxyNode.value.array;
-		const transformsF32 = new Float32Array( transformsU32.buffer, transformsU32.byteOffset, transformsU32.length );
+		// TODO: read the packed geometry and object records with three-mesh-bvh's "readStorage" (three-mesh-bvh#996)
+		// instead of the storage buffers' CPU arrays, which won't exist once the data is GPU-resident
+		const { storage: bvhStorage, structs, bvh } = bvhData;
+		const geometryU32 = bvhStorage.geometry.proxyNode.value.array;
+		const geometryF32 = new Float32Array( geometryU32.buffer, geometryU32.byteOffset, geometryU32.length );
+		const recordsU32 = bvhStorage.objects.proxyNode.value.array;
+		const recordsF32 = new Float32Array( recordsU32.buffer, recordsU32.byteOffset, recordsU32.length );
+		const recordLength = structs.objectRecord.getLength();
 
-		// each vertex attribute is a vec4f
-		const attributeStride = structs.attributes.getLength();
-		const positionOffset = structs.attributes.membersLayout.findIndex( ( { name } ) => name === 'position' ) * 4;
-		const transformStride = structs.transform.getLength();
+		// the packed vertex stride and where the position sits in it, in words
+		// TODO: three-mesh-bvh doesn't expose its packed attribute layout, so this reads its internal one
+		const attributeLayout = getAttributeLayout( bvhData.attributes );
+		const attributeStride = attributeLayout.stride;
+		const positionOffset = attributeLayout.members.find( ( { name } ) => name === 'position' ).offset;
 
 		// Every triangle of each emissive object, in order so a hit triangle's place in the list follows from its
-		// object's first one: its object and triangle index, area, and its leaf node for the tree. Triangles without
+		// object's first one: its object and triangle index, area, bounds and power for the tree. Triangles without
 		// area are kept, with no power
+		const objectSlots = bvhData._getTransformMap( bvh );
 		const triangles = [];
 		const areas = [];
-		const leafNodes = [];
-		const objects = new Uint32Array( triangleRanges.length * 2 );
-		triangleRanges.forEach( ( { offset, count }, objectIndex ) => {
+		const bounds = [];
+		const powers = [];
+		const objects = new Uint32Array( objectSlots.size * 2 );
+		objectSlots.forEach( ( { object, instanceId, root, slot } ) => {
 
 			// skip objects that are hidden or don't emit
-			const slot = objectIndex * transformStride;
-			const material = shadingModel.materials[ transformsU32[ slot + TRANSFORM_MATERIAL_WORD ] ];
-			if ( transformsU32[ slot + TRANSFORM_VISIBLE_WORD ] === 0 || ! material || ! material.emissive ) {
+			const recordOffset = slot * recordLength;
+			const material = shadingModel.materials[ recordsU32[ recordOffset + RECORD_MATERIAL_INDEX_WORD ] ];
+			if ( recordsU32[ recordOffset + RECORD_VISIBLE_WORD ] === 0 || ! material || ! material.emissive ) {
 
 				return;
 
@@ -90,26 +280,30 @@ export class EmissiveTrianglesInfo {
 
 			}
 
-			// the object's first triangle in the list, plus one so zero means it doesn't emit
-			objects[ objectIndex * 2 ] = areas.length + 1;
-			objects[ objectIndex * 2 + 1 ] = offset;
+			// the object's first triangle in the list, plus one so zero means it doesn't emit, and its first triangle
+			// in its geometry's packed index, which triangle indices count from
+			const { indexOffset, attributesOffset, primitiveOffset, primitiveCount } = bvhData.getObjectInfo( object, instanceId, root );
+			objects[ slot * 2 ] = areas.length + 1;
+			objects[ slot * 2 + 1 ] = primitiveOffset;
 
-			_matrix.fromArray( transformsF32, slot );
-			for ( let t = offset; t < offset + count; t ++ ) {
+			_matrix.fromArray( recordsF32, recordOffset );
+			for ( let t = primitiveOffset; t < primitiveOffset + primitiveCount; t ++ ) {
 
-				_a.fromArray( attributes, index[ t * 3 ] * attributeStride + positionOffset ).applyMatrix4( _matrix );
-				_b.fromArray( attributes, index[ t * 3 + 1 ] * attributeStride + positionOffset ).applyMatrix4( _matrix );
-				_c.fromArray( attributes, index[ t * 3 + 2 ] * attributeStride + positionOffset ).applyMatrix4( _matrix );
+				const i0 = geometryU32[ indexOffset + t * 3 ];
+				const i1 = geometryU32[ indexOffset + t * 3 + 1 ];
+				const i2 = geometryU32[ indexOffset + t * 3 + 2 ];
+				_a.fromArray( geometryF32, attributesOffset + i0 * attributeStride + positionOffset ).applyMatrix4( _matrix );
+				_b.fromArray( geometryF32, attributesOffset + i1 * attributeStride + positionOffset ).applyMatrix4( _matrix );
+				_c.fromArray( geometryF32, attributesOffset + i2 * attributeStride + positionOffset ).applyMatrix4( _matrix );
 				_cross.crossVectors( _edge1.subVectors( _b, _a ), _edge2.subVectors( _c, _a ) );
 				const area = 0.5 * _cross.length();
 
-				// the triangle's leaf node, in the node layout
-				const triangleIndex = areas.length;
-				leafNodes.push(
-					Math.min( _a.x, _b.x, _c.x ), Math.min( _a.y, _b.y, _c.y ), Math.min( _a.z, _b.z, _c.z ), area * luminance,
-					Math.max( _a.x, _b.x, _c.x ), Math.max( _a.y, _b.y, _c.y ), Math.max( _a.z, _b.z, _c.z ), - ( triangleIndex + 1 ),
+				bounds.push(
+					Math.min( _a.x, _b.x, _c.x ), Math.min( _a.y, _b.y, _c.y ), Math.min( _a.z, _b.z, _c.z ),
+					Math.max( _a.x, _b.x, _c.x ), Math.max( _a.y, _b.y, _c.y ), Math.max( _a.z, _b.z, _c.z ),
 				);
-				triangles.push( objectIndex, t );
+				powers.push( area * luminance );
+				triangles.push( slot, t );
 				areas.push( area );
 
 			}
@@ -117,7 +311,7 @@ export class EmissiveTrianglesInfo {
 		} );
 
 		const count = areas.length;
-		const { nodes, leafIndices } = this._buildTree( count, new Float32Array( leafNodes ) );
+		const { nodes, leafIndices } = this._buildTree( new Float32Array( bounds ), new Float32Array( powers ) );
 
 		// each triangle's object index, triangle index, leaf node and area bits
 		const triangleData = new Uint32Array( Math.max( count, 1 ) * 4 );
@@ -142,109 +336,54 @@ export class EmissiveTrianglesInfo {
 
 	}
 
-	// Builds the light tree over the triangles' leaf nodes, splitting each node at the middle of its triangles'
-	// centers along their widest axis. Returns the nodes and each triangle's leaf node index
-	// TODO: this split matches three-mesh-bvh's CENTER strategy, so the tree can be built with its BVH now, summing
-	// each node's power in a pass afterward. A power weighted split needs a custom split strategy (three-mesh-bvh#987),
-	// and packing and walking the tree with BVHComputeData instead of this class needs per-node data (three-mesh-bvh#988)
-	_buildTree( count, leafNodes ) {
+	// Builds the light tree over the triangles' bounds and powers with three-mesh-bvh, then writes its nodes in this
+	// class's layout, in the same depth first order. Returns the nodes and each triangle's leaf node index
+	// TODO: packing and walking the tree with BVHComputeData instead of this class needs per-node data (three-mesh-bvh#988)
+	_buildTree( bounds, powers ) {
 
+		const count = powers.length;
 		const nodes = new Float32Array( Math.max( 2 * count - 1, 1 ) * NODE_FLOATS );
 		const leafIndices = new Uint32Array( count );
-		const order = new Uint32Array( count );
-		for ( let i = 0; i < count; i ++ ) {
+		if ( count === 0 ) {
 
-			order[ i ] = i;
+			return { nodes, leafIndices };
 
 		}
 
-		const center = ( i, axis ) => leafNodes[ i * NODE_FLOATS + axis ] + leafNodes[ i * NODE_FLOATS + 4 + axis ];
+		const tree = new LightTreeBVH( bounds, powers );
+		const root = tree._roots[ 0 ];
+		const rootF32 = new Float32Array( root );
+		const rootU32 = new Uint32Array( root );
+		const rootU16 = new Uint16Array( root );
 
-		let nodeCount = 0;
-		const build = ( start, end ) => {
+		// children follow their parent, so walking the nodes backward sums each node's power from its children
+		for ( let node = root.byteLength / 4 / BVH_NODE_WORDS - 1; node >= 0; node -- ) {
 
-			const node = nodeCount ++;
+			const node32 = node * BVH_NODE_WORDS;
 			const base = node * NODE_FLOATS;
-
-			if ( end - start === 1 ) {
-
-				const i = order[ start ];
-				nodes.set( leafNodes.subarray( i * NODE_FLOATS, ( i + 1 ) * NODE_FLOATS ), base );
-				leafIndices[ i ] = node;
-				return;
-
-			}
-
-			// the widest axis of the triangles' centers, and its middle
-			let axis = 0;
-			let middle = 0;
-			let widest = - 1;
-			for ( let a = 0; a < 3; a ++ ) {
-
-				let min = Infinity;
-				let max = - Infinity;
-				for ( let j = start; j < end; j ++ ) {
-
-					const c = center( order[ j ], a );
-					min = Math.min( min, c );
-					max = Math.max( max, c );
-
-				}
-
-				if ( max - min > widest ) {
-
-					widest = max - min;
-					axis = a;
-					middle = ( min + max ) / 2;
-
-				}
-
-			}
-
-			// move the triangles below the middle first, splitting in half when they're all on one side
-			let split = start;
-			for ( let j = start; j < end; j ++ ) {
-
-				if ( center( order[ j ], axis ) < middle ) {
-
-					const swap = order[ j ];
-					order[ j ] = order[ split ];
-					order[ split ] = swap;
-					split ++;
-
-				}
-
-			}
-
-			if ( split === start || split === end ) {
-
-				split = ( start + end ) >> 1;
-
-			}
-
-			// the first child follows its node
-			build( start, split );
-			const second = nodeCount;
-			build( split, end );
-
-			// the node holds both children: their bounds and total power
-			const firstBase = base + NODE_FLOATS;
-			const secondBase = second * NODE_FLOATS;
 			for ( let k = 0; k < 3; k ++ ) {
 
-				nodes[ base + k ] = Math.min( nodes[ firstBase + k ], nodes[ secondBase + k ] );
-				nodes[ base + 4 + k ] = Math.max( nodes[ firstBase + 4 + k ], nodes[ secondBase + 4 + k ] );
+				nodes[ base + k ] = rootF32[ node32 + k ];
+				nodes[ base + 4 + k ] = rootF32[ node32 + 3 + k ];
 
 			}
 
-			nodes[ base + 3 ] = nodes[ firstBase + 3 ] + nodes[ secondBase + 3 ];
-			nodes[ base + 7 ] = second;
+			if ( rootU16[ node32 * 2 + 15 ] === BVH_LEAF_FLAG ) {
 
-		};
+				// a leaf holds one triangle
+				const triangleIndex = tree.primitiveBuffer[ rootU32[ node32 + 6 ] ];
+				nodes[ base + 3 ] = powers[ triangleIndex ];
+				nodes[ base + 7 ] = - ( triangleIndex + 1 );
+				leafIndices[ triangleIndex ] = node;
 
-		if ( count > 0 ) {
+			} else {
 
-			build( 0, count );
+				// the first child follows its node
+				const second = node + rootU32[ node32 + 6 ];
+				nodes[ base + 3 ] = nodes[ base + NODE_FLOATS + 3 ] + nodes[ second * NODE_FLOATS + 3 ];
+				nodes[ base + 7 ] = second;
+
+			}
 
 		}
 
@@ -256,9 +395,10 @@ export class EmissiveTrianglesInfo {
 
 		const { treeTextureNode, trianglesTextureNode, objectsTextureNode, countNode } = this;
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
-		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
-		const indexStorage = contextProxy( 'bvhData.storage.index' );
-		const attributesStorage = contextProxy( 'bvhData.storage.attributes' );
+		const objectsStorage = contextProxy( 'bvhData.storage.objects' );
+		const getTriangleIndices = contextProxyFn( 'bvhData.fns.getTriangleIndices' );
+		const getVertexPosition = contextProxyFn( 'bvhData.fns.getVertexPosition' );
+		const getVertex = contextProxyFn( 'bvhData.fns.getVertex' );
 		const getUvFromChannel = contextProxyFn( 'bvhData.fns.getUvFromChannel' );
 		const sampleTexel = contextProxyFn( 'shadingModel.fns.sampleTexel' );
 
@@ -367,15 +507,13 @@ export class EmissiveTrianglesInfo {
 				let objectIndex = triangleInfo.x;
 				let triangleIndex = triangleInfo.y;
 				let area = bitcast<f32>( triangleInfo.w );
-				let objectInfo = &${ transformsStorage }[ objectIndex ];
+				let objectInfo = &${ objectsStorage }[ objectIndex ];
 				let materialInfo = &${ materialsStorage }[ objectInfo.materialIndex ];
 
-				let i0 = ${ indexStorage }[ triangleIndex * 3u ];
-				let i1 = ${ indexStorage }[ triangleIndex * 3u + 1u ];
-				let i2 = ${ indexStorage }[ triangleIndex * 3u + 2u ];
-				let p0 = ( objectInfo.matrixWorld * vec4f( ${ attributesStorage }[ i0 ].position.xyz, 1.0 ) ).xyz;
-				let p1 = ( objectInfo.matrixWorld * vec4f( ${ attributesStorage }[ i1 ].position.xyz, 1.0 ) ).xyz;
-				let p2 = ( objectInfo.matrixWorld * vec4f( ${ attributesStorage }[ i2 ].position.xyz, 1.0 ) ).xyz;
+				let indices = ${ getTriangleIndices }( triangleIndex, objectInfo.indexOffset );
+				let p0 = ( objectInfo.matrixWorld * vec4f( ${ getVertexPosition }( indices.x, objectInfo.attributesOffset ), 1.0 ) ).xyz;
+				let p1 = ( objectInfo.matrixWorld * vec4f( ${ getVertexPosition }( indices.y, objectInfo.attributesOffset ), 1.0 ) ).xyz;
+				let p2 = ( objectInfo.matrixWorld * vec4f( ${ getVertexPosition }( indices.z, objectInfo.attributesOffset ), 1.0 ) ).xyz;
 
 				// a random point, uniform over the triangle's area
 				let su = sqrt( ruv.y );
@@ -402,9 +540,9 @@ export class EmissiveTrianglesInfo {
 				var emission = materialInfo.emissiveIntensity * materialInfo.emissive;
 				if ( materialInfo.emissiveMap != - 1 ) {
 
-					let uv0 = ${ getUvFromChannel }( ${ attributesStorage }[ i0 ], materialInfo.emissiveMap );
-					let uv1 = ${ getUvFromChannel }( ${ attributesStorage }[ i1 ], materialInfo.emissiveMap );
-					let uv2 = ${ getUvFromChannel }( ${ attributesStorage }[ i2 ], materialInfo.emissiveMap );
+					let uv0 = ${ getUvFromChannel }( ${ getVertex }( indices.x, objectInfo.attributesOffset ), materialInfo.emissiveMap );
+					let uv1 = ${ getUvFromChannel }( ${ getVertex }( indices.y, objectInfo.attributesOffset ), materialInfo.emissiveMap );
+					let uv2 = ${ getUvFromChannel }( ${ getVertex }( indices.z, objectInfo.attributesOffset ), materialInfo.emissiveMap );
 					let uv = b0 * uv0 + b1 * uv1 + b2 * uv2;
 					let uvPrime = materialInfo.emissiveMapTransform * vec3f( uv, 1.0 );
 					emission *= ${ sampleTexel }( uvPrime.xy, materialInfo.emissiveMap, 0.0 ).rgb;
