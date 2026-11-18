@@ -1,6 +1,6 @@
 import { Matrix4, StructTypeNode } from 'three/webgpu';
 import { uniform, uint, float } from 'three/tsl';
-import { wgslTagFn, ndcToCameraRay, rayStruct, bvhNodeBoundsStruct, bvhNodeStruct, intersectsTriangle } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, ndcToCameraRay, rayStruct, bvhNodeBoundsStruct, bvhNodeStruct, intersectRayTriangle } from 'three-mesh-bvh/webgpu';
 
 // blue -> cyan -> green -> yellow -> red heat ramp shared by the debug visualizations
 export const heatColorFn = wgslTagFn/* wgsl */`
@@ -121,7 +121,7 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 					let b = ${ getVertexPosition }( indices.y, attributesOffset );
 					let c = ${ getVertexPosition }( indices.z, attributesOffset );
 
-					var triResult = ${ intersectsTriangle }( ray, a, b, c );
+					var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 					triResult.dist *= ${ rayScalar };
 					if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
