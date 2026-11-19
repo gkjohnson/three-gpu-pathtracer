@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "renderTime" and "elapsedTime" in the sample counts, the milliseconds spent rendering and the milliseconds since rendering started.
 
 ### Changed
+- WebGPUPathTracer: A camera's "getCameraRay" function takes the pixel and a [0, 1) random sample for the point within it, "( pixel, sample, resolution, ray )", in place of the jittered uv, so a camera knows exactly which pixel it renders.
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
 - WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
 - WebGPUPathTracer: "setSize" updates the camera, so camera ray functions that depend on the render size follow it.

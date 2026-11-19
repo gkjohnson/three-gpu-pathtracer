@@ -176,13 +176,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
 				${ rngInit }( globalSeed, indexUV.xy, sampleIndex, 0 );
 
 				// scene ray
-				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
 				var ray: ${ rayStruct };
-				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+				if ( ! ${ getCameraRayFn }( indexUV, ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ), vec2f( targetDimensions ), &ray ) ) {
 
 					// a declined pixel never takes a sample, so with a cap it counts as finished
 					if ( maxSamples != 0u ) {

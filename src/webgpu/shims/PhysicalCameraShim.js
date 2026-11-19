@@ -93,9 +93,10 @@ PhysicalCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	const anamorphicRatio = uniform( 1 );
 
 	const fn = wgslTagFn/* wgsl */`
-		fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
+		fn getCameraRay( pixel: vec2u, sample: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
 			// base ray
+			let uv = ( vec2f( pixel ) + sample ) / resolution;
 			let ndc = uv * 2.0 - vec2f( 1.0 );
 			*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
 
