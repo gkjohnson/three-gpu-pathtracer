@@ -218,7 +218,6 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	interpolateDisplay: boolean;
 	synchronizeRenderSize: boolean;
 	renderToCanvas: boolean;
-	asyncCompile: boolean;
 	generateMissingAttributes: boolean;
 	commonAttributes: Array<string>;
 	stableNoise: boolean;
