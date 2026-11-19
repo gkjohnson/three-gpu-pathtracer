@@ -2,7 +2,6 @@ import { texture, uniform } from 'three/tsl';
 import { Matrix4, Vector3, RGBAFormat, RGIntegerFormat, RGBAIntegerFormat, FloatType, UnsignedIntType } from 'three/webgpu';
 import { BVH } from 'three-mesh-bvh';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
-import { getAttributeLayout } from 'three-mesh-bvh/src/webgpu/utils/packBVHBufferUtils.js';
 import { LinearDataTexture } from './LinearDataTexture.js';
 import { lightRecordStruct } from './nodes/structs.wgsl.js';
 import { EMISSIVE_TRIANGLE_LIGHT_TYPE } from './nodes/lights.wgsl.js';
@@ -237,8 +236,6 @@ export class EmissiveTrianglesInfo {
 	// transforms change
 	update( bvhData, shadingModel ) {
 
-		// TODO: read the packed geometry and object records with three-mesh-bvh's "readStorage" (three-mesh-bvh#996)
-		// instead of the storage buffers' CPU arrays, which won't exist once the data is GPU-resident
 		const { storage: bvhStorage, structs } = bvhData;
 		const geometryU32 = bvhStorage.geometry.proxyNode.value.array;
 		const geometryF32 = new Float32Array( geometryU32.buffer, geometryU32.byteOffset, geometryU32.length );
@@ -247,8 +244,7 @@ export class EmissiveTrianglesInfo {
 		const recordLength = structs.objectRecord.getLength();
 
 		// the packed vertex stride and where the position sits in it, in words
-		// TODO: three-mesh-bvh doesn't expose its packed attribute layout, so this reads its internal one
-		const attributeLayout = getAttributeLayout( bvhData.attributes );
+		const { attributeLayout } = bvhData;
 		const attributeStride = attributeLayout.stride;
 		const positionOffset = attributeLayout.members.find( ( { name } ) => name === 'position' ).offset;
 
