@@ -105,9 +105,7 @@ export class CameraRayKernel extends ComputeKernel {
 
 					${ rngInit }( globalSeed, indexUV, samples, 0 );
 
-					let uv = vec2f( indexUV ) / vec2f( targetDimensions );
-					let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
-					if ( ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+					if ( ${ getCameraRayFn }( indexUV, ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ), vec2f( targetDimensions ), &ray ) ) {
 
 						hasPixel = true;
 						break;

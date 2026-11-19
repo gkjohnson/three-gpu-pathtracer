@@ -1184,6 +1184,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 * Replaces the camera the rays are generated from. Cameras with a `getCameraRayFn`, such as
 	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation, and optionally
 	 * `getRayOriginBounds( box, boundsToWorld )`, the bounds of where their rays start in camera space.
+	 * Its WGSL `getCameraRay( pixel: vec2u, sample: vec2f, resolution: vec2f, ray ) -> bool` receives the
+	 * pixel to render and a `[ 0, 1 )` random sample for the point within it, and returns false to skip
+	 * the pixel.
 	 *
 	 * @param {Camera} camera
 	 */
@@ -1217,8 +1220,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				},
 				fn: wgslTagFn/* wgsl */`
-					fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
+					fn getCameraRay( pixel: vec2u, sample: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
+						let uv = ( vec2f( pixel ) + sample ) / resolution;
 						let ndc = uv * 2.0 - vec2f( 1.0 );
 						*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
 						return true;
