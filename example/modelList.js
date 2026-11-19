@@ -1,5 +1,4 @@
-import { Box3, Color, CylinderGeometry, DirectionalLight, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, Vector3 } from 'three';
-import { ShapedAreaLight } from 'three-gpu-pathtracer';
+import { Box3, Color, CylinderGeometry, DirectionalLight, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, RectAreaLight, Sphere, Vector3 } from 'three';
 import { FogVolumeNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
@@ -89,120 +88,6 @@ function mecaBricksGoldCorrection( model ) {
 			}
 
 		}
-
-	} );
-
-}
-
-// Replaces flat emissive quads with equivalent RectAreaLights so they can be importance
-// sampled. Curved emitters are left as emissive geometry.
-// TODO: sample a CDF over emissive triangles so all emissive surfaces can be importance sampled
-export function convertEmissivePlanesToLights( model ) {
-
-	const FLAT_RATIO = 1e-3;
-	const size = new Vector3();
-	const center = new Vector3();
-	const position = new Vector3();
-	const quaternion = new Quaternion();
-	const scale = new Vector3();
-	const alignment = new Quaternion();
-	const axis = new Vector3();
-	const normal = new Vector3();
-	const emitDirection = new Vector3();
-
-	model.updateMatrixWorld( true );
-
-	const meshes = [];
-	model.traverse( c => {
-
-		if ( c.isMesh && c.material.emissiveIntensity > 0 && c.material.emissive.getHex() !== 0 ) {
-
-			meshes.push( c );
-
-		}
-
-	} );
-
-	meshes.forEach( mesh => {
-
-		// only a flat mesh can be represented by a rect area light, and its dimensions are taken
-		// from the bounding box so the mesh is assumed to fill it
-		const geometry = mesh.geometry;
-		geometry.computeBoundingBox();
-		geometry.boundingBox.getSize( size );
-		geometry.boundingBox.getCenter( center );
-
-		const maxDim = Math.max( size.x, size.y, size.z );
-		const flatAxis =
-			size.x < FLAT_RATIO * maxDim ? 'x' :
-				size.y < FLAT_RATIO * maxDim ? 'y' :
-					size.z < FLAT_RATIO * maxDim ? 'z' : null;
-		if ( flatAxis === null ) {
-
-			return;
-
-		}
-
-		position.copy( center ).applyMatrix4( mesh.matrixWorld );
-		mesh.matrixWorld.decompose( new Vector3(), quaternion, scale );
-
-		// orient the light plane ( local XY ) onto the flat axis
-		let width, height;
-		if ( flatAxis === 'x' ) {
-
-			alignment.setFromAxisAngle( axis.set( 0, 1, 0 ), Math.PI / 2 );
-			width = size.z * Math.abs( scale.z );
-			height = size.y * Math.abs( scale.y );
-
-		} else if ( flatAxis === 'y' ) {
-
-			alignment.setFromAxisAngle( axis.set( 1, 0, 0 ), Math.PI / 2 );
-			width = size.x * Math.abs( scale.x );
-			height = size.z * Math.abs( scale.z );
-
-		} else {
-
-			alignment.identity();
-			width = size.x * Math.abs( scale.x );
-			height = size.y * Math.abs( scale.y );
-
-		}
-
-		// emitters are single sided, emitting along the quad normal
-		const material = mesh.material;
-		const isCircular = /_disk_emission$/.test( material.name );
-		let light;
-		if ( isCircular ) {
-
-			light = new ShapedAreaLight( material.emissive, material.emissiveIntensity, width, height );
-			light.isCircular = true;
-
-		} else {
-
-			// use a rect area light so the three.js rasterization path works
-			light = new RectAreaLight( material.emissive, material.emissiveIntensity, width, height );
-
-		}
-
-		light.position.copy( position );
-		light.quaternion.copy( quaternion ).multiply( alignment );
-
-		// flip the light if it emits away from the quad's normal
-		const normalAttr = geometry.attributes.normal;
-		if ( normalAttr ) {
-
-			normal.fromBufferAttribute( normalAttr, 0 );
-			emitDirection.set( 0, 0, - 1 ).applyQuaternion( alignment );
-			if ( emitDirection.dot( normal ) < 0 ) {
-
-				light.quaternion.multiply( alignment.setFromAxisAngle( axis.set( 1, 0, 0 ), Math.PI ) );
-
-			}
-
-		}
-
-		model.add( light );
-		mesh.removeFromParent();
 
 	} );
 
@@ -369,7 +254,6 @@ export const MODEL_LIST = {
 		background: 'black',
 		bokehSize: 10,
 		focusDistance: 0.55,
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'Monster Under The Bed': {
@@ -475,8 +359,6 @@ export const MODEL_LIST = {
 		// aperture refit from the source scene's f/6 at 35mm to the normalized model scale
 		bokehSize: 1,
 		focusDistance: 0.74,
-
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'Dodge Challenger': {
@@ -525,7 +407,6 @@ export const MODEL_LIST = {
 		credit: 'Model by "SlykDrako", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
 		rotation: [ 0, 0, 0 ],
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'The Breakfast Room': {
@@ -533,7 +414,6 @@ export const MODEL_LIST = {
 		credit: 'Model by "Wig42", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
 		rotation: [ 0, 0, 0 ],
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'Contemporary Bathroom': {
@@ -541,7 +421,6 @@ export const MODEL_LIST = {
 		credit: 'Model by "Mareck", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
 		rotation: [ 0, 0, 0 ],
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'Country Kitchen': {
@@ -549,7 +428,6 @@ export const MODEL_LIST = {
 		credit: 'Model by "Jay-Artist", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
 		rotation: [ 0, 0, 0 ],
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'The Grey & White Room': {
@@ -557,7 +435,6 @@ export const MODEL_LIST = {
 		credit: 'Model by "Wig42", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
 		rotation: [ 0, 0, 0 ],
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'Salle de Bain': {
@@ -565,7 +442,6 @@ export const MODEL_LIST = {
 		credit: 'Model by "nacimus", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
 		rotation: [ 0, 0, 0 ],
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'The White Room': {
@@ -573,7 +449,6 @@ export const MODEL_LIST = {
 		credit: 'Model by "Jay-Artist", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>.',
 		rotation: [ 0, 0, 0 ],
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'The Wooden Staircase': {
@@ -582,7 +457,6 @@ export const MODEL_LIST = {
 		rotation: [ 0, 0, 0 ],
 		envMap: 'none',
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	// devices
@@ -592,7 +466,6 @@ export const MODEL_LIST = {
 		rotation: [ 0, 0, 0 ],
 		envMap: 'none',
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'Little Lamp': {
@@ -601,7 +474,6 @@ export const MODEL_LIST = {
 		rotation: [ 0, 0, 0 ],
 		envMap: 'none',
 		stage: 'none',
-		postProcess: convertEmissivePlanesToLights,
 	},
 
 	'Headphone with Stand': {

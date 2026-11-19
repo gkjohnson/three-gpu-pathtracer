@@ -21,8 +21,8 @@ const _raycastTarget = {
 };
 
 // three-mesh-bvh's object record with the material fields appended, and the words they're written at
-const RECORD_VISIBLE_WORD = 32;
-const RECORD_MATERIAL_INDEX_WORD = 36;
+export const RECORD_VISIBLE_WORD = 32;
+export const RECORD_MATERIAL_INDEX_WORD = 36;
 const RECORD_VISIBLE_TO_SHADOW_RAYS_WORD = 37;
 const RECORD_COLOR_WORD = 40;
 const objectRecordStruct = new StructTypeNode( {

@@ -66,6 +66,7 @@ export class LogicKernel extends ComputeKernel {
 		const getDirectLightFn = proxyFn( 'lightsInfo.value.getDirectLight', params );
 		const getLightHitsFn = proxyFn( 'lightsInfo.value.getLightHits', params );
 		const getEnvironmentPdfFn = proxyFn( 'lightsInfo.value.getEnvironmentPdf', params );
+		const getEmissiveHitWeightFn = proxyFn( 'lightsInfo.value.getEmissiveHitWeight', params );
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -207,6 +208,16 @@ export class LogicKernel extends ComputeKernel {
 							rayDataStorage[ index ].origin = position;
 
 						}
+
+						// the surface's emission, weighted against the light sampling at the previous vertex picking its triangle
+						var emissionWeight = 1.0;
+						if ( isMISWeighted && didHitSurface && ! isFogScatter ) {
+
+							emissionWeight = ${ getEmissiveHitWeightFn }( input.origin, position, hitResult.normal, u32( hitResult.objectIndex ), hitResult.triangleIndex, input.scatterPdf );
+
+						}
+
+						rayDataStorage[ index ].emissionWeight = emissionWeight;
 
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution. MaterialKernel evaluates the bsdf, or the phase function at a scatter

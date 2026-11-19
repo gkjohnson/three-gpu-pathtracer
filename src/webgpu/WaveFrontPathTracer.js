@@ -147,6 +147,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.subsurfaceKernel.context.bvhData = bvhData;
 		this.cameraRayKernel.context.bvhData = bvhData;
 		this.cameraMediumKernel.context.bvhData = bvhData;
+		this.logicKernel.context.bvhData = bvhData;
 		this.rebuild();
 
 	}
@@ -188,6 +189,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel.context.shadingModel = shadingModel;
 		this.subsurfaceKernel.context.shadingModel = shadingModel;
 		this.cameraMediumKernel.context.shadingModel = shadingModel;
+		this.logicKernel.context.shadingModel = shadingModel;
 		this.rebuild();
 
 	}

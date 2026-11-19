@@ -84,6 +84,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getDirectLightFn = proxyFn( 'lightsInfo.value.getDirectLight', params );
 		const getLightHitsFn = proxyFn( 'lightsInfo.value.getLightHits', params );
 		const getEnvironmentPdfFn = proxyFn( 'lightsInfo.value.getEnvironmentPdf', params );
+		const getEmissiveHitWeightFn = proxyFn( 'lightsInfo.value.getEmissiveHitWeight', params );
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 
 		// Returns the light a light sample adds at a path vertex, given the vertex evaluated toward the light: the
@@ -330,6 +331,14 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
+					// the surface's emission, weighted against the light sampling at the previous vertex picking its triangle
+					var emissionWeight = 1.0;
+					if ( isMISWeighted && didHitSurface && ! isFogScatter ) {
+
+						emissionWeight = ${ getEmissiveHitWeightFn }( ray.origin, position, hitResult.normal, hitResult.objectIndex, hitResult.indices.w, scatterPdf );
+
+					}
+
 					var lightRec: ${ lightRecordStruct };
 					if ( didHit ) {
 
@@ -541,7 +550,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						// emission, gathered below
-						emission = surface.emission;
+						emission = surface.emission * emissionWeight;
 
 						// evaluate the bsdf toward the light. The pdf is 0 without NEE
 						if ( lightRec.pdf > 0.0 ) {
