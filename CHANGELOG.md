@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Removed
 - WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.
+- WebGPUPathTracer: "asyncCompile". The kernels always compile asynchronously, so nothing new renders while "compiling" is true.
 
 ### Fixed
 - WebGPUPathTracer: "getRenderTime" and "samplesPerSecond" counting the time spent paused, finished, with the page hidden or between "renderSample" calls, such as after "maxSamples" is reached and then raised.
