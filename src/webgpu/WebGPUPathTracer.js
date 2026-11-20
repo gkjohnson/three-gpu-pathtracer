@@ -45,6 +45,7 @@ const _originBounds = /* @__PURE__ */ new Box3();
 const _originToWorld = /* @__PURE__ */ new Matrix4();
 const _rotationMatrix = /* @__PURE__ */ new Matrix4();
 const _outputRegion = /* @__PURE__ */ new Box3();
+const _targetSize = /* @__PURE__ */ new Vector2();
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -933,11 +934,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 	// fills the denoiser and upscaler input with the accumulated samples at the render size
 	_renderInput() {
 
-		const inputTarget = this._inputTarget;
-		this._pathTracer.getSize( _resolution );
-		inputTarget.setSize( _resolution.x, _resolution.y );
-		this.renderTo( inputTarget, { output: 'accumulated' } );
-		return inputTarget.texture;
+		this.renderTo( this._inputTarget, { output: 'accumulated' } );
+		return this._inputTarget.texture;
 
 	}
 
@@ -1797,9 +1795,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		// drawn to the current render target as is, without the resize of "renderTo"
 		if ( this.renderToCanvas ) {
 
-			this.renderTo( originalTarget );
+			this._drawOutput( 'beauty' );
 
 		}
 
@@ -1820,11 +1819,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Draws the render into a render target, or the canvas when `null`, resampled to its size. The
-	 * "beauty" output is the image as {@link WebGPUPathTracer#renderSample} presents it, denoised,
-	 * upscaled and faded in over the low res preview. The "accumulated" output is the averaged samples
-	 * alone. Render targets receive linear values, while the renderer applies its tone mapping on the
-	 * canvas. Values in half float targets are clamped to the largest half float.
+	 * Draws the render into a render target, resized to the size of the output, or the canvas when
+	 * `null`, resampled to its size. The "beauty" output is the image as
+	 * {@link WebGPUPathTracer#renderSample} presents it, denoised, upscaled to the drawing buffer size
+	 * and faded in over the low res preview. The "accumulated" output is the averaged samples alone, at
+	 * the render size. Render targets receive linear values, while the renderer applies its tone mapping
+	 * on the canvas. Values in half float targets are clamped to the largest half float.
 	 *
 	 * @param {RenderTarget|null} [target]
 	 * @param {Object} [options]
@@ -1836,10 +1836,36 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const { output = 'beauty' } = options;
 		const renderer = this._renderer;
 		const originalTarget = renderer.getRenderTarget();
-		const originalAutoClear = renderer.autoClear;
-		const maxValue = target?.texture.type === HalfFloatType ? 65504 : 0;
+
+		if ( target !== null ) {
+
+			// the size the output is produced at, which the low res preview is scaled up to
+			if ( output === 'beauty' && this._upscaler ) {
+
+				renderer.getDrawingBufferSize( _targetSize );
+
+			} else {
+
+				_targetSize.copy( this._size );
+
+			}
+
+			target.setSize( _targetSize.x, _targetSize.y );
+
+		}
 
 		renderer.setRenderTarget( target );
+		this._drawOutput( output );
+		renderer.setRenderTarget( originalTarget );
+
+	}
+
+	// draws an output into the current render target, resampled to its size
+	_drawOutput( output ) {
+
+		const renderer = this._renderer;
+		const originalAutoClear = renderer.autoClear;
+		const maxValue = renderer.getRenderTarget()?.texture.type === HalfFloatType ? 65504 : 0;
 
 		if ( output === 'accumulated' ) {
 
@@ -1874,7 +1900,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		renderer.autoClear = originalAutoClear;
-		renderer.setRenderTarget( originalTarget );
 
 	}
 

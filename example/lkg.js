@@ -348,7 +348,6 @@ function onLkgParamsChange() {
 	const width = Math.max( 1, Math.floor( renderScale * lkgParams.quiltWidth ) );
 	const height = Math.max( 1, Math.floor( renderScale * lkgParams.quiltHeight ) );
 	pathTracer.setSize( width, height );
-	quiltTarget.setSize( width, height );
 	previewQuad.material.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
 
 	pathTracer.updateCamera();

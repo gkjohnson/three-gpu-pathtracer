@@ -13,7 +13,6 @@ import {
 	HalfFloatType,
 	FloatType,
 	RenderTarget,
-	Vector2,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
@@ -49,8 +48,6 @@ const params = {
 let pathTracer, renderer, controls;
 let camera, scene;
 let loader, hdrGenerator;
-
-const _size = new Vector2();
 
 // sample counts are measured asynchronously, so the average is kept for the pause checks
 let averageSamples = 0;
@@ -218,9 +215,8 @@ async function downloadImage() {
 
 	downloading = true;
 
-	// the accumulated samples at the render size, as the float values the gain map encoder reads
-	renderer.getDrawingBufferSize( _size ).multiplyScalar( pathTracer.renderScale ).floor();
-	const target = new RenderTarget( _size.x, _size.y, { type: FloatType, depthBuffer: false } );
+	// the accumulated samples, as the float values the gain map encoder reads
+	const target = new RenderTarget( 1, 1, { type: FloatType, depthBuffer: false } );
 	pathTracer.renderTo( target, { output: 'accumulated' } );
 
 	try {
