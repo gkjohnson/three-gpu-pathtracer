@@ -42,8 +42,8 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	result.update = () => {
 
 		const { cameras } = this;
-		const needsRebuild = cameraCount.node.value !== cameras.length;
-		cameraCount.node.value = cameras.length;
+		const needsRebuild = cameraCount.value !== cameras.length;
+		cameraCount.value = cameras.length;
 
 		while ( viewports.array.length < cameras.length ) {
 
