@@ -304,8 +304,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
 						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
 						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-						// the transform is read by index since WebKit fails to compile a matrix read through a
-						// storage pointer times a vector
+						// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
+						// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
 						let uvPrime = ${ materialsStorage }[ materialIndex ].mapTransform * vec3f( uv, 1 );
 
 						opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
