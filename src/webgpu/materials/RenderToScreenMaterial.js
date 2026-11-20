@@ -55,11 +55,11 @@ function createSampleTexelFn( name, textureType, loadFn ) {
 
 }
 
-// the output target is bound as the kernels bind it, so it's read with the same function
+// the output target is read as in the kernels
 const sampleArrayTexelFn = createSampleTexelFn( 'sampleArrayTexel', 'texture_storage_2d_array<r32float, read_write>', loadOutputFn );
 const sampleTexelFn = createSampleTexelFn( 'sampleTexel', 'texture_2d<f32>', loadTexelFn );
 
-// the color limited to "maxValue", so half float targets don't overflow to inf. 0 disables the clamp
+// keeps half float targets from overflowing to inf. A "maxValue" of 0 disables it
 const clampColorFn = wgslFn( /* wgsl */`
 	fn clampColor( color: vec4f, maxValue: f32 ) -> vec4f {
 
@@ -85,7 +85,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	set texture( v ) {
 
-		// the output target and RGBA textures are bound and read differently, so changing between them rebuilds
+		// the output target and RGBA textures are read differently, so switching between them rebuilds
 		if ( Boolean( v.isArrayTexture ) !== Boolean( this.texture.isArrayTexture ) ) {
 
 			this.needsUpdate = true;
@@ -157,6 +157,25 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	}
 
+	// TODO: three only notices a blending change when the material version changes, which makes every render object
+	// using the material recheck it. Three should detect the change itself
+	get blending() {
+
+		return this._blending;
+
+	}
+
+	set blending( v ) {
+
+		if ( this._blending !== v ) {
+
+			this._blending = v;
+			this.needsUpdate = true;
+
+		}
+
+	}
+
 	get maxValue() {
 
 		return this._maxValueUniform.value;
@@ -191,7 +210,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 		super();
 
-		// the texture is bound as a storage texture when it's the output target, like the kernels bind it
+		// the output target is bound as a storage texture
 		const outputTarget = createOutputTarget();
 		const texNode = texture( outputTarget );
 		this._texNode = texNode;
@@ -217,7 +236,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const maxValueUniform = uniform( 0 );
 		this._maxValueUniform = maxValueUniform;
 
-		// the render, read with the function for the kind of texture it is when the shader is built
+		// sampled for the kind of texture set when the shader builds
 		const sampleColor = Fn( () => {
 
 			return this.texture.isArrayTexture

@@ -108,7 +108,7 @@ export class FSRUpscaler {
 	readonly texture: Texture | null;
 
 	init( renderer: WebGPURenderer ): void;
-	upscale( source: Texture, camera: Camera ): Texture;
+	upscale( source: Texture, camera: Camera, width: number, height: number ): Texture;
 	dispose(): void;
 
 }
@@ -253,7 +253,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 
 	reset(): void;
 	renderSample(): void;
-	renderTo( target?: RenderTarget | null, options?: { output?: 'beauty' | 'accumulated' } ): void;
+	renderTo( target?: RenderTarget | null, options?: { output?: 'beauty' | 'accumulated', resize?: boolean } ): void;
 	renderDebugBounds( options?: DebugBoundsOptions ): void;
 	renderTextureAtlas( layer?: number ): void;
 	renderSampleDensity(): void;

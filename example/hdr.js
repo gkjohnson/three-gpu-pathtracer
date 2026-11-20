@@ -215,7 +215,7 @@ async function downloadImage() {
 
 	downloading = true;
 
-	// the accumulated samples, as the float values the gain map encoder reads
+	// the gain map encoder reads float values
 	const target = new RenderTarget( 1, 1, { type: FloatType, depthBuffer: false } );
 	pathTracer.renderTo( target, { output: 'accumulated' } );
 

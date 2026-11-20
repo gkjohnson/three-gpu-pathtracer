@@ -1,10 +1,7 @@
 /** @import { Camera, Texture, WebGPURenderer } from 'three/webgpu' */
-import { Vector2 } from 'three/webgpu';
-
-const _size = /*@__PURE__*/ new Vector2();
 
 /**
- * Upscales a path traced image to the drawing buffer size with FSR. Pass one to
+ * Upscales a path traced image with FSR, to the drawing buffer size when presented. Pass one to
  * "WebGPUPathTracer.setUpscaler".
  *
  * The "Upscaler" class is passed in rather than imported so it does not become a dependency.
@@ -69,33 +66,33 @@ export class FSRUpscaler {
 	}
 
 	/**
-	 * Upscales a texture to the renderer's drawing buffer size.
+	 * Upscales a texture to the given size.
 	 *
 	 * @param {Texture} source
 	 * @param {Camera} camera
+	 * @param {number} width
+	 * @param {number} height
 	 * @returns {Texture}
 	 */
-	upscale( source, camera ) {
+	upscale( source, camera, width, height ) {
 
 		const { renderer, _upscaler: upscaler } = this;
 
 		// the upscaler reads the raw GPUTexture, which only exists once three has initialized it
 		renderer.initTexture( source );
 
-		renderer.getDrawingBufferSize( _size );
-
 		// "configure" reallocates the working textures, so only call it when something moved
 		const changed =
-			upscaler.displayWidth !== _size.x ||
-			upscaler.displayHeight !== _size.y ||
+			upscaler.displayWidth !== width ||
+			upscaler.displayHeight !== height ||
 			upscaler.renderWidth !== source.width ||
 			upscaler.renderHeight !== source.height;
 
 		if ( changed ) {
 
 			upscaler.configure( {
-				displayWidth: _size.x,
-				displayHeight: _size.y,
+				displayWidth: width,
+				displayHeight: height,
 				renderWidth: source.width,
 				renderHeight: source.height,
 

@@ -45,7 +45,7 @@ const _originBounds = /* @__PURE__ */ new Box3();
 const _originToWorld = /* @__PURE__ */ new Matrix4();
 const _rotationMatrix = /* @__PURE__ */ new Matrix4();
 const _outputRegion = /* @__PURE__ */ new Box3();
-const _targetSize = /* @__PURE__ */ new Vector2();
+const _drawingBufferSize = /* @__PURE__ */ new Vector2();
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -684,7 +684,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._denoiser = null;
 		this._upscaler = null;
 
-		// the accumulated samples as RGBA, which the denoiser and upscaler read. Allocated while one is attached
+		// the RGBA input of the denoiser and upscaler
 		this._inputTarget = null;
 
 		// the attached denoiser's progress events are forwarded
@@ -904,7 +904,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// the denoiser and upscaler input is only allocated while one is attached
+	// allocated only while a denoiser or upscaler is attached
 	_updateInputTarget() {
 
 		const needed = Boolean( this._denoiser || this._upscaler );
@@ -921,7 +921,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// fills the denoiser and upscaler input with the accumulated samples at the render size
+	// upscales the denoised result when available
+	_upscale( width, height ) {
+
+		const texture = this._denoiser?.texture ?? this._renderInput();
+		this._upscaler.upscale( texture, this.camera, width, height );
+
+	}
+
+	// fills the denoiser and upscaler input
 	_renderInput() {
 
 		this.renderTo( this._inputTarget, { output: 'accumulated' } );
@@ -1678,7 +1686,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// it, including when the preview was already full size and nothing is resized
 		if ( ! lowResMode && pathTracer.lowResMode && dynamicLowRes ) {
 
-			// every layer of the output target, since the copy defaults to the first
+			// copy every layer, not only the first
 			const { depth } = pathTracer.outputTarget;
 			lowResTarget.setSize( _resolution.x, _resolution.y, depth );
 			_outputRegion.min.set( 0, 0, 0 );
@@ -1773,8 +1781,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			if ( upscaler ) {
 
-				const texture = denoiser?.texture ?? this._renderInput();
-				upscaler.upscale( texture, this.camera );
+				renderer.getDrawingBufferSize( _drawingBufferSize );
+				this._upscale( _drawingBufferSize.x, _drawingBufferSize.y );
 
 				// the pass above binds its own targets
 				renderer.setRenderTarget( originalTarget );
@@ -1783,7 +1791,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// drawn to the current render target as is, without the resize of "renderTo"
+		// draws to the current render target without resizing it
 		if ( this.renderToCanvas ) {
 
 			this._drawOutput( 'beauty' );
@@ -1807,38 +1815,32 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Draws the render into a render target, resized to the size of the output, or the canvas when
-	 * `null`, resampled to its size. The "beauty" output is the image as
-	 * {@link WebGPUPathTracer#renderSample} presents it, denoised, upscaled to the drawing buffer size
-	 * and faded in over the low res preview. The "accumulated" output is the averaged samples alone, at
-	 * the render size. Render targets receive linear values, while the renderer applies its tone mapping
-	 * on the canvas. Values in half float targets are clamped to the largest half float.
+	 * Draws the render into a render target, or the canvas when `null`. "beauty" is the image as
+	 * {@link WebGPUPathTracer#renderSample} presents it, and "accumulated" is the averaged samples alone.
+	 * Targets are resized to the output's size unless "resize" is false, in which case an upscaler
+	 * upscales to the target's size. Targets receive linear values, clamped in half float targets.
 	 *
 	 * @param {RenderTarget|null} [target]
 	 * @param {Object} [options]
 	 * @param {'beauty'|'accumulated'} [options.output]
-	 * @note The "beauty" output blends, so it needs a blendable target format such as half float.
+	 * @param {boolean} [options.resize]
+	 * @note "beauty" blends, so it needs a blendable target format such as half float.
 	 */
 	renderTo( target = null, options = {} ) {
 
-		const { output = 'beauty' } = options;
+		const { output = 'beauty', resize = true } = options;
 		const renderer = this._renderer;
 		const originalTarget = renderer.getRenderTarget();
+		const upscaled = output === 'beauty' && this._upscaler;
 
-		if ( target !== null ) {
+		if ( target !== null && resize ) {
 
-			// the size the output is produced at, which the low res preview is scaled up to
-			if ( output === 'beauty' && this._upscaler ) {
+			const size = upscaled ? renderer.getDrawingBufferSize( _drawingBufferSize ) : this._size;
+			target.setSize( size.x, size.y );
 
-				renderer.getDrawingBufferSize( _targetSize );
+		} else if ( target !== null && upscaled && ! this.lowResMode ) {
 
-			} else {
-
-				_targetSize.copy( this._size );
-
-			}
-
-			target.setSize( _targetSize.x, _targetSize.y );
+			this._upscale( target.width, target.height );
 
 		}
 
@@ -1848,7 +1850,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// draws an output into the current render target, resampled to its size
+	// draws an output into the current render target
 	_drawOutput( output ) {
 
 		const renderer = this._renderer;
@@ -1856,20 +1858,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const material = quad.material;
 		const originalAutoClear = renderer.autoClear;
 
-		// the accumulated samples are drawn as is, without blending so any target format can be written. Blending is
-		// turned off rather than "transparent", which would make three write an alpha of 1
+		// the accumulated samples are written as is. Blending is disabled rather than "transparent", which forces an alpha of 1
 		const beauty = output !== 'accumulated';
-		const blending = beauty ? NormalBlending : NoBlending;
-		if ( material.blending !== blending ) {
-
-			material.blending = blending;
-			material.needsUpdate = true;
-
-		}
+		material.blending = beauty ? NormalBlending : NoBlending;
 
 		if ( beauty ) {
 
-			// the upscaled or denoised result once there is one, otherwise the accumulated samples
+			// the upscaled or denoised result when available
 			const { lowResMode, dynamicLowRes, minSamples } = this;
 			const texture = lowResMode ? null : this._upscaler?.texture ?? this._denoiser?.texture ?? null;
 			const opacity = lowResMode && dynamicLowRes ? 1.0 : this._fadeState;

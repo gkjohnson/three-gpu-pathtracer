@@ -1,6 +1,6 @@
 import { wgslFn } from 'three/tsl';
 
-// read and write a color of the output target, which stores a channel per layer. See "createOutputTarget"
+// read and write a color of the output target, a channel per layer
 export const loadOutputFn = wgslFn( /* wgsl */`
 	fn loadOutput( outputTarget: texture_storage_2d_array<r32float, read_write>, pixel: vec2u ) -> vec4f {
 
