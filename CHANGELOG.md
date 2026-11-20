@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Support for bump maps, with "bumpScale" as a height in object units.
 - WebGPUPathTracer: "interpolateDisplay", set to false to show the render without interpolation when it's drawn at a different size than the canvas.
 - WebGPUPathTracer: "renderTime" and "elapsedTime" in the sample counts, the milliseconds spent rendering and the milliseconds since rendering started.
+- WebGPUPathTracer: "renderTo", which draws the render into a render target or the canvas, either as presented with the "beauty" output or as the "accumulated" samples alone.
 
 ### Changed
 - WebGPUPathTracer: A camera's "getCameraRay" function takes the pixel and a [0, 1) random sample for the point within it, "( pixel, sample, resolution, ray )", in place of the jittered uv, so a camera knows exactly which pixel it renders.
@@ -19,10 +20,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Russian roulette starts at the second vertex, as in Cycles, so paths end sooner and samples are cheaper.
 - WebGPUPathTracer: The wavefront path tracer rebuilds its pixel queue after each pass, skipping finished pixels and the ones the camera declines and sampling the pixels that fall behind first, so renders with "maxSamples" finish sooner and more evenly. The queue shrinks with the render size, except during the low res preview.
 - WebGPUPathTracer: The render fades in over the low res preview, which shows through the pixels the render hasn't reached yet. With a "minSamples" of 0 the preview stays until every pixel has a sample.
+- WebGPUPathTracer: The samples accumulate in place in a single float array texture rather than two RGBA float targets, halving the memory they use.
 
 ### Removed
 - WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.
 - WebGPUPathTracer: "asyncCompile". The kernels always compile asynchronously, so nothing new renders while "compiling" is true.
+- WebGPUPathTracer: "target". Use "renderTo" to draw the render into a render target.
 
 ### Fixed
 - WebGPUPathTracer: Setting an ArrayCamera throwing an error.

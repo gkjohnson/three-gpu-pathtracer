@@ -1,6 +1,7 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
+import { loadOutputFn, storeOutputFn } from '../../nodes/output.wgsl.js';
 import { blendAuxFn, AUX_LAYERS } from '../../nodes/auxiliary.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -32,8 +33,7 @@ export class LogicKernel extends ComputeKernel {
 			lightsInfo: { value: null },
 
 			// targets
-			prevOutputTarget: textureStore( createOutputTarget() ).toReadOnly(),
-			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
+			outputTarget: textureStore( createOutputTarget() ).toReadWrite(),
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			// the per pixel first hit albedo and normal, as running means like the color
@@ -330,11 +330,12 @@ export class LogicKernel extends ComputeKernel {
 				if ( isTerminated ) {
 
 					// blend the finished sample into the output and free the slot for a new camera ray
+					// the color is updated in place
 					let sampleCount = storedSamples + 1;
-					let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
+					let prevColor = ${ loadOutputFn }( ${ params.outputTarget }, colorIndex );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
-					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+					${ storeOutputFn }( ${ params.outputTarget }, colorIndex, blendedColor );
 
 					// the auxiliary images are blended the same way, in the same row order
 					if ( accumulateAux != 0u ) {
@@ -365,7 +366,7 @@ export class LogicKernel extends ComputeKernel {
 					// the low res preview shows the path so far, which the first sample overwrites
 					if ( lowResMode != 0u && storedSamples == 0u ) {
 
-						textureStore( ${ params.outputTarget }, colorIndex, resultColor );
+						${ storeOutputFn }( ${ params.outputTarget }, colorIndex, resultColor );
 
 					}
 

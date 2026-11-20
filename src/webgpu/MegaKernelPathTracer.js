@@ -126,7 +126,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 	*createRenderTask() {
 
 		const {
-			renderer,
 			kernel,
 			maxBounces,
 			maxTransparentBounces,
@@ -195,13 +194,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
 			kernel.sampleIndex = completedSamples;
-
-			// Swap targets to support devices without <rgba32float, read_write> textures
-			// Copy latest data to a new outputTarget to keep the appearance
-			renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
-			[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
-			kernel.prevOutputTarget = this.prevOutputTarget;
-			kernel.outputTarget = this.outputTarget;
 
 			for ( let x = 0; x < tiles.x; x ++ ) {
 

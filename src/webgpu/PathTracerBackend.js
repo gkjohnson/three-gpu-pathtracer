@@ -48,8 +48,7 @@ export class PathTracerBackend {
 		this._timestampUIDs = null;
 		this._timingFrame = false;
 
-		this.outputTarget = createOutputTarget( 'Output #0' );
-		this.prevOutputTarget = createOutputTarget( 'Output #1' );
+		this.outputTarget = createOutputTarget( 'Output' );
 		this.sampleCountTarget = createSampleCountTarget( 'Sample Count' );
 
 		this.sampleCountClearKernel = new ZeroOutKernel().setWorkgroupSize( 8, 8, 1 );
@@ -193,15 +192,12 @@ export class PathTracerBackend {
 		}
 
 		this.outputTarget.dispose();
-		this.prevOutputTarget.dispose();
 		this.sampleCountTarget.dispose();
 
 		this.outputTarget = this.outputTarget.clone();
-		this.prevOutputTarget = this.outputTarget.clone();
 		this.sampleCountTarget = this.sampleCountTarget.clone();
 
-		this.outputTarget.setSize( w, h );
-		this.prevOutputTarget.setSize( w, h );
+		this.outputTarget.setSize( w, h, this.outputTarget.depth );
 		this.sampleCountTarget.setSize( w, h );
 		this.auxTarget?.setSize( w, h, AUX_LAYERS );
 
@@ -313,7 +309,6 @@ export class PathTracerBackend {
 			sampleCountClearKernel,
 
 			outputTarget,
-			prevOutputTarget,
 			sampleCountTarget,
 		} = this;
 
@@ -323,14 +318,11 @@ export class PathTracerBackend {
 
 		}
 
-		const { width, height } = outputTarget;
+		const { width, height, depth } = outputTarget;
 		const dispatchSize = outputTargetClearKernel.getDispatchSize( width, height );
 
 		outputTargetClearKernel.target = outputTarget;
-		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
-
-		outputTargetClearKernel.target = prevOutputTarget;
-		renderer.compute( outputTargetClearKernel.kernel, dispatchSize );
+		renderer.compute( outputTargetClearKernel.kernel, outputTargetClearKernel.getDispatchSize( width, height, depth ) );
 
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );
@@ -351,7 +343,6 @@ export class PathTracerBackend {
 	dispose() {
 
 		this.outputTarget.dispose();
-		this.prevOutputTarget.dispose();
 		this.sampleCountTarget.dispose();
 		this.sampleCountClearKernel.dispose();
 		this.outputTargetClearKernel.dispose();

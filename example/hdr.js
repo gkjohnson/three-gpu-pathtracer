@@ -11,6 +11,8 @@ import {
 	ACESFilmicToneMapping,
 	NoToneMapping,
 	HalfFloatType,
+	FloatType,
+	RenderTarget,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
@@ -213,9 +215,13 @@ async function downloadImage() {
 
 	downloading = true;
 
+	// the gain map encoder reads float values
+	const target = new RenderTarget( 1, 1, { type: FloatType, depthBuffer: false } );
+	pathTracer.renderTo( target, { output: 'accumulated' } );
+
 	try {
 
-		const blob = await hdrGenerator.generateBlob( pathTracer.target );
+		const blob = await hdrGenerator.generateBlob( target );
 		const url = URL.createObjectURL( blob );
 
 		const anchor = document.createElement( 'a' );
@@ -229,6 +235,7 @@ async function downloadImage() {
 
 	} finally {
 
+		target.dispose();
 		downloading = false;
 
 	}

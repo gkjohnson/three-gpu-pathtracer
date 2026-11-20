@@ -1,15 +1,16 @@
 import { ColorManagement, FloatType, HalfFloatType, RGBAFormat } from 'three';
-import { RedIntegerFormat, StorageArrayTexture, StorageTexture, UnsignedIntType } from 'three/webgpu';
+import { RedFormat, RedIntegerFormat, StorageArrayTexture, StorageTexture, UnsignedIntType } from 'three/webgpu';
 import { AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
 
 // The storage textures the backends accumulate into. The kernels are created with these too, so
 // their pipelines are compiled against the formats they are dispatched with.
 
-// the color accumulation, in the working color space
+// the color accumulation in the working color space, a channel per layer since only single channel storage
+// textures are read write everywhere
 export function createOutputTarget( name = '' ) {
 
-	const target = new StorageTexture( 1, 1 );
-	target.format = RGBAFormat;
+	const target = new StorageArrayTexture( 1, 1, 4 );
+	target.format = RedFormat;
 	target.type = FloatType;
 	target.colorSpace = ColorManagement.workingColorSpace;
 	target.name = name;

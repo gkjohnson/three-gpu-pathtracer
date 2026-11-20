@@ -1,6 +1,7 @@
 import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
+import { loadOutputFn, storeOutputFn } from '../nodes/output.wgsl.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
@@ -27,8 +28,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			lightsInfo: { value: null },
 
 			// targets
-			prevOutputTarget: textureStore( createOutputTarget() ).toReadOnly(),
-			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
+			outputTarget: textureStore( createOutputTarget() ).toReadWrite(),
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			// tiles
@@ -673,10 +673,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// store the color rows top down to match a rasterized render target
 				let colorIndex = vec2u( indexUV.x, targetDimensions.y - 1u - indexUV.y );
 
-				let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
+				// the color is updated in place
+				let prevColor = ${ loadOutputFn }( ${ params.outputTarget }, colorIndex );
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( nextSampleCount ) );
 				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
-				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+				${ storeOutputFn }( ${ params.outputTarget }, colorIndex, blendedColor );
 
 				// the auxiliary images are blended the same way, in the same row order
 				if ( accumulateAux != 0u ) {
