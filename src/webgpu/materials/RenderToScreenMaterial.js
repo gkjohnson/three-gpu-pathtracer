@@ -1,29 +1,14 @@
 import { MeshBasicNodeMaterial, NoToneMapping } from 'three/webgpu';
-import { uv, varying, texture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
+import { uv, varying, texture, storageTexture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { createOutputTarget } from '../compute/targets.js';
-
-// the color at a texel of the path tracer's output target, which stores a channel per layer
-const loadArrayTexelFn = wgslFn( /* wgsl */`
-	fn loadArrayTexel( tex: texture_2d_array<f32>, texel: vec2i ) -> vec4f {
-
-		let coord = clamp( texel, vec2i( 0 ), vec2i( textureDimensions( tex, 0 ) ) - 1 );
-		return vec4f(
-			textureLoad( tex, coord, 0, 0 ).r,
-			textureLoad( tex, coord, 1, 0 ).r,
-			textureLoad( tex, coord, 2, 0 ).r,
-			textureLoad( tex, coord, 3, 0 ).r,
-		);
-
-	}
-` );
+import { loadOutputFn } from '../nodes/output.wgsl.js';
 
 // the color at a texel of an RGBA texture, such as the denoised or upscaled result
 const loadTexelFn = wgslFn( /* wgsl */`
-	fn loadTexel( tex: texture_2d<f32>, texel: vec2i ) -> vec4f {
+	fn loadTexel( tex: texture_2d<f32>, pixel: vec2u ) -> vec4f {
 
-		let coord = clamp( texel, vec2i( 0 ), vec2i( textureDimensions( tex, 0 ) ) - 1 );
-		return textureLoad( tex, coord, 0 );
+		return textureLoad( tex, pixel, 0 );
 
 	}
 ` );
@@ -38,13 +23,14 @@ function createSampleTexelFn( name, textureType, loadFn ) {
 
 			// Manual bilinear filtering using textureLoad to support filterable float32 textures
 			// on all devices
-			let size = vec2f( textureDimensions( tex, 0 ) );
+			let size = vec2f( textureDimensions( tex ) );
+			let maxPx = vec2i( size ) - 1;
 
 			// the path tracer stores its color rows top down
 			let texelCoord = vec2f( coord.x, 1.0 - coord.y ) * size;
 			if ( nearest != 0u ) {
 
-				return ${ loadFn }( tex, vec2i( floor( texelCoord ) ) );
+				return ${ loadFn }( tex, vec2u( clamp( vec2i( floor( texelCoord ) ), vec2i( 0 ), maxPx ) ) );
 
 			}
 
@@ -53,10 +39,10 @@ function createSampleTexelFn( name, textureType, loadFn ) {
 			let fr = fract( pxCoord );
 
 			// get the four sibling samples
-			let s00 = ${ loadFn }( tex, px );
-			let s10 = ${ loadFn }( tex, px + vec2i( 1, 0 ) );
-			let s01 = ${ loadFn }( tex, px + vec2i( 0, 1 ) );
-			let s11 = ${ loadFn }( tex, px + vec2i( 1, 1 ) );
+			let s00 = ${ loadFn }( tex, vec2u( clamp( px, vec2i( 0 ), maxPx ) ) );
+			let s10 = ${ loadFn }( tex, vec2u( clamp( px + vec2i( 1, 0 ), vec2i( 0 ), maxPx ) ) );
+			let s01 = ${ loadFn }( tex, vec2u( clamp( px + vec2i( 0, 1 ), vec2i( 0 ), maxPx ) ) );
+			let s11 = ${ loadFn }( tex, vec2u( clamp( px + vec2i( 1, 1 ), vec2i( 0 ), maxPx ) ) );
 
 			// interpolate on the x axis
 			let y0 = mix( s00, s10, fr.x );
@@ -70,7 +56,8 @@ function createSampleTexelFn( name, textureType, loadFn ) {
 
 }
 
-const sampleArrayTexelFn = createSampleTexelFn( 'sampleArrayTexel', 'texture_2d_array<f32>', loadArrayTexelFn );
+// the output target is bound as the kernels bind it, so it's read with the same function
+const sampleArrayTexelFn = createSampleTexelFn( 'sampleArrayTexel', 'texture_storage_2d_array<r32float, read_write>', loadOutputFn );
 const sampleTexelFn = createSampleTexelFn( 'sampleTexel', 'texture_2d<f32>', loadTexelFn );
 
 // the color limited to "maxValue", so half float targets don't overflow to inf. 0 disables the clamp
@@ -194,11 +181,12 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		// the shader is built for the layout of the initial texture, the output target's unless another is given.
 		// The preview always has the output target's layout
 		const initialTexture = params.texture ?? createOutputTarget();
-		const texNode = texture( initialTexture );
-		const sampleColorFn = initialTexture.isArrayTexture ? sampleArrayTexelFn : sampleTexelFn;
+		const isOutputTarget = initialTexture.isArrayTexture;
+		const texNode = isOutputTarget ? storageTexture( initialTexture ).toReadWrite() : texture( initialTexture );
+		const sampleColorFn = isOutputTarget ? sampleArrayTexelFn : sampleTexelFn;
 		this._texNode = texNode;
 
-		const fromTexNode = texture( createOutputTarget() );
+		const fromTexNode = storageTexture( createOutputTarget() ).toReadWrite();
 		this._fromTexNode = fromTexNode;
 
 		const texUV = varying( uv() );
