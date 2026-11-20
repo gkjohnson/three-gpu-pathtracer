@@ -410,7 +410,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	*createRenderTask() {
 
 		const {
-			renderer,
 			maxTransparentBounces,
 
 			logicKernel,
@@ -497,13 +496,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			for ( let i = 0; i < iter; i ++ ) {
 
-				// Swap targets to support devices without <rgba32float, read_write> textures
-				// Copy latest data to a new outputTarget to keep the appearance
-				// TODO: this full resolution copy runs every frame - remove it by writing terminated
-				// samples to both targets or gating the swap on devices that support read_write
-				renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
-				[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
-				logicKernel.prevOutputTarget = this.prevOutputTarget;
 				logicKernel.outputTarget = this.outputTarget;
 				logicKernel.sampleCountTarget = this.sampleCountTarget;
 				logicKernel.auxTarget = this.auxTarget ?? this._auxPlaceholder;

@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, FloatType, HalfFloatType, Timer, StorageTexture, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, HalfFloatType, Timer, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -21,6 +21,7 @@ import { getLights } from '../core/utils/sceneUpdateUtils.js';
 import { GLTFShadingModel } from './shadingModels/GLTFShadingModel.js';
 import { expandByNearPlane } from './shims/nearPlaneBounds.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
+import { createOutputTarget, OUTPUT_LAYERS } from './compute/targets.js';
 /** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
 /** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
@@ -43,6 +44,7 @@ const _color = new Color();
 const _originBounds = /* @__PURE__ */ new Box3();
 const _originToWorld = /* @__PURE__ */ new Matrix4();
 const _rotationMatrix = /* @__PURE__ */ new Matrix4();
+const _outputRegion = /* @__PURE__ */ new Box3();
 
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
@@ -677,10 +679,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// quickly and inflate the budget
 		this._fullFrameBudget = null;
 
-		// avoid mipmap gen on copy, not always supported with float type
-		this._lowResTarget = new StorageTexture( 1, 1 );
-		this._lowResTarget.type = FloatType;
-		this._lowResTarget.generateMipmaps = false;
+		// a copy of the last low res preview, laid out like the output target
+		this._lowResTarget = createOutputTarget( 'Low Res Preview' );
 
 		// the lights, environment and background, which the backends sample
 		this._lightsInfo = new LightsInfoNode();
@@ -1658,8 +1658,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// it, including when the preview was already full size and nothing is resized
 		if ( ! lowResMode && pathTracer.lowResMode && dynamicLowRes ) {
 
-			lowResTarget.setSize( _resolution.x, _resolution.y );
-			renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget );
+			// every layer of the output target, since the copy defaults to the first
+			lowResTarget.setSize( _resolution.x, _resolution.y, OUTPUT_LAYERS );
+			_outputRegion.min.set( 0, 0, 0 );
+			_outputRegion.max.set( _resolution.x, _resolution.y, OUTPUT_LAYERS );
+			renderer.copyTextureToTexture( pathTracer.outputTarget, lowResTarget, _outputRegion );
 
 		}
 

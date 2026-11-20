@@ -1,6 +1,6 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget, OUTPUT_LAYERS } from '../targets.js';
 import { blendAuxFn, AUX_LAYERS } from '../../nodes/auxiliary.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -32,8 +32,7 @@ export class LogicKernel extends ComputeKernel {
 			lightsInfo: { value: null },
 
 			// targets
-			prevOutputTarget: textureStore( createOutputTarget() ).toReadOnly(),
-			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
+			outputTarget: textureStore( createOutputTarget() ).toReadWrite(),
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			// the per pixel first hit albedo and normal, as running means like the color
@@ -330,11 +329,22 @@ export class LogicKernel extends ComputeKernel {
 				if ( isTerminated ) {
 
 					// blend the finished sample into the output and free the slot for a new camera ray
+					// the color is updated in place, a layer per channel
 					let sampleCount = storedSamples + 1;
-					let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
+					var prevColor: vec4f;
+					for ( var layer = 0u; layer < ${ OUTPUT_LAYERS }u; layer ++ ) {
+
+						prevColor[ layer ] = textureLoad( ${ params.outputTarget }, colorIndex, layer ).r;
+
+					}
+
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
-					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+					for ( var layer = 0u; layer < ${ OUTPUT_LAYERS }u; layer ++ ) {
+
+						textureStore( ${ params.outputTarget }, colorIndex, layer, vec4f( blendedColor[ layer ] ) );
+
+					}
 
 					// the auxiliary images are blended the same way, in the same row order
 					if ( accumulateAux != 0u ) {
@@ -365,7 +375,11 @@ export class LogicKernel extends ComputeKernel {
 					// the low res preview shows the path so far, which the first sample overwrites
 					if ( lowResMode != 0u && storedSamples == 0u ) {
 
-						textureStore( ${ params.outputTarget }, colorIndex, resultColor );
+						for ( var layer = 0u; layer < ${ OUTPUT_LAYERS }u; layer ++ ) {
+
+							textureStore( ${ params.outputTarget }, colorIndex, layer, vec4f( resultColor[ layer ] ) );
+
+						}
 
 					}
 

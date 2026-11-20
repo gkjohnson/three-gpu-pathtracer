@@ -1,12 +1,28 @@
-import { MeshBasicNodeMaterial, NoToneMapping, StorageTexture } from 'three/webgpu';
+import { MeshBasicNodeMaterial, NoToneMapping } from 'three/webgpu';
 import { uv, varying, texture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { createOutputTarget } from '../compute/targets.js';
 
 // TODO: we could fall back to hardware-based filtering if available but it has to be specifically
 // requested and available on the renderer which we don't have access to immediately. It's possible this
 // can be detected during build time via a custom node to adjust the sample approach used?
-const sampleTexelFn = wgslFn( /* wgsl */`
-	fn sampleTexel( tex: texture_2d<f32>, coord: vec2f, nearest: u32 ) -> vec4f {
+// the color at a texel of the path tracer's output target, which stores a channel per layer
+const loadTexelFn = wgslFn( /* wgsl */`
+	fn loadTexel( tex: texture_2d_array<f32>, texel: vec2i ) -> vec4f {
+
+		let coord = clamp( texel, vec2i( 0 ), vec2i( textureDimensions( tex, 0 ) ) - 1 );
+		return vec4f(
+			textureLoad( tex, coord, 0, 0 ).r,
+			textureLoad( tex, coord, 1, 0 ).r,
+			textureLoad( tex, coord, 2, 0 ).r,
+			textureLoad( tex, coord, 3, 0 ).r,
+		);
+
+	}
+` );
+
+const sampleTexelFn = wgslTagFn/* wgsl */`
+	fn sampleTexel( tex: texture_2d_array<f32>, coord: vec2f, nearest: u32 ) -> vec4f {
 
 		// Manual bilinear filtering using textureLoad to support filterable float32 textures
 		// on all devices
@@ -16,7 +32,7 @@ const sampleTexelFn = wgslFn( /* wgsl */`
 		let texelCoord = vec2f( coord.x, 1.0 - coord.y ) * size;
 		if ( nearest != 0u ) {
 
-			return textureLoad( tex, clamp( vec2i( floor( texelCoord ) ), vec2i( 0 ), vec2i( size ) - 1 ), 0 );
+			return ${ loadTexelFn }( tex, vec2i( floor( texelCoord ) ) );
 
 		}
 
@@ -25,10 +41,10 @@ const sampleTexelFn = wgslFn( /* wgsl */`
 		let fr = fract( pxCoord );
 
 		// get the four sibling samples
-		let s00 = textureLoad( tex, clamp( px,                 vec2i( 0 ), vec2i( size ) - 1 ), 0 );
-		let s10 = textureLoad( tex, clamp( px + vec2i( 1, 0 ), vec2i( 0 ), vec2i( size ) - 1 ), 0 );
-		let s01 = textureLoad( tex, clamp( px + vec2i( 0, 1 ), vec2i( 0 ), vec2i( size ) - 1 ), 0 );
-		let s11 = textureLoad( tex, clamp( px + vec2i( 1, 1 ), vec2i( 0 ), vec2i( size ) - 1 ), 0 );
+		let s00 = ${ loadTexelFn }( tex, px );
+		let s10 = ${ loadTexelFn }( tex, px + vec2i( 1, 0 ) );
+		let s01 = ${ loadTexelFn }( tex, px + vec2i( 0, 1 ) );
+		let s11 = ${ loadTexelFn }( tex, px + vec2i( 1, 1 ) );
 
 		// interpolate on the x axis
 		let y0 = mix( s00, s10, fr.x );
@@ -38,7 +54,7 @@ const sampleTexelFn = wgslFn( /* wgsl */`
 		return mix( y0, y1, fr.y );
 
 	}
-` );
+`;
 
 // Material to apply tone mapping _before_ applying alpha blending
 export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
@@ -131,10 +147,11 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 		super();
 
-		const texNode = texture( new StorageTexture() );
+		// placeholders with the output target's layout, so the shader is built for it
+		const texNode = texture( createOutputTarget() );
 		this._texNode = texNode;
 
-		const fromTexNode = texture( new StorageTexture() );
+		const fromTexNode = texture( createOutputTarget() );
 		this._fromTexNode = fromTexNode;
 
 		const texUV = varying( uv() );
