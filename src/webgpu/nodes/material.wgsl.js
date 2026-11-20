@@ -137,8 +137,8 @@ export const getSurfaceRecordFunc = ( {
 	materialStruct,
 	surfaceRecordStruct,
 	attributesStruct,
-	attributesStorage,
-	transformsStorage,
+	getVertex,
+	objectsStorage,
 	sampleTexel,
 	getTextureSize,
 	getUvFromChannel,
@@ -191,10 +191,10 @@ export const getSurfaceRecordFunc = ( {
 			// "Bump Mapping Unparametrized Surfaces on the GPU" by Morten S. Mikkelsen, as in three.js, with the
 			// triangle's edges in place of the screen-space derivatives
 			// https://mmikk.github.io/papers3d/mm_sfgrad_bump.pdf
-			let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
-			let a0 = ${ attributesStorage }[ hit.indices.x ];
-			let a1 = ${ attributesStorage }[ hit.indices.y ];
-			let a2 = ${ attributesStorage }[ hit.indices.z ];
+			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
+			let a0 = ${ getVertex }( hit.indices.x, objectInfo.attributesOffset );
+			let a1 = ${ getVertex }( hit.indices.y, objectInfo.attributesOffset );
+			let a2 = ${ getVertex }( hit.indices.z, objectInfo.attributesOffset );
 
 			// the triangle's edges in world space, and in the bump map's uv space
 			let sigmaX = ( objectInfo.matrixWorld * vec4f( a1.position.xyz - a0.position.xyz, 0.0 ) ).xyz;

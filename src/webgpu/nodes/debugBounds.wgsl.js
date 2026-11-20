@@ -1,6 +1,6 @@
 import { Matrix4, StructTypeNode } from 'three/webgpu';
 import { uniform, uint, float } from 'three/tsl';
-import { wgslTagFn, ndcToCameraRay, rayStruct, bvhNodeBoundsStruct, bvhNodeStruct, intersectsTriangle } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, ndcToCameraRay, rayStruct, bvhNodeBoundsStruct, bvhNodeStruct, intersectRayTriangle } from 'three-mesh-bvh/webgpu';
 
 // blue -> cyan -> green -> yellow -> red heat ramp shared by the debug visualizations
 export const heatColorFn = wgslTagFn/* wgsl */`
@@ -26,7 +26,8 @@ const debugBoundsResultStruct = new StructTypeNode( {
 // driving it are attached as `.uniforms` so the caller can update them each frame.
 export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
-	const { transforms, index, attributes } = bvhData.storage;
+	const { objects } = bvhData.storage;
+	const { getTriangleIndices, getVertexPosition } = bvhData.fns;
 	const { materials } = shadingModel.storage;
 
 	// uniforms
@@ -108,22 +109,19 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
 	// range hook: intersect the leaf triangles to track the nearest surface
 	const intersectRange = wgslTagFn/* wgsl */`
-		fn debugIntersectRange( ray: ${ rayStruct }, offset: u32, count: u32, result: ptr<function, ${ debugBoundsResultStruct }> ) -> bool {
+		fn debugIntersectRange( ray: ${ rayStruct }, offset: u32, count: u32, indexOffset: u32, attributesOffset: u32, result: ptr<function, ${ debugBoundsResultStruct }> ) -> bool {
 
 			var didHit = false;
 			if ( ${ stopAtSurface } > 0.5 ) {
 
 				for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
 
-					let i0 = ${ index }[ ti * 3u ];
-					let i1 = ${ index }[ ti * 3u + 1u ];
-					let i2 = ${ index }[ ti * 3u + 2u ];
+					let indices = ${ getTriangleIndices }( ti, indexOffset );
+					let a = ${ getVertexPosition }( indices.x, attributesOffset );
+					let b = ${ getVertexPosition }( indices.y, attributesOffset );
+					let c = ${ getVertexPosition }( indices.z, attributesOffset );
 
-					let a = ${ attributes }[ i0 ].position.xyz;
-					let b = ${ attributes }[ i1 ].position.xyz;
-					let c = ${ attributes }[ i2 ].position.xyz;
-
-					var triResult = ${ intersectsTriangle }( ray, a, b, c );
+					var triResult = ${ intersectRayTriangle }( ray, a, b, c, 0.0 );
 					triResult.dist *= ${ rayScalar };
 					if ( triResult.didHit && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
@@ -153,10 +151,10 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 	// the scale factor, exactly like the raycast ), record the material side, and mark that we are
 	// now descending a BLAS
 	const transformRay = wgslTagFn/* wgsl */`
-		fn debugTransformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> void {
+		fn debugTransformRay( ray: ptr<function, ${ rayStruct }>, objectIndex: u32 ) -> bool {
 
-			let object = ${ transforms }[ objectIndex ];
-			let toLocal = object.inverseMatrixWorld;
+			let objectInfo = ${ objects }[ objectIndex ];
+			let toLocal = objectInfo.inverseMatrixWorld;
 			ray.origin = ( toLocal * vec4f( ray.origin, 1.0 ) ).xyz;
 			ray.direction = ( toLocal * vec4f( ray.direction, 0.0 ) ).xyz;
 
@@ -164,8 +162,9 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 			ray.direction = ray.direction / len;
 			${ rayScalar } = 1.0 / len;
 
-			${ materialSide } = ${ materials }[ object.materialIndex ].side;
+			${ materialSide } = ${ materials }[ objectInfo.materialIndex ].side;
 			${ level } = 1u;
+			return true;
 
 		}
 	`;
@@ -197,7 +196,7 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 		fn debugBounds( vUv: vec2f ) -> vec4f {
 
 			let ndc = vUv * 2.0 - vec2f( 1.0 );
-			var ray = ${ ndcToCameraRay }( ndc, ${ cameraToModelMatrix } * ${ inverseProjectionMatrix } );
+			var ray = ${ ndcToCameraRay }( ndc, ${ cameraToModelMatrix }, ${ inverseProjectionMatrix } );
 			ray.direction = normalize( ray.direction );
 
 			// count the boxes the ray crosses, pruning those behind the nearest hit surface
