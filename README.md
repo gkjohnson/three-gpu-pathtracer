@@ -40,6 +40,8 @@ Path tracing project using [three-mesh-bvh](https://github.com/gkjohnson/three-m
 
 [Denoising and Upscaling](https://gkjohnson.github.io/three-gpu-pathtracer/denoise.html)
 
+[Lightmap & AO Map Baking](https://gkjohnson.github.io/three-gpu-pathtracer/lightmap.html)
+
 **Test Scenes**
 
 [Material Test Orb](https://gkjohnson.github.io/three-gpu-pathtracer/materialOrb.html)
