@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, HalfFloatType, Timer, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem } from 'three/webgpu';
+import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, HalfFloatType, Timer, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem, RenderTarget, StorageTexture } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -527,17 +527,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * The render target the accumulated samples are written into.
-	 * @type {Texture|null}
-	 * @readonly
-	 */
-	get target() {
-
-		return this._pathTracer.outputTarget ?? null;
-
-	}
-
-	/**
 	 * Progress of the fade from the low resolution preview to the full render, from 0 to 1.
 	 * @type {number}
 	 * @readonly
@@ -667,7 +656,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} );
 
+		// draw the output target, or the denoised and upscaled RGBA result, faded in over the low res preview
 		this._blitQuad = new FullScreenQuad( new RenderToScreenNodeMaterial() );
+		this._blitTextureQuad = new FullScreenQuad( new RenderToScreenNodeMaterial( { texture: new StorageTexture() } ) );
+
+		// draws the accumulated samples alone, without blending so any target format can be written
+		this._accumulatedQuad = new FullScreenQuad( new RenderToScreenNodeMaterial( { transparent: false } ) );
+
+		// the display state "renderTo" draws with, as of the last "renderSample"
+		this._displayLowRes = false;
+		this._upscaledTexture = null;
 
 		// adaptive frame budget and preview state
 		this._timingCount = 0;
@@ -693,6 +691,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// optional post passes, attached with "setDenoiser" / "setUpscaler"
 		this._denoiser = null;
 		this._upscaler = null;
+
+		// the accumulated samples as RGBA, which the denoiser and upscaler read. Allocated while one is attached
+		this._inputTarget = null;
 
 		// the attached denoiser's progress events are forwarded
 		this._onDenoiserProgress = e => this.dispatchEvent( { type: 'progress', stage: 'denoising', progress: e.progress } );
@@ -778,7 +779,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		/**
 		 * Whether {@link WebGPUPathTracer#renderSample} draws the result to the current render
 		 * target, the canvas by default. Set to `false` to only accumulate, as when baking to a
-		 * texture read through {@link WebGPUPathTracer#target}.
+		 * texture written with {@link WebGPUPathTracer#renderTo}.
 		 * @type {boolean}
 		 * @default true
 		 */
@@ -886,6 +887,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		this._pathTracer.setAccumulateAux( Boolean( denoiser && denoiser.useAuxiliaryBuffers ) );
+		this._updateInputTarget();
 		this.reset();
 
 	}
@@ -899,12 +901,43 @@ export class WebGPUPathTracer extends EventDispatcher {
 	setUpscaler( upscaler ) {
 
 		this._upscaler = upscaler;
+		this._upscaledTexture = null;
 
 		if ( upscaler ) {
 
 			upscaler.init( this._renderer );
 
 		}
+
+		this._updateInputTarget();
+
+	}
+
+	// the denoiser and upscaler input is only allocated while one is attached
+	_updateInputTarget() {
+
+		const needed = Boolean( this._denoiser || this._upscaler );
+		if ( needed && ! this._inputTarget ) {
+
+			this._inputTarget = new RenderTarget( 1, 1, { type: HalfFloatType, depthBuffer: false } );
+
+		} else if ( ! needed && this._inputTarget ) {
+
+			this._inputTarget.dispose();
+			this._inputTarget = null;
+
+		}
+
+	}
+
+	// fills the denoiser and upscaler input with the accumulated samples at the render size
+	_renderInput() {
+
+		const inputTarget = this._inputTarget;
+		this._pathTracer.getSize( _resolution );
+		inputTarget.setSize( _resolution.x, _resolution.y );
+		this.renderTo( inputTarget, { output: 'accumulated' } );
+		return inputTarget.texture;
 
 	}
 
@@ -1433,6 +1466,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._pathTracer.reset();
 		this._denoiser?.reset();
+		this._upscaledTexture = null;
 		this._resetTime = - 1;
 		this._renderTime = 0;
 		this._renderedLastCall = false;
@@ -1585,7 +1619,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		const renderer = this._renderer;
 		const size = this._size;
-		const blitQuad = this._blitQuad;
 		const pathTracer = this._pathTracer;
 		const lowResTarget = this._lowResTarget;
 		const timer = this._timer;
@@ -1740,47 +1773,33 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-
-		// render the content to the canvas
-		const opacity = ( lowResMode && dynamicLowRes ? 1.0 : this._fadeState );
-
 		// the low res preview is replaced moments later, so it is neither denoised nor upscaled
-		let texture = pathTracer.outputTarget;
-		if ( denoiser && ! lowResMode ) {
+		this._displayLowRes = lowResMode;
+		this._upscaledTexture = null;
+		if ( ! lowResMode ) {
 
 			// "min" so every pixel has stopped, not just the average
 			if ( awaitingDenoise && this._lastSampleCounts.min >= maxSamples ) {
 
-				denoiser.update( pathTracer.outputTarget, pathTracer.auxTarget );
+				denoiser.update( this._renderInput(), pathTracer.auxTarget );
 
 			}
 
-			texture = denoiser.texture ?? texture;
+			if ( upscaler ) {
 
-		}
-
-		// the upscale and the draw only serve the display
-		if ( this.renderToCanvas ) {
-
-			if ( upscaler && ! lowResMode ) {
-
-				texture = upscaler.upscale( texture, this.camera );
+				const texture = denoiser?.texture ?? this._renderInput();
+				this._upscaledTexture = upscaler.upscale( texture, this.camera );
 
 				// the pass above binds its own targets
 				renderer.setRenderTarget( originalTarget );
 
 			}
 
-			// the preview stays under the render until it fades in, and with no "minSamples" until every pixel has a sample
-			const previewNeeded = this._fadeState < 1 || ( minSamples === 0 && this._lastSampleCounts.min < 1 );
-			renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
-			blitQuad.material.transition = dynamicLowRes ? opacity : 1.0;
-			blitQuad.material.showPreview = dynamicLowRes && ! lowResMode && previewNeeded;
-			blitQuad.material.opacity = dynamicLowRes ? 1.0 : opacity;
-			blitQuad.material.nearest = ! this.interpolateDisplay;
-			blitQuad.material.fromTexture = lowResTarget;
-			blitQuad.material.texture = texture;
-			blitQuad.render( renderer );
+		}
+
+		if ( this.renderToCanvas ) {
+
+			this.renderTo( originalTarget );
 
 		}
 
@@ -1797,6 +1816,65 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		this._wasComplete = complete;
+
+	}
+
+	/**
+	 * Draws the render into a render target, or the canvas when `null`, resampled to its size. The
+	 * "beauty" output is the image as {@link WebGPUPathTracer#renderSample} presents it, denoised,
+	 * upscaled and faded in over the low res preview. The "accumulated" output is the averaged samples
+	 * alone. Render targets receive linear values, while the renderer applies its tone mapping on the
+	 * canvas. Values in half float targets are clamped to the largest half float.
+	 *
+	 * @param {RenderTarget|null} [target]
+	 * @param {Object} [options]
+	 * @param {'beauty'|'accumulated'} [options.output]
+	 * @note The "beauty" output blends, so it needs a blendable target format such as half float.
+	 */
+	renderTo( target = null, options = {} ) {
+
+		const { output = 'beauty' } = options;
+		const renderer = this._renderer;
+		const originalTarget = renderer.getRenderTarget();
+		const originalAutoClear = renderer.autoClear;
+		const maxValue = target?.texture.type === HalfFloatType ? 65504 : 0;
+
+		renderer.setRenderTarget( target );
+
+		if ( output === 'accumulated' ) {
+
+			const material = this._accumulatedQuad.material;
+			material.nearest = ! this.interpolateDisplay;
+			material.texture = this._pathTracer.outputTarget;
+			material.maxValue = maxValue;
+			this._accumulatedQuad.render( renderer );
+
+		} else {
+
+			// the upscaled or denoised result once there is one, otherwise the accumulated samples
+			const lowResMode = this._displayLowRes;
+			const texture = lowResMode ? null : this._upscaledTexture ?? this._denoiser?.texture ?? null;
+			const quad = texture ? this._blitTextureQuad : this._blitQuad;
+			const material = quad.material;
+			const { dynamicLowRes, minSamples } = this;
+			const opacity = lowResMode && dynamicLowRes ? 1.0 : this._fadeState;
+
+			// the preview stays under the render until it fades in, and with no "minSamples" until every pixel has a sample
+			const previewNeeded = this._fadeState < 1 || ( minSamples === 0 && this._lastSampleCounts.min < 1 );
+			renderer.autoClear = dynamicLowRes ? true : opacity === 1.0;
+			material.transition = dynamicLowRes ? opacity : 1.0;
+			material.showPreview = dynamicLowRes && ! lowResMode && previewNeeded;
+			material.opacity = dynamicLowRes ? 1.0 : opacity;
+			material.nearest = ! this.interpolateDisplay;
+			material.fromTexture = this._lowResTarget;
+			material.texture = texture ?? this._pathTracer.outputTarget;
+			material.maxValue = maxValue;
+			quad.render( renderer );
+
+		}
+
+		renderer.autoClear = originalAutoClear;
+		renderer.setRenderTarget( originalTarget );
 
 	}
 
@@ -1998,10 +2076,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._environmentCache.dispose();
 		this._backgroundCache.dispose();
 		this._lowResTarget.dispose();
+		this._inputTarget?.dispose();
 
 		// FullScreenQuad.dispose only disposes the shared geometry, not the material
 		this._blitQuad.dispose();
 		this._blitQuad.material.dispose();
+		this._blitTextureQuad.dispose();
+		this._blitTextureQuad.material.dispose();
+		this._accumulatedQuad.dispose();
+		this._accumulatedQuad.material.dispose();
 		this._atlasDebugQuad?.dispose();
 		this._atlasDebugQuad?.material.dispose();
 		this._sampleDensityQuad?.dispose();

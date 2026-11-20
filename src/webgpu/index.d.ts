@@ -1,4 +1,4 @@
-import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
+import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture, RenderTarget } from 'three';
 import { StorageArrayTexture, WebGPURenderer, MeshBasicNodeMaterial, MeshBasicNodeMaterialParameters } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
@@ -223,7 +223,6 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	stableNoise: boolean;
 	pause: boolean;
 
-	readonly target: Texture | null;
 	readonly frameTime: number;
 	readonly complete: boolean;
 	readonly fadeState: number;
@@ -252,6 +251,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 
 	reset(): void;
 	renderSample(): void;
+	renderTo( target?: RenderTarget | null, options?: { output?: 'beauty' | 'accumulated' } ): void;
 	renderDebugBounds( options?: DebugBoundsOptions ): void;
 	renderTextureAtlas( layer?: number ): void;
 	renderSampleDensity(): void;
