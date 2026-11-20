@@ -17,6 +17,17 @@ const _size = /*@__PURE__*/ new Vector2();
 export class FSRUpscaler {
 
 	/**
+	 * The last upscaled result, or null until the first upscale.
+	 *
+	 * @type {Texture|null}
+	 */
+	get texture() {
+
+		return this._texture;
+
+	}
+
+	/**
 	 * Every field below can also be assigned after construction.
 	 *
 	 * @param {Object} options
@@ -41,6 +52,7 @@ export class FSRUpscaler {
 		this.renderer = null;
 
 		this._upscaler = null;
+		this._texture = null;
 
 	}
 
@@ -95,7 +107,8 @@ export class FSRUpscaler {
 
 		upscaler.settings.sharpness = this.sharpness;
 		upscaler.dispatch( { color: source }, camera );
-		return upscaler.outputTexture;
+		this._texture = upscaler.outputTexture;
+		return this._texture;
 
 	}
 
@@ -103,6 +116,7 @@ export class FSRUpscaler {
 
 		this._upscaler?.dispose();
 		this._upscaler = null;
+		this._texture = null;
 
 	}
 

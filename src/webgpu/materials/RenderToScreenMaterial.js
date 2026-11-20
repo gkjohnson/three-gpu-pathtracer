@@ -1,5 +1,5 @@
 import { MeshBasicNodeMaterial, NoToneMapping } from 'three/webgpu';
-import { uv, varying, texture, storageTexture, vec4, toneMapping, uniform, wgslFn } from 'three/tsl';
+import { uv, varying, texture, storageTexture, vec4, toneMapping, uniform, wgslFn, Fn } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { createOutputTarget } from '../compute/targets.js';
 import { loadOutputFn } from '../nodes/output.wgsl.js';
@@ -24,13 +24,12 @@ function createSampleTexelFn( name, textureType, loadFn ) {
 			// Manual bilinear filtering using textureLoad to support filterable float32 textures
 			// on all devices
 			let size = vec2f( textureDimensions( tex ) );
-			let maxPx = vec2i( size ) - 1;
 
 			// the path tracer stores its color rows top down
 			let texelCoord = vec2f( coord.x, 1.0 - coord.y ) * size;
 			if ( nearest != 0u ) {
 
-				return ${ loadFn }( tex, vec2u( clamp( vec2i( floor( texelCoord ) ), vec2i( 0 ), maxPx ) ) );
+				return ${ loadFn }( tex, vec2u( clamp( vec2i( floor( texelCoord ) ), vec2i( 0 ), vec2i( size ) - 1 ) ) );
 
 			}
 
@@ -39,10 +38,10 @@ function createSampleTexelFn( name, textureType, loadFn ) {
 			let fr = fract( pxCoord );
 
 			// get the four sibling samples
-			let s00 = ${ loadFn }( tex, vec2u( clamp( px, vec2i( 0 ), maxPx ) ) );
-			let s10 = ${ loadFn }( tex, vec2u( clamp( px + vec2i( 1, 0 ), vec2i( 0 ), maxPx ) ) );
-			let s01 = ${ loadFn }( tex, vec2u( clamp( px + vec2i( 0, 1 ), vec2i( 0 ), maxPx ) ) );
-			let s11 = ${ loadFn }( tex, vec2u( clamp( px + vec2i( 1, 1 ), vec2i( 0 ), maxPx ) ) );
+			let s00 = ${ loadFn }( tex, vec2u( clamp( px,                 vec2i( 0 ), vec2i( size ) - 1 ) ) );
+			let s10 = ${ loadFn }( tex, vec2u( clamp( px + vec2i( 1, 0 ), vec2i( 0 ), vec2i( size ) - 1 ) ) );
+			let s01 = ${ loadFn }( tex, vec2u( clamp( px + vec2i( 0, 1 ), vec2i( 0 ), vec2i( size ) - 1 ) ) );
+			let s11 = ${ loadFn }( tex, vec2u( clamp( px + vec2i( 1, 1 ), vec2i( 0 ), vec2i( size ) - 1 ) ) );
 
 			// interpolate on the x axis
 			let y0 = mix( s00, s10, fr.x );
@@ -86,7 +85,15 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	set texture( v ) {
 
+		// the output target and RGBA textures are bound and read differently, so changing between them rebuilds
+		if ( Boolean( v.isArrayTexture ) !== Boolean( this.texture.isArrayTexture ) ) {
+
+			this.needsUpdate = true;
+
+		}
+
 		this._texNode.value = v;
+		this._outputTexNode.value = v;
 
 	}
 
@@ -174,17 +181,23 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 
 	}
 
-	constructor( params = {} ) {
+	customProgramCacheKey() {
+
+		return super.customProgramCacheKey() + ( this.texture.isArrayTexture ? '-output' : '-rgba' );
+
+	}
+
+	constructor( params ) {
 
 		super();
 
-		// the shader is built for the layout of the initial texture, the output target's unless another is given.
-		// The preview always has the output target's layout
-		const initialTexture = params.texture ?? createOutputTarget();
-		const isOutputTarget = initialTexture.isArrayTexture;
-		const texNode = isOutputTarget ? storageTexture( initialTexture ).toReadWrite() : texture( initialTexture );
-		const sampleColorFn = isOutputTarget ? sampleArrayTexelFn : sampleTexelFn;
+		// the texture is bound as a storage texture when it's the output target, like the kernels bind it
+		const outputTarget = createOutputTarget();
+		const texNode = texture( outputTarget );
 		this._texNode = texNode;
+
+		const outputTexNode = storageTexture( outputTarget ).toReadWrite();
+		this._outputTexNode = outputTexNode;
 
 		const fromTexNode = storageTexture( createOutputTarget() ).toReadWrite();
 		this._fromTexNode = fromTexNode;
@@ -204,12 +217,20 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 		const maxValueUniform = uniform( 0 );
 		this._maxValueUniform = maxValueUniform;
 
+		// the render, read with the function for the kind of texture it is when the shader is built
+		const sampleColor = Fn( () => {
+
+			return this.texture.isArrayTexture
+				? sampleArrayTexelFn( outputTexNode, texUV, nearestUniform )
+				: sampleTexelFn( texNode, texUV, nearestUniform );
+
+		} );
+
 		// the render faded in over the preview, which shows through the pixels the render hasn't reached
 		// NOTE: varyings cannot be referenced directly and must be passed as arguments
 		const getFadedColorFn = wgslTagFn/* wgsl */`
-			fn fade( uv: vec2f ) -> vec4f {
+			fn fade( color: vec4f, uv: vec2f ) -> vec4f {
 
-				let color = ${ sampleColorFn }( ${ texNode }, uv, ${ nearestUniform } );
 				if ( ${ showPreviewUniform } == 0u ) {
 
 					return color;
@@ -223,7 +244,7 @@ export class RenderToScreenNodeMaterial extends MeshBasicNodeMaterial {
 			}
 		`;
 
-		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getFadedColorFn( texUV ) );
+		const toneMappingNode = toneMapping( NoToneMapping, 1.0, getFadedColorFn( sampleColor(), texUV ) );
 		this._toneMapping = toneMappingNode;
 
 		// apply alpha _after_ applying tone mapping

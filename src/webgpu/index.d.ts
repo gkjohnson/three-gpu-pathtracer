@@ -105,6 +105,8 @@ export class FSRUpscaler {
 	Upscaler: Function;
 	sharpness: number;
 
+	readonly texture: Texture | null;
+
 	init( renderer: WebGPURenderer ): void;
 	upscale( source: Texture, camera: Camera ): Texture;
 	dispose(): void;

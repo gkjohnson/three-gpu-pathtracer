@@ -1,7 +1,7 @@
 import { TimestampQuery } from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
-import { createAuxTarget, createOutputTarget, createSampleCountTarget, OUTPUT_LAYERS } from './compute/targets.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/auxiliary.wgsl.js';
 
 // the async compile state of a compute node. A node with no state has not been requested.
@@ -197,7 +197,7 @@ export class PathTracerBackend {
 		this.outputTarget = this.outputTarget.clone();
 		this.sampleCountTarget = this.sampleCountTarget.clone();
 
-		this.outputTarget.setSize( w, h, OUTPUT_LAYERS );
+		this.outputTarget.setSize( w, h, this.outputTarget.depth );
 		this.sampleCountTarget.setSize( w, h );
 		this.auxTarget?.setSize( w, h, AUX_LAYERS );
 
@@ -318,11 +318,11 @@ export class PathTracerBackend {
 
 		}
 
-		const { width, height } = outputTarget;
+		const { width, height, depth } = outputTarget;
 		const dispatchSize = outputTargetClearKernel.getDispatchSize( width, height );
 
 		outputTargetClearKernel.target = outputTarget;
-		renderer.compute( outputTargetClearKernel.kernel, outputTargetClearKernel.getDispatchSize( width, height, OUTPUT_LAYERS ) );
+		renderer.compute( outputTargetClearKernel.kernel, outputTargetClearKernel.getDispatchSize( width, height, depth ) );
 
 		sampleCountClearKernel.target = sampleCountTarget;
 		renderer.compute( sampleCountClearKernel.kernel, dispatchSize );

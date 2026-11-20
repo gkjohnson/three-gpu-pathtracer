@@ -5,14 +5,11 @@ import { AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
 // The storage textures the backends accumulate into. The kernels are created with these too, so
 // their pipelines are compiled against the formats they are dispatched with.
 
-// the layers of the output target, one per color channel
-export const OUTPUT_LAYERS = 4;
-
 // the color accumulation in the working color space, a layer per channel. Read write access to a storage
 // texture is only available for single channel formats everywhere, so the kernels update it in place
 export function createOutputTarget( name = '' ) {
 
-	const target = new StorageArrayTexture( 1, 1, OUTPUT_LAYERS );
+	const target = new StorageArrayTexture( 1, 1, 4 );
 	target.format = RedFormat;
 	target.type = FloatType;
 	target.colorSpace = ColorManagement.workingColorSpace;
