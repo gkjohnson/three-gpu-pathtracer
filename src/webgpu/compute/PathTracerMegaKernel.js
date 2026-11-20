@@ -244,7 +244,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// TraceRayKernel
 					// trace the queued segment, in fog up to a sampled scatter distance as "queueRay" does
 					var traceRay = Ray( traceOrigin, ray.direction, 0.0 );
-					var hitResult: ${ raycastOutput };
+					// the records declared in this loop are initialized explicitly: Chrome on Linux keeps a struct's values from the
+					// previous iteration instead of zeroing it, and a stale hit would cull every surface farther than it
+					var hitResult = ${ raycastOutput }();
 					var didHitSurface = false;
 					var scatterDist = 0.0;
 					if ( medium.subsurface == 0u ) {
@@ -328,7 +330,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					var lightRec: ${ lightRecordStruct };
+					var lightRec = ${ lightRecordStruct }();
 					if ( didHit ) {
 
 						if ( misEnabled != 0u ) {
@@ -422,7 +424,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// MaterialKernel
 					// the vertex: its light evaluation, next direction, and where the bounce and shadow rays start. The shadow
 					// ray leaves the hit point, offset off the surface along its normal, which stays zero in fog
-					var scatterRec: ${ scatterRecordStruct };
+					var scatterRec = ${ scatterRecordStruct }();
 					var lightEvalColor = vec3f( 0.0 );
 					var lightEvalPdf = 0.0;
 					var bounceOrigin = position;
@@ -433,7 +435,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var isTerminated = false;
 
 					// the hit as staged by the wavefront. A fog scatter has no surface
-					var hit: ${ hitRecordStruct };
+					var hit = ${ hitRecordStruct }();
 					hit.bounce = bounce;
 
 					if ( isFogScatter ) {
