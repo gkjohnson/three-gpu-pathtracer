@@ -61,9 +61,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// scatter events a medium walk takes per pass
 		this.mediumStepsPerPass = 16;
 
-		// The path slot pool, sized to the frame budget and resized in the render loop as the budget
-		// changes. Every per-slot buffer is allocated to the same count so a full pool can never
-		// overflow them.
+		// The path slots allocated, sized to the frame budget, and the ones dispatched. Every per-slot buffer is
+		// allocated to the same count so a full pool can never overflow them.
+		this.slotCapacity = 0;
 		this.rayCount = 0;
 
 		// persistent per-path state, one slot per in-flight path
@@ -303,25 +303,50 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// Reallocates the per slot buffers to "count" slots. Slots that survive carry their ray data
-	// over, dropped slots clear their pixel's active flag, and added slots start idle. Only
-	// the slots in use, up to the pixel count, hold pixels. The trace queues and results only live
-	// within a frame, so they start empty.
+	// Clears a range of slots. Dropped slots free their pixel, and added slots start idle
+	_resetSlots( rayDataStorage, start, end, addingSlots ) {
+
+		const { resetSlotsKernel } = this;
+		resetSlotsKernel.sampleCountTarget = this.sampleCountTarget;
+		resetSlotsKernel.rayDataStorage = rayDataStorage;
+		resetSlotsKernel.start = start;
+		resetSlotsKernel.end = end;
+		resetSlotsKernel.addingSlots = addingSlots;
+		this.dispatch( resetSlotsKernel, resetSlotsKernel.getDispatchSize( end - start, 1, 1 ) );
+
+	}
+
+	// Sets how many of the allocated slots are dispatched
+	_setSlotCount( count, pixelCount ) {
+
+		const previousActive = Math.min( this.rayCount, pixelCount );
+		const active = Math.min( count, pixelCount );
+		if ( active < previousActive ) {
+
+			this._resetSlots( this.rayDataStorage, active, previousActive, false );
+
+		} else if ( active > previousActive ) {
+
+			this._resetSlots( this.rayDataStorage, previousActive, active, true );
+
+		}
+
+		this.rayCount = count;
+
+	}
+
+	// Reallocates the per slot buffers to "count" slots, all dispatched. Slots that survive carry their ray data
+	// over. The trace queues and results only live within a frame, so they start empty.
 	_resizePool( count, pixelCount ) {
 
-		const { resetSlotsKernel, copyRayDataKernel } = this;
+		const { copyRayDataKernel } = this;
 		const previousCount = this.rayCount;
 		const previousActive = Math.min( previousCount, pixelCount );
 		const active = Math.min( count, pixelCount );
 
-		resetSlotsKernel.sampleCountTarget = this.sampleCountTarget;
 		if ( active < previousActive ) {
 
-			resetSlotsKernel.rayDataStorage = this.rayDataStorage;
-			resetSlotsKernel.start = active;
-			resetSlotsKernel.end = previousActive;
-			resetSlotsKernel.addingSlots = false;
-			this.dispatch( resetSlotsKernel, resetSlotsKernel.getDispatchSize( previousActive - active, 1, 1 ) );
+			this._resetSlots( this.rayDataStorage, active, previousActive, false );
 
 		}
 
@@ -370,28 +395,31 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayIntersectionsStorage = rayIntersectionsStorage;
 		this.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 		this.mediumQueue = mediumQueue;
+		this.slotCapacity = count;
 		this.rayCount = count;
 
 		if ( active > previousActive ) {
 
-			resetSlotsKernel.rayDataStorage = rayDataStorage;
-			resetSlotsKernel.start = previousActive;
-			resetSlotsKernel.end = active;
-			resetSlotsKernel.addingSlots = true;
-			this.dispatch( resetSlotsKernel, resetSlotsKernel.getDispatchSize( active - previousActive, 1, 1 ) );
+			this._resetSlots( rayDataStorage, previousActive, active, true );
 
 		}
 
 	}
 
-	// The slot count the current budget asks for, capped by the pool limit and the pixels left to sample, since each
-	// pixel has one path in flight. That's rounded up to a power of two so the pool isn't reallocated at every
-	// measurement
-	_getRequestedSlotCount() {
+	// The slots the current budget allocates, capped by the pool limit
+	_getBudgetSlotCount() {
 
 		const budgetSlots = Math.max( 1, Math.floor( this.frameBudget ) );
+		return Math.min( MAX_RAY_DATA_COUNT, budgetSlots );
+
+	}
+
+	// The slots dispatched: one per pixel left to sample at most, rounded up to a power of two so they aren't reset
+	// at every measurement
+	_getRequestedSlotCount() {
+
 		const pixelSlots = 2 ** Math.ceil( Math.log2( Math.max( this.unfinishedPixels, 1 ) ) );
-		return Math.min( MAX_RAY_DATA_COUNT, budgetSlots, pixelSlots );
+		return Math.min( this._getBudgetSlotCount(), pixelSlots );
 
 	}
 
@@ -409,13 +437,20 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// Resizes the pool when the budget changes. Paths in flight past a smaller budget are dropped.
+	// Reallocates the pool when the budget changes, and dispatches fewer slots once few pixels are left
+	// to sample
 	_applyBudget( pixelCount ) {
+
+		if ( this._getBudgetSlotCount() !== this.slotCapacity ) {
+
+			this._resizePool( this._getBudgetSlotCount(), pixelCount );
+
+		}
 
 		const requested = this._getRequestedSlotCount();
 		if ( requested !== this.rayCount ) {
 
-			this._resizePool( requested, pixelCount );
+			this._setSlotCount( requested, pixelCount );
 
 		}
 
