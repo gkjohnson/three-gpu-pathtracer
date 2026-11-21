@@ -23,8 +23,6 @@ export const sampleCountersStruct = new StructTypeNode( {
 	totalLo: { type: 'uint', atomic: true },
 	totalHi: { type: 'uint', atomic: true },
 	pixelCount: { type: 'uint', atomic: true },
-
-	// the pixels at the sample limit
 	finishedCount: { type: 'uint', atomic: true },
 }, 'SampleCounters' );
 

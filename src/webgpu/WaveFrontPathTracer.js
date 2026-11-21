@@ -44,8 +44,10 @@ const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLeng
 
 const LOW_RES_ITERATIONS = 5;
 
-// the most iterations an update runs
-const MAX_ITERATIONS = 32;
+const MAX_SAMPLE_ITERATIONS = 32;
+
+// milliseconds between the render task's measurements of the pixels left to sample
+const MEASURE_INTERVAL = 250;
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
@@ -387,8 +389,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 	// measurement
 	_getRequestedSlotCount() {
 
+		const budgetSlots = Math.max( 1, Math.floor( this.frameBudget ) );
 		const pixelSlots = 2 ** Math.ceil( Math.log2( Math.max( this.unfinishedPixels, 1 ) ) );
-		return Math.min( MAX_RAY_DATA_COUNT, Math.max( 1, Math.floor( this.frameBudget ) ), pixelSlots );
+		return Math.min( MAX_RAY_DATA_COUNT, budgetSlots, pixelSlots );
 
 	}
 
@@ -498,13 +501,15 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		subsurfaceKernel.globalSeed = this.globalSeed;
 		cameraMediumKernel.globalSeed = this.globalSeed;
 
+		let lastMeasureTime = - Infinity;
 		while ( true ) {
 
 			// the iterations that spend the budget over the paths in flight, which the pixels left to sample limit once
 			// most have finished. Each still dispatches over every slot, so they're capped
-			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount, this.unfinishedPixels );
+			const activeSlots = Math.max( 1, Math.min( this._getRequestedSlotCount(), pixelCount, this.unfinishedPixels ) );
 			const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
-			const iter = Math.min( MAX_ITERATIONS, Math.max( minIterations, Math.round( this.frameBudget / Math.max( activeSlots, 1 ) ) ) );
+			const budgetIterations = Math.round( this.frameBudget / activeSlots );
+			const iter = Math.min( MAX_SAMPLE_ITERATIONS, Math.max( minIterations, budgetIterations ) );
 
 			for ( let i = 0; i < iter; i ++ ) {
 
@@ -622,6 +627,25 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			}
 
+			// measure the pixels left to sample every so often, kept unless a reset or rebuild replaced this task meanwhile
+			const now = performance.now();
+			if ( now - lastMeasureTime >= MEASURE_INTERVAL ) {
+
+				lastMeasureTime = now;
+
+				const renderTask = this._renderTask;
+				this.getSampleCountsAsync().then( counts => {
+
+					if ( this._renderTask === renderTask ) {
+
+						this.unfinishedPixels = counts.unfinishedPixels;
+
+					}
+
+				} );
+
+			}
+
 			yield;
 
 		}
@@ -635,19 +659,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// share the in flight measurement rather than dispatching another
 		if ( this._samplesPromise === null ) {
 
-			// a reset may have started a newer measurement in the meantime
-			const promise = this._measureSampleCounts().then( counts => {
+			const promise = this._measureSampleCounts().finally( () => {
 
-				if ( this._samplesPromise === promise ) {
-
-					this.unfinishedPixels = counts.unfinishedPixels;
-
-				}
-
-				return counts;
-
-			} ).finally( () => {
-
+				// a reset may have started a newer measurement in the meantime
 				if ( this._samplesPromise === promise ) {
 
 					this._samplesPromise = null;
