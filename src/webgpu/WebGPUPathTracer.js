@@ -121,7 +121,8 @@ class TextureCache {
 		this.texture = null;
 		this.hash = null;
 
-		// the copy of a scene's render target texture, reused while the scene uses one
+		// the copy of a scene's render target texture, reused across updates. Once disposed it's allocated again
+		// on its next use
 		this.copyTexture = null;
 
 		// half float, since 8 bit linear data truncates dark colors (0x080808 becomes black)
@@ -136,26 +137,7 @@ class TextureCache {
 	dispose() {
 
 		this.colorTex.dispose();
-		this.setTexture( null );
-
-	}
-
-	// swaps in the texture, disposing the last one, except the render target copy while it's still in use
-	setTexture( texture ) {
-
-		if ( this.texture !== texture ) {
-
-			this.texture?.dispose();
-
-		}
-
-		if ( texture !== this.copyTexture ) {
-
-			this.copyTexture = null;
-
-		}
-
-		this.texture = texture;
+		this.texture?.dispose();
 
 	}
 
@@ -239,7 +221,15 @@ class TextureCache {
 			// an equirect map wraps around horizontally and is clamped at the poles
 			value.wrapS = RepeatWrapping;
 			value.wrapT = ClampToEdgeWrapping;
-			this.setTexture( value );
+
+			// the reused render target copy is still in use, so only a replaced texture is disposed
+			if ( this.texture !== value ) {
+
+				this.texture?.dispose();
+
+			}
+
+			this.texture = value;
 			this.hash = hash;
 
 		}
