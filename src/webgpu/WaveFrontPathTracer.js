@@ -24,6 +24,7 @@ import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import {
 	PrimeSampleCountersKernel,
 	TallySampleCountsKernel,
+	SAMPLE_COUNTER_FINISHED_COUNT,
 	SAMPLE_COUNTER_LENGTH,
 	SAMPLE_COUNTER_MAX,
 	SAMPLE_COUNTER_MIN,
@@ -42,6 +43,9 @@ const MAX_BUFFER_SIZE = 134217728;
 const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLength() * 4 ) );
 
 const LOW_RES_ITERATIONS = 5;
+
+// the most iterations an update runs
+const MAX_ITERATIONS = 32;
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
@@ -86,6 +90,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
 		this.sampleCountersStorage.name = 'Sample Counters';
 		this._samplesPromise = null;
+
+		// the pixels left to sample as of the last measurement, which limit the paths in flight
+		this.unfinishedPixels = Infinity;
 
 		// kernels
 		this.populatePixelIndicesKernel = new PopulatePixelIndicesKernel().setWorkgroupSize( 8, 8, 1 );
@@ -136,6 +143,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		super.reset();
 		this.globalSeed ++;
 		this._samplesPromise = null;
+		this.unfinishedPixels = Infinity;
 
 	}
 
@@ -374,10 +382,13 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// The slot count the current budget asks for, capped by the pool limit
+	// The slot count the current budget asks for, capped by the pool limit and the pixels left to sample, since each
+	// pixel has one path in flight. That's rounded up to a power of two so the pool isn't reallocated at every
+	// measurement
 	_getRequestedSlotCount() {
 
-		return Math.min( MAX_RAY_DATA_COUNT, Math.max( 1, Math.floor( this.frameBudget ) ) );
+		const pixelSlots = 2 ** Math.ceil( Math.log2( Math.max( this.unfinishedPixels, 1 ) ) );
+		return Math.min( MAX_RAY_DATA_COUNT, Math.max( 1, Math.floor( this.frameBudget ) ), pixelSlots );
 
 	}
 
@@ -489,10 +500,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		while ( true ) {
 
-			// the iterations that spend the budget over the slots in use
-			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount );
+			// the iterations that spend the budget over the paths in flight, which the pixels left to sample limit once
+			// most have finished. Each still dispatches over every slot, so they're capped
+			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount, this.unfinishedPixels );
 			const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
-			const iter = Math.max( minIterations, Math.round( this.frameBudget / activeSlots ) );
+			const iter = Math.min( MAX_ITERATIONS, Math.max( minIterations, Math.round( this.frameBudget / Math.max( activeSlots, 1 ) ) ) );
 
 			for ( let i = 0; i < iter; i ++ ) {
 
@@ -623,9 +635,19 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// share the in flight measurement rather than dispatching another
 		if ( this._samplesPromise === null ) {
 
-			const promise = this._measureSampleCounts().finally( () => {
+			// a reset may have started a newer measurement in the meantime
+			const promise = this._measureSampleCounts().then( counts => {
 
-				// a reset may have started a newer measurement in the meantime
+				if ( this._samplesPromise === promise ) {
+
+					this.unfinishedPixels = counts.unfinishedPixels;
+
+				}
+
+				return counts;
+
+			} ).finally( () => {
+
 				if ( this._samplesPromise === promise ) {
 
 					this._samplesPromise = null;
@@ -654,7 +676,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		if ( ! renderer.initialized || this.lowResMode ) {
 
-			return { min: 0, max: 0, avg: 0 };
+			return { min: 0, max: 0, avg: 0, unfinishedPixels: Infinity };
 
 		}
 
@@ -663,6 +685,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		tallySampleCountsKernel.counters = sampleCountersStorage;
 		tallySampleCountsKernel.sampleCountTarget = sampleCountTarget;
+		tallySampleCountsKernel.maxSamples = this.maxSamples;
 		renderer.compute(
 			tallySampleCountsKernel.kernel,
 			tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
@@ -675,7 +698,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// no camera ray has been dispatched yet, so there is nothing to average over
 		if ( pixelCount === 0 ) {
 
-			return { min: 0, max: 0, avg: 0 };
+			return { min: 0, max: 0, avg: 0, unfinishedPixels: Infinity };
 
 		}
 
@@ -686,6 +709,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			min: counters[ SAMPLE_COUNTER_MIN ],
 			max: counters[ SAMPLE_COUNTER_MAX ],
 			avg: total / pixelCount,
+			unfinishedPixels: pixelCount - counters[ SAMPLE_COUNTER_FINISHED_COUNT ],
 		};
 
 	}
