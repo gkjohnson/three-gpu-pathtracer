@@ -60,9 +60,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		// scatter events a medium walk takes per pass
 		this.mediumStepsPerPass = 16;
 
-		// The path slots allocated, sized to the frame budget, and the ones dispatched. Every per-slot buffer is
-		// allocated to the same count so a full pool can never overflow them.
-		this.slotCapacity = 0;
+		// The path slots dispatched, of the ones allocated to the frame budget. Every per-slot buffer is allocated to
+		// the same count so a full pool can never overflow them.
 		this.rayCount = 0;
 
 		// persistent per-path state, one slot per in-flight path
@@ -91,9 +90,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
 		this.sampleCountersStorage.name = 'Sample Counters';
 		this._samplesPromise = null;
-
-		// the pixels left to sample as of the last measurement, which limit the paths in flight
-		this.unfinishedPixels = Infinity;
 
 		// kernels
 		this.populatePixelIndicesKernel = new PopulatePixelIndicesKernel().setWorkgroupSize( 8, 8, 1 );
@@ -144,7 +140,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		super.reset();
 		this.globalSeed ++;
 		this._samplesPromise = null;
-		this.unfinishedPixels = Infinity;
 
 	}
 
@@ -394,7 +389,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayIntersectionsStorage = rayIntersectionsStorage;
 		this.shadowRayIntersectionsStorage = shadowRayIntersectionsStorage;
 		this.mediumQueue = mediumQueue;
-		this.slotCapacity = count;
 		this.rayCount = count;
 
 		if ( active > previousActive ) {
@@ -415,9 +409,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	// The slots dispatched: one per pixel left to sample at most, rounded up to a power of two so they aren't reset
 	// at every measurement
-	_getRequestedSlotCount() {
+	_getRequestedSlotCount( unfinishedPixels ) {
 
-		const pixelSlots = 2 ** Math.ceil( Math.log2( Math.max( this.unfinishedPixels, 1 ) ) );
+		const pixelSlots = 2 ** Math.ceil( Math.log2( Math.max( unfinishedPixels, 1 ) ) );
 		return Math.min( this._getBudgetSlotCount(), pixelSlots );
 
 	}
@@ -438,15 +432,16 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	// Reallocates the pool when the budget changes, and dispatches fewer slots once few pixels are left
 	// to sample
-	_applyBudget( pixelCount ) {
+	_applyBudget( pixelCount, unfinishedPixels ) {
 
-		if ( this._getBudgetSlotCount() !== this.slotCapacity ) {
+		const capacity = this.rayDataStorage ? this.rayDataStorage.count : 0;
+		if ( this._getBudgetSlotCount() !== capacity ) {
 
 			this._resizePool( this._getBudgetSlotCount(), pixelCount );
 
 		}
 
-		const requested = this._getRequestedSlotCount();
+		const requested = this._getRequestedSlotCount( unfinishedPixels );
 		if ( requested !== this.rayCount ) {
 
 			this._setSlotCount( requested, pixelCount );
@@ -510,7 +505,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// the populate pass below overwrites whatever the resize carried over
 		const pixelCount = targetDimensions.x * targetDimensions.y;
-		this._applyBudget( pixelCount );
+		this._applyBudget( pixelCount, Infinity );
 
 		// reset the trace queues — only their lengths need zeroing
 		zeroDispatchKernel.target = this.queueCounters;
@@ -535,12 +530,15 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		subsurfaceKernel.globalSeed = this.globalSeed;
 		cameraMediumKernel.globalSeed = this.globalSeed;
 
+		// the pixels left to sample as of the last measurement, which limit the paths in flight. A reset or rebuild
+		// replaces this task, so measurements from before it can't change them
+		let unfinishedPixels = Infinity;
 		let lastMeasureTime = - Infinity;
 		while ( true ) {
 
 			// the iterations that spend the budget over the paths in flight, which the pixels left to sample limit once
 			// most have finished. Each still dispatches over every slot, so they're capped
-			const activeSlots = Math.max( 1, Math.min( this._getRequestedSlotCount(), pixelCount, this.unfinishedPixels ) );
+			const activeSlots = Math.max( 1, Math.min( this._getRequestedSlotCount( unfinishedPixels ), pixelCount, unfinishedPixels ) );
 			const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
 			const budgetIterations = Math.round( this.frameBudget / activeSlots );
 			const iter = Math.min( MAX_SAMPLE_ITERATIONS, Math.max( minIterations, budgetIterations ) );
@@ -563,7 +561,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				this.dispatch( logicKernel, logicKernel.getDispatchSize( logicKernel.rayCount, 1, 1 ) );
 
 				// the trace results are consumed, so only the slot state has to survive a resize
-				this._applyBudget( pixelCount );
+				this._applyBudget( pixelCount, unfinishedPixels );
 
 				const {
 					rayDataStorage,
@@ -661,20 +659,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			}
 
-			// measure the pixels left to sample every so often, kept unless a reset or rebuild replaced this task meanwhile
+			// measure the pixels left to sample every so often
 			const now = performance.now();
 			if ( now - lastMeasureTime >= SAMPLE_COUNT_READBACK_INTERVAL_MS ) {
 
 				lastMeasureTime = now;
-
-				const renderTask = this._renderTask;
 				this.getSampleCountsAsync().then( counts => {
 
-					if ( this._renderTask === renderTask ) {
-
-						this.unfinishedPixels = counts.unfinishedPixels;
-
-					}
+					unfinishedPixels = counts.unfinishedPixels;
 
 				} );
 
