@@ -157,6 +157,9 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// index of the next cycle, as in the wavefront, and the global seed gives each render its own sequence
 		let completedSamples = 0;
 
+		// the dispatches of the current update
+		let updateDispatches = 0;
+
 		while ( true ) {
 
 			// skip the tile loop entirely once every pixel is finished
@@ -165,6 +168,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			kernel.accumulateAux = this.auxTarget ? 1 : 0;
 			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
 
+				updateDispatches = 0;
 				yield;
 				continue;
 
@@ -196,7 +200,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			kernel.sampleIndex = completedSamples;
 
 			// a frame rendered in one tile takes as many samples per update as fit in the budget
-			const updateSamples = tileCount === 1 && ! lowResMode ? Math.max( 1, Math.floor( this.frameBudget / ( _size.x * _size.y ) ) ) : 1;
+			let updateSamples = 1;
+			if ( tileCount === 1 && ! lowResMode ) {
+
+				updateSamples = Math.max( 1, Math.floor( this.frameBudget / ( _size.x * _size.y ) ) );
+
+			}
 
 			for ( let x = 0; x < tiles.x; x ++ ) {
 
@@ -210,8 +219,10 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 					this._completedSamples = completedSamples;
 					this._tileProgress = completedTiles / tileCount;
 
-					if ( ( completedSamples + 1 ) % updateSamples === 0 ) {
+					updateDispatches ++;
+					if ( updateDispatches >= updateSamples ) {
 
+						updateDispatches = 0;
 						yield;
 
 					}
