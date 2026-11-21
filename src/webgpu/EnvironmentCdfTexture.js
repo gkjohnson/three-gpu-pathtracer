@@ -6,20 +6,17 @@ import { ComputeKernel } from './compute/ComputeKernel.js';
 // the texture width WebGPU guarantees, so an 8k environment map's CDFs fit in a few rows
 const CDF_TEXTURE_WIDTH = 8192;
 
-// The importance sampling CDFs of an equirect environment map, built on the GPU from the map's texture, so maps
-// rendered on the GPU need no readback. The entries are one 1D array laid out in the texture's rows, entry "i" at texel
-// ( i % width, i / width ), read with "readCdf":
+// The importance sampling CDFs of an equirect environment map, built on the GPU. One array laid out in the texture's
+// rows, entry "i" at texel ( i % width, i / width ):
 // - the marginal CDF over the rows, "height + 1" entries led by a zero
-// - each row's conditional CDF over its pixels, "width + 1" entries each, led by a zero
-// - the sum of all the pixels' weights, last
-// A pixel's weight is its luminance times the sine of its row's polar angle, for the solid angle the equirect
-// projection stretches it over. See:
-// https://pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#Piecewise-Constant2DDistributions
+// - each row's CDF over its pixels, "width + 1" entries each, led by a zero
+// - the sum of all the pixels' weights
+// A pixel's weight is its luminance times the sine of its row's angle, the solid angle it covers
 export class EnvironmentCdfTexture extends StorageTexture {
 
 	constructor() {
 
-		// sized for a 1x1 map, all zeros until generated, which gives an environment that's never sampled
+		// all zeros for a 1x1 map until generated
 		super( 5, 1 );
 		this.format = RedFormat;
 		this.type = FloatType;

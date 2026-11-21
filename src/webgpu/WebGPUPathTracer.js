@@ -167,6 +167,17 @@ class TextureCache {
 			hash = null;
 			value = new CubeToEquirectGenerator( renderer ).generate( value );
 
+		} else if ( value.isRenderTargetTexture ) {
+
+			// rendering to a render target changes neither its uuid nor its version, so its contents are copied on
+			// every update, which also keeps them from changing under the render
+			hash = null;
+
+			const { width, height } = value.image;
+			const copy = new RenderTarget( width, height, { type: value.type, colorSpace: value.colorSpace, depthBuffer: false } ).texture;
+			renderer.copyTextureToTexture( value, copy );
+			value = copy;
+
 		} else {
 
 			// hash the scene's texture rather than the clone, whose uuid is new on every call, so an
