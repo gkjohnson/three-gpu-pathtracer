@@ -16,7 +16,7 @@ import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFun
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { LIGHT_FAR_DISTANCE, getShadowRayFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
-import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -36,7 +36,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			tileSize: uniform( new Vector2() ),
 
 			// settings
-			sampleIndex: uniform( 0 ),
 			globalSeed: uniform( 0, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
@@ -136,7 +135,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				tileSize: vec2u,
 
 				// settings
-				sampleIndex: u32,
 				globalSeed: u32,
 				maxBounces: u32,
 				maxTransparentBounces: u32,
@@ -169,14 +167,15 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				// skip the pixel once it has hit the sample limit
-				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u;
 				if ( maxSamples != 0u && sampleCount >= maxSamples ) {
 
 					return;
 
 				}
 
-				${ rngInit }( globalSeed, indexUV.xy, sampleIndex, 0 );
+				// the sample count indexes the pixel's sequence, as in the wavefront, and the global seed gives each render its own
+				${ rngInit }( globalSeed, indexUV.xy, sampleCount, 0 );
 
 				// scene ray
 				var ray: ${ rayStruct };
@@ -676,7 +675,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// the color is updated in place
 				let prevColor = ${ loadOutputFn }( ${ params.outputTarget }, colorIndex );
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( nextSampleCount ) );
-				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
+				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | nextSampleCount ) );
 				${ storeOutputFn }( ${ params.outputTarget }, colorIndex, blendedColor );
 
 				// the auxiliary images are blended the same way, in the same row order
