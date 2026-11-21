@@ -112,14 +112,6 @@ async function generateBVHInWorker( worker, geometry, options ) {
 
 }
 
-// an equirect map wraps around horizontally and is clamped at the poles
-function setEquirectWrapping( texture ) {
-
-	texture.wrapS = RepeatWrapping;
-	texture.wrapT = ClampToEdgeWrapping;
-
-}
-
 class TextureCache {
 
 	constructor( renderer, key ) {
@@ -196,7 +188,6 @@ class TextureCache {
 
 			hash = null;
 			value = new CubeToEquirectGenerator( renderer ).generate( value );
-			setEquirectWrapping( value );
 
 		} else if ( value.isRenderTargetTexture ) {
 
@@ -217,7 +208,6 @@ class TextureCache {
 				copyTexture.magFilter = LinearFilter;
 				copyTexture.source.dataReady = false;
 				copyTexture.needsUpdate = true;
-				setEquirectWrapping( copyTexture );
 				this.copyTexture = copyTexture;
 
 			}
@@ -237,31 +227,24 @@ class TextureCache {
 				value = value.clone();
 				value.minFilter = LinearFilter;
 				value.magFilter = LinearFilter;
-				setEquirectWrapping( value );
 
 			}
 
 		}
 
-		if ( hash === null ) {
+		// a texture swapped in is always the cache's own, never the scene's
+		const needsUpdate = hash === null || hash !== this.hash;
+		if ( needsUpdate ) {
 
+			// an equirect map wraps around horizontally and is clamped at the poles
+			value.wrapS = RepeatWrapping;
+			value.wrapT = ClampToEdgeWrapping;
 			this.setTexture( value );
-			this.hash = null;
-			return true;
-
-		} else {
-
-			const needsUpdate = hash !== this.hash;
-			if ( needsUpdate ) {
-
-				this.setTexture( value );
-				this.hash = hash;
-
-			}
-
-			return needsUpdate;
+			this.hash = hash;
 
 		}
+
+		return needsUpdate;
 
 	}
 
