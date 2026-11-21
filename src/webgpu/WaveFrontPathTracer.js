@@ -46,8 +46,7 @@ const LOW_RES_ITERATIONS = 5;
 
 const MAX_SAMPLE_ITERATIONS = 32;
 
-// milliseconds between the render task's measurements of the pixels left to sample
-const MEASURE_INTERVAL = 250;
+const SAMPLE_COUNT_READBACK_INTERVAL_MS = 250;
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
@@ -664,7 +663,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			// measure the pixels left to sample every so often, kept unless a reset or rebuild replaced this task meanwhile
 			const now = performance.now();
-			if ( now - lastMeasureTime >= MEASURE_INTERVAL ) {
+			if ( now - lastMeasureTime >= SAMPLE_COUNT_READBACK_INTERVAL_MS ) {
 
 				lastMeasureTime = now;
 
