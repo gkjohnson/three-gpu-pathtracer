@@ -157,6 +157,10 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// index of the next cycle, as in the wavefront, and the global seed gives each render its own sequence
 		let completedSamples = 0;
 
+		// the pixels dispatched in the current update, which takes tiles while they fit in the budget, so a budget past
+		// the pixel count runs several tile cycles
+		let updatePixels = 0;
+
 		while ( true ) {
 
 			// skip the tile loop entirely once every pixel is finished
@@ -165,6 +169,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			kernel.accumulateAux = this.auxTarget ? 1 : 0;
 			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
 
+				updatePixels = 0;
 				yield;
 				continue;
 
@@ -193,21 +198,30 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			}
 
 			const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
+			const tilePixels = tileSize.x * tileSize.y;
 			kernel.sampleIndex = completedSamples;
 
 			for ( let x = 0; x < tiles.x; x ++ ) {
 
 				for ( let y = 0; y < tiles.y; y ++ ) {
 
+					// the next update takes the tile if it doesn't fit in this one. Every update takes at least one,
+					// and the low res preview only one
+					if ( updatePixels > 0 && ( lowResMode || updatePixels + tilePixels > this.frameBudget ) ) {
+
+						updatePixels = 0;
+						yield;
+
+					}
+
 					kernel.offset.set( x, y ).multiply( tileSize );
 					this.dispatch( kernel, dispatchSize );
+					updatePixels += tilePixels;
 
 					// in low res mode the tiles past the first fall outside the target and do no work
 					completedTiles = Math.min( completedTiles + 1, tileCount );
 					this._completedSamples = completedSamples;
 					this._tileProgress = completedTiles / tileCount;
-
-					yield;
 
 				}
 
