@@ -1,4 +1,4 @@
-import { Matrix3, DataTexture, LinearFilter, RepeatWrapping, ClampToEdgeWrapping } from 'three/webgpu';
+import { Matrix3, DataTexture, LinearFilter } from 'three/webgpu';
 import { texture, sampler, uniform, PI } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { EnvironmentCdfTexture } from './EnvironmentCdfTexture.js';
@@ -33,11 +33,9 @@ export class EquirectHdrInfoNode {
 
 	}
 
-	// samples the given equirect map, building its CDFs. The map wraps around horizontally and is clamped at the poles
+	// samples the given equirect map, building its CDFs
 	updateFrom( renderer, envMap ) {
 
-		envMap.wrapS = RepeatWrapping;
-		envMap.wrapT = ClampToEdgeWrapping;
 		this.mapNode.value = envMap;
 		this.cdfTexture.generate( renderer, envMap );
 

@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, HalfFloatType, Timer, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem, RenderTarget, NormalBlending, NoBlending } from 'three/webgpu';
+import { Box3, DataTexture, RGBAFormat, EventDispatcher, LinearFilter, RepeatWrapping, ClampToEdgeWrapping, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, HalfFloatType, Timer, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem, RenderTarget, NormalBlending, NoBlending } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -112,6 +112,14 @@ async function generateBVHInWorker( worker, geometry, options ) {
 
 }
 
+// an equirect map wraps around horizontally and is clamped at the poles
+function setEquirectWrapping( texture ) {
+
+	texture.wrapS = RepeatWrapping;
+	texture.wrapT = ClampToEdgeWrapping;
+
+}
+
 class TextureCache {
 
 	constructor( renderer, key ) {
@@ -122,7 +130,7 @@ class TextureCache {
 		this.hash = null;
 
 		// the copy of a scene's render target texture, reused while the scene uses one
-		this.copyTarget = null;
+		this.copyTexture = null;
 
 		// half float, since 8 bit linear data truncates dark colors (0x080808 becomes black)
 		const colorTex = new DataTexture( toHalfFloatArray( [ 1, 1, 1, 1 ] ), 1, 1 );
@@ -140,19 +148,18 @@ class TextureCache {
 
 	}
 
-	// swaps in the texture, disposing the last one. The render target copy is kept while it's in use, and disposed
-	// through its render target, since disposing a render target's texture alone doesn't free it
+	// swaps in the texture, disposing the last one, except the render target copy while it's still in use
 	setTexture( texture ) {
 
-		const { copyTarget } = this;
-		if ( copyTarget !== null && texture !== copyTarget.texture ) {
-
-			copyTarget.dispose();
-			this.copyTarget = null;
-
-		} else if ( this.texture !== copyTarget?.texture ) {
+		if ( this.texture !== texture ) {
 
 			this.texture?.dispose();
+
+		}
+
+		if ( texture !== this.copyTexture ) {
+
+			this.copyTexture = null;
 
 		}
 
@@ -189,6 +196,7 @@ class TextureCache {
 
 			hash = null;
 			value = new CubeToEquirectGenerator( renderer ).generate( value );
+			setEquirectWrapping( value );
 
 		} else if ( value.isRenderTargetTexture ) {
 
@@ -197,18 +205,25 @@ class TextureCache {
 			hash = null;
 
 			const { width, height } = value.image;
-			if ( this.copyTarget === null ) {
+			let { copyTexture } = this;
+			if ( copyTexture === null || copyTexture.image.width !== width || copyTexture.image.height !== height ) {
 
-				this.copyTarget = new RenderTarget( width, height, { type: value.type, colorSpace: value.colorSpace, depthBuffer: false } );
+				copyTexture?.dispose();
 
-			} else {
-
-				this.copyTarget.setSize( width, height );
+				// "dataReady" set to false allocates the texture on the GPU without uploading any data, since it has none
+				copyTexture = new DataTexture( null, width, height, RGBAFormat, value.type );
+				copyTexture.colorSpace = value.colorSpace;
+				copyTexture.minFilter = LinearFilter;
+				copyTexture.magFilter = LinearFilter;
+				copyTexture.source.dataReady = false;
+				copyTexture.needsUpdate = true;
+				setEquirectWrapping( copyTexture );
+				this.copyTexture = copyTexture;
 
 			}
 
-			renderer.copyTextureToTexture( value, this.copyTarget.texture );
-			value = this.copyTarget.texture;
+			renderer.copyTextureToTexture( value, copyTexture );
+			value = copyTexture;
 
 		} else {
 
@@ -222,6 +237,7 @@ class TextureCache {
 				value = value.clone();
 				value.minFilter = LinearFilter;
 				value.magFilter = LinearFilter;
+				setEquirectWrapping( value );
 
 			}
 
