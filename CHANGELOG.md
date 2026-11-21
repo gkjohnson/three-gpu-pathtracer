@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "renderTo", which draws the render into a render target or the canvas, either as presented with the "beauty" output or as the "accumulated" samples alone.
 - WebGPUPathTracer: Support for render target textures as the scene's environment, copied on "updateEnvironment".
 - WebGPUPathTracer: "finished" in the sample counts, the share of pixels done sampling, which "complete" waits on.
+- WebGPUPathTracer: Adaptive sampling as in Cycles, with "adaptiveThreshold" and "adaptiveMinSamples". A pixel stops sampling once its noise and its neighbors' is under the threshold.
 
 ### Changed
 - WebGPUPathTracer: A camera's "getCameraRay" function takes the pixel and a [0, 1) random sample for the point within it, "( pixel, sample, resolution, ray )", in place of the jittered uv, so a camera knows exactly which pixel it renders.
