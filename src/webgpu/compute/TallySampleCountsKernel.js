@@ -1,8 +1,10 @@
-import { StorageBufferAttribute, StorageTexture, StructTypeNode } from 'three/webgpu';
+import { StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, textureStore, globalId, uniform } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
+import { createSampleCountTarget } from './targets.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
+import { isPixelConvergedFn } from '../nodes/adaptive.wgsl.js';
 
 // field order of the sample counter buffer, matching the struct below
 export const SAMPLE_COUNTER_MIN = 0;
@@ -67,7 +69,7 @@ export class TallySampleCountsKernel extends ComputeKernel {
 			globalId: globalId,
 			maxSamples: uniform( 0, 'uint' ),
 			counters: storage( new StorageBufferAttribute( 1, 1 ), sampleCountersStruct ),
-			sampleCountTarget: textureStore( new StorageTexture( 1, 1 ) ).toReadOnly(),
+			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadOnly(),
 		};
 
 		const fn = wgslTagFn/* wgsl */`
@@ -94,7 +96,7 @@ export class TallySampleCountsKernel extends ComputeKernel {
 				atomicMax( &${ params.counters }[ 0 ].maxSamples, samples );
 				atomicAdd( &${ params.counters }[ 0 ].pixelCount, 1u );
 
-				if ( maxSamples != 0u && samples >= maxSamples ) {
+				if ( ( maxSamples != 0u && samples >= maxSamples ) || ${ isPixelConvergedFn }( ${ params.sampleCountTarget }, globalId.xy ) ) {
 
 					atomicAdd( &${ params.counters }[ 0 ].finishedCount, 1u );
 

@@ -33,7 +33,7 @@ import { createOutputTarget } from './compute/targets.js';
  * @property {number} min - Lowest sample count of any pixel.
  * @property {number} max - Highest sample count of any pixel.
  * @property {number} avg - Mean sample count across the image.
- * @property {number} finished - Share of the pixels done sampling, at `maxSamples`.
+ * @property {number} finished - Share of the pixels done sampling, at `maxSamples` or converged by adaptive sampling.
  * @property {number} samplesPerSecond - Mean samples accumulated per second of render time since the last reset.
  * @property {number} renderTime - Milliseconds spent rendering samples since the last reset.
  * @property {number} elapsedTime - Milliseconds since rendering started after the last reset, including pauses but
@@ -226,8 +226,8 @@ class TextureCache {
 // WebGPUPathTracer Event Definitions
 
 /**
- * Fired once every pixel has reached `maxSamples` and an attached denoiser has finished. Fires
- * again after a reset, or after `maxSamples` is raised, once the render has caught up.
+ * Fired once every pixel has reached `maxSamples` or converged by `adaptiveThreshold`, and an attached denoiser
+ * has finished. Fires again after a reset, or after `maxSamples` is raised, once the render has caught up.
  * @event WebGPUPathTracer#complete
  */
 
@@ -357,7 +357,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Stops accumulating once every pixel reaches this many samples. A denoiser only runs once the
-	 * render has stopped, so it has no effect while this is `0`.
+	 * render has stopped, so it has no effect while this is `0` unless adaptive sampling stops it.
 	 * @type {number}
 	 * @default 0
 	 * @note `0` renders indefinitely.
@@ -380,8 +380,49 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Whether every pixel has reached {@link WebGPUPathTracer#maxSamples} and an attached denoiser
-	 * has finished, as of the last measurement. Always false while rendering indefinitely.
+	 * Noise level a pixel stops sampling at, as Cycles' adaptive sampling "noise threshold": lower values
+	 * reduce the noise at the cost of render time. A pixel stops once it and the pixels around it are under
+	 * it, or at {@link WebGPUPathTracer#maxSamples}. Adaptive sampling stores another 12 bytes per pixel.
+	 * @type {number}
+	 * @default 0
+	 * @note `0` turns adaptive sampling off.
+	 */
+	get adaptiveThreshold() {
+
+		return this._pathTracer.adaptiveThreshold;
+
+	}
+
+	set adaptiveThreshold( v ) {
+
+		this._pathTracer.setAdaptiveSampling( v, this.adaptiveMinSamples );
+		this.reset();
+
+	}
+
+	/**
+	 * Samples a pixel takes before adaptive sampling can stop it, so small noisy features are found first.
+	 * @type {number}
+	 * @default 0
+	 * @note `0` picks them from {@link WebGPUPathTracer#adaptiveThreshold}, as Cycles does: 64 at 0.01.
+	 */
+	get adaptiveMinSamples() {
+
+		return this._pathTracer.adaptiveMinSamples;
+
+	}
+
+	set adaptiveMinSamples( v ) {
+
+		this._pathTracer.setAdaptiveSampling( this.adaptiveThreshold, v );
+		this.reset();
+
+	}
+
+	/**
+	 * Whether every pixel has finished sampling, at {@link WebGPUPathTracer#maxSamples} or by
+	 * {@link WebGPUPathTracer#adaptiveThreshold}, and an attached denoiser has finished, as of the last
+	 * measurement. Always false while rendering indefinitely without adaptive sampling.
 	 * @type {boolean}
 	 */
 	get complete() {
@@ -603,11 +644,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	useMegakernel( value ) {
 
-		const maxSamples = this._pathTracer.maxSamples;
+		const { maxSamples, adaptiveThreshold, adaptiveMinSamples } = this._pathTracer;
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.maxSamples = maxSamples;
+		this._pathTracer.setAdaptiveSampling( adaptiveThreshold, adaptiveMinSamples );
 		this._timingCount = 0;
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setLightsInfo( this._lightsInfo );
@@ -1554,7 +1596,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 	_dispatchRenderProgress( samples ) {
 
 		const { maxSamples } = this;
-		const progress = maxSamples > 0 ? Math.min( samples.avg / maxSamples, 1 ) : null;
+		// pixels stopped by adaptive sampling are done, short of "maxSamples"
+		const sampleProgress = maxSamples > 0 ? Math.min( samples.avg / maxSamples, 1 ) : 0;
+		const progress = maxSamples > 0 || this.adaptiveThreshold > 0 ? Math.max( sampleProgress, samples.finished ) : null;
 		this.dispatchEvent( { type: 'progress', stage: 'rendering', progress, samples } );
 
 	}
@@ -1633,7 +1677,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 			synchronizeRenderSize,
 			renderScale,
 			minSamples,
-			maxSamples,
 		} = this;
 
 		timer.update();
@@ -1711,7 +1754,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// update the samples, stopping once every pixel has reached "maxSamples"
+		// update the samples, stopping once every pixel has reached "maxSamples" or converged
 		const samplesComplete = this._lastSampleCounts.finished >= 1;
 		let rendered = false;
 		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
@@ -1747,10 +1790,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const denoiser = this._denoiser;
 		const upscaler = this._upscaler;
 
-		// the denoiser runs once the render stops, so an uncapped render never denoises
+		// the denoiser runs once the render stops, so an uncapped render without adaptive sampling never denoises
 		// TODO: this only needs to know whether the render stopped, but measures the per pixel
 		// counts every frame. A count of the camera rays dispatched would answer it in one value
-		const awaitingDenoise = Boolean( denoiser ) && ! denoiser.complete && ! denoiser.running && maxSamples > 0;
+		const awaitingDenoise = Boolean( denoiser ) && ! denoiser.complete && ! denoiser.running;
 
 		// Gate on the average pixel. Measuring is expensive so it stops once faded in, and
 		// the check reads the last measurement rather than waiting on this one.

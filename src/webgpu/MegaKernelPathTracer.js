@@ -2,6 +2,7 @@ import { Vector2 } from 'three/webgpu';
 import { PathTracerMegaKernel } from './compute/PathTracerMegaKernel.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
+import { getAdaptiveSettings } from './nodes/adaptive.wgsl.js';
 
 const _size = new Vector2();
 
@@ -127,7 +128,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// compile the kernel before its first dispatch
 		yield* this.compileKernels( [ kernel ] );
 
-		// Number of tile cycles that have finished, ie. the sample count every pixel has reached
+		// Number of tile cycles that have finished, ie. the sample count every pixel has reached without adaptive sampling
 		let completedSamples = 0;
 
 		// the dispatches of the current update
@@ -135,11 +136,17 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		while ( true ) {
 
-			// skip the tile loop entirely once every pixel is finished
 			kernel.maxSamples = this.maxSamples;
 			kernel.auxTarget = this.auxTarget ?? this._auxPlaceholder;
 			kernel.accumulateAux = this.auxTarget ? 1 : 0;
-			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
+
+			const adaptive = getAdaptiveSettings( this.adaptiveThreshold, this.adaptiveMinSamples );
+			kernel.adaptiveThreshold = adaptive.threshold;
+			kernel.adaptiveMinSamples = adaptive.minSamples;
+
+			// skip the tile loop entirely once every pixel is finished. With adaptive sampling a pixel stopped by its
+			// neighbors can resume past this, so the cycles go on until the measured counts end the render
+			if ( this.adaptiveThreshold === 0 && this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
 
 				updateDispatches = 0;
 				yield;

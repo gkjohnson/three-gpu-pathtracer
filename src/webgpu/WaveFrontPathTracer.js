@@ -21,6 +21,7 @@ import {
 } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
+import { getAdaptiveSettings } from './nodes/adaptive.wgsl.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
@@ -494,6 +495,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				logicKernel.auxTarget = this.auxTarget ?? this._auxPlaceholder;
 				logicKernel.accumulateAux = this.auxTarget ? 1 : 0;
 				logicKernel.lowResMode = this.lowResMode ? 1 : 0;
+
+				const adaptive = getAdaptiveSettings( this.adaptiveThreshold, this.adaptiveMinSamples );
+				logicKernel.adaptiveThreshold = adaptive.threshold;
+				logicKernel.adaptiveMinSamples = adaptive.minSamples;
 
 				// Step 1: resolve last frame's trace results — accumulate NEE / emission / env, terminate
 				// finished paths into the output, and pick the next NEE light for each live path

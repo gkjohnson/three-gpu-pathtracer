@@ -17,7 +17,8 @@ import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, NO_PIXEL } from './structs.js';
 import { getMediumSegmentWeightFn } from '../../nodes/medium.wgsl.js';
-import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
+import { SAMPLE_CONVERGED_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
+import { accumulateAdaptiveFn } from '../../nodes/adaptive.wgsl.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
 // results, accumulates emission and NEE / forward MIS contributions, terminates finished paths into
@@ -47,6 +48,10 @@ export class LogicKernel extends ComputeKernel {
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 			accumulateAux: uniform( 0, 'uint' ),
 			lowResMode: uniform( 0, 'uint' ),
+
+			// adaptive sampling, from "getAdaptiveSettings"
+			adaptiveThreshold: uniform( 0 ),
+			adaptiveMinSamples: uniform( 0, 'uint' ),
 
 			rayDataStorage: storage( new StorageBufferAttribute( 1, 1 ), rayDataStruct ),
 			rayIntersectionsStorage: storage( new StorageBufferAttribute( 1, 1 ), intersectionResultStruct ),
@@ -79,6 +84,8 @@ export class LogicKernel extends ComputeKernel {
 				transmissiveBackground: u32,
 				accumulateAux: u32,
 				lowResMode: u32,
+				adaptiveThreshold: f32,
+				adaptiveMinSamples: u32,
 
 				globalId: vec3u
 			) -> void {
@@ -325,7 +332,8 @@ export class LogicKernel extends ComputeKernel {
 
 				// the color rows are stored top down to match a rasterized render target
 				let colorIndex = vec2u( indexUV.x, textureDimensions( ${ params.outputTarget } ).y - 1u - indexUV.y );
-				let storedSamples = textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u;
+				let storedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+				let storedSamples = storedField & ${ SAMPLE_COUNT_MASK }u;
 
 				if ( isTerminated ) {
 
@@ -334,7 +342,12 @@ export class LogicKernel extends ComputeKernel {
 					let sampleCount = storedSamples + 1;
 					let prevColor = ${ loadOutputFn }( ${ params.outputTarget }, colorIndex );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
-					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
+					let convergedFlag = ${ accumulateAdaptiveFn }(
+						${ params.outputTarget }, colorIndex, resultColor, blendedColor, sampleCount,
+						storedField & ${ SAMPLE_CONVERGED_FLAG }u, adaptiveThreshold, adaptiveMinSamples,
+					);
+
+					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | convergedFlag | sampleCount ) );
 					${ storeOutputFn }( ${ params.outputTarget }, colorIndex, blendedColor );
 
 					// the auxiliary images are blended the same way, in the same row order

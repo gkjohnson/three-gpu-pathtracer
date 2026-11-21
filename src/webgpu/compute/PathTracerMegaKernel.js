@@ -16,7 +16,8 @@ import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFun
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { LIGHT_FAR_DISTANCE, getShadowRayFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
-import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT, SAMPLE_CONVERGED_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
+import { accumulateAdaptiveFn, isPixelConvergedReadWriteFn } from '../nodes/adaptive.wgsl.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -50,6 +51,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 			transmissiveBackground: uniform( TRANSMISSIVE_BACKGROUND_OVERLAY ),
 			accumulateAux: uniform( 0, 'uint' ),
+
+			// adaptive sampling, from "getAdaptiveSettings"
+			adaptiveThreshold: uniform( 0 ),
+			adaptiveMinSamples: uniform( 0, 'uint' ),
 
 			// the per pixel first hit albedo and normal, as running means like the color
 			auxTarget: textureStore( createAuxTarget() ).toReadWrite(),
@@ -147,6 +152,8 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				transmissiveBackground: u32,
 				accumulateAux: u32,
+				adaptiveThreshold: f32,
+				adaptiveMinSamples: u32,
 
 			) -> void {
 
@@ -166,9 +173,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 				}
 
-				// skip the pixel once it has hit the sample limit
-				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u;
-				if ( maxSamples != 0u && sampleCount >= maxSamples ) {
+				// skip the pixel once it has hit the sample limit or converged
+				let sampleField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+				let sampleCount = sampleField & ${ SAMPLE_COUNT_MASK }u;
+				if ( ( maxSamples != 0u && sampleCount >= maxSamples ) || ${ isPixelConvergedReadWriteFn }( ${ params.sampleCountTarget }, indexUV ) ) {
 
 					return;
 
@@ -675,7 +683,12 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// the color is updated in place
 				let prevColor = ${ loadOutputFn }( ${ params.outputTarget }, colorIndex );
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( nextSampleCount ) );
-				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | nextSampleCount ) );
+				let convergedFlag = ${ accumulateAdaptiveFn }(
+					${ params.outputTarget }, colorIndex, resultColor, blendedColor, nextSampleCount,
+					sampleField & ${ SAMPLE_CONVERGED_FLAG }u, adaptiveThreshold, adaptiveMinSamples,
+				);
+
+				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | convergedFlag | nextSampleCount ) );
 				${ storeOutputFn }( ${ params.outputTarget }, colorIndex, blendedColor );
 
 				// the auxiliary images are blended the same way, in the same row order
