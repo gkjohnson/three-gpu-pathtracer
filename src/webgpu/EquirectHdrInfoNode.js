@@ -1,7 +1,6 @@
-import { Matrix3, DataTexture, RGBAFormat, HalfFloatType, LinearFilter, RepeatWrapping, ClampToEdgeWrapping } from 'three/webgpu';
+import { Matrix3, DataTexture, LinearFilter, RepeatWrapping, ClampToEdgeWrapping } from 'three/webgpu';
 import { texture, sampler, uniform, PI } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { toHalfFloatArray } from '../utils/TextureUtils.js';
 import { EnvironmentCdfTexture } from './EnvironmentCdfTexture.js';
 import { readCdfFn, searchCdfFn } from './nodes/cdf.wgsl.js';
 import { environmentSampleStruct } from './nodes/structs.wgsl.js';
@@ -13,7 +12,7 @@ export class EquirectHdrInfoNode {
 	constructor() {
 
 		// a black map until one is set
-		const defaultMap = new DataTexture( toHalfFloatArray( [ 0, 0, 0, 0 ] ), 1, 1, RGBAFormat, HalfFloatType );
+		const defaultMap = new DataTexture( new Uint8Array( 4 ), 1, 1 );
 		defaultMap.minFilter = LinearFilter;
 		defaultMap.magFilter = LinearFilter;
 		defaultMap.needsUpdate = true;

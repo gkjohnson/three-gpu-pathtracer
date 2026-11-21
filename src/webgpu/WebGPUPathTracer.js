@@ -121,6 +121,9 @@ class TextureCache {
 		this.texture = null;
 		this.hash = null;
 
+		// the copy of a scene's render target texture, reused while the scene uses one
+		this.copyTarget = null;
+
 		// half float, since 8 bit linear data truncates dark colors (0x080808 becomes black)
 		const colorTex = new DataTexture( toHalfFloatArray( [ 1, 1, 1, 1 ] ), 1, 1 );
 		colorTex.type = HalfFloatType;
@@ -133,23 +136,27 @@ class TextureCache {
 	dispose() {
 
 		this.colorTex.dispose();
-		this.disposeTexture();
+		this.setTexture( null );
 
 	}
 
-	// disposes the current texture, a render target copy through the render target that owns it
-	disposeTexture() {
+	// swaps in the texture, disposing the last one. The render target copy is kept while it's in use, and disposed
+	// through its render target, since disposing a render target's texture alone doesn't free it
+	setTexture( texture ) {
 
-		const { texture } = this;
-		if ( texture?.isRenderTargetTexture ) {
+		const { copyTarget } = this;
+		if ( copyTarget !== null && texture !== copyTarget.texture ) {
 
-			texture.renderTarget.dispose();
+			copyTarget.dispose();
+			this.copyTarget = null;
 
-		} else {
+		} else if ( this.texture !== copyTarget?.texture ) {
 
-			texture?.dispose();
+			this.texture?.dispose();
 
 		}
+
+		this.texture = texture;
 
 	}
 
@@ -190,9 +197,18 @@ class TextureCache {
 			hash = null;
 
 			const { width, height } = value.image;
-			const copy = new RenderTarget( width, height, { type: value.type, colorSpace: value.colorSpace, depthBuffer: false } ).texture;
-			renderer.copyTextureToTexture( value, copy );
-			value = copy;
+			if ( this.copyTarget === null ) {
+
+				this.copyTarget = new RenderTarget( width, height, { type: value.type, colorSpace: value.colorSpace, depthBuffer: false } );
+
+			} else {
+
+				this.copyTarget.setSize( width, height );
+
+			}
+
+			renderer.copyTextureToTexture( value, this.copyTarget.texture );
+			value = this.copyTarget.texture;
 
 		} else {
 
@@ -213,9 +229,7 @@ class TextureCache {
 
 		if ( hash === null ) {
 
-			this.disposeTexture();
-
-			this.texture = value;
+			this.setTexture( value );
 			this.hash = null;
 			return true;
 
@@ -224,8 +238,7 @@ class TextureCache {
 			const needsUpdate = hash !== this.hash;
 			if ( needsUpdate ) {
 
-				this.disposeTexture();
-				this.texture = value;
+				this.setTexture( value );
 				this.hash = hash;
 
 			}
