@@ -1,4 +1,4 @@
-import { Box3, DataTexture, EventDispatcher, LinearFilter, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, HalfFloatType, Timer, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem, RenderTarget, NormalBlending, NoBlending } from 'three/webgpu';
+import { Box3, DataTexture, RGBAFormat, EventDispatcher, LinearFilter, RepeatWrapping, ClampToEdgeWrapping, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, HalfFloatType, Timer, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem, RenderTarget, NormalBlending, NoBlending } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -167,6 +167,24 @@ class TextureCache {
 			hash = null;
 			value = new CubeToEquirectGenerator( renderer ).generate( value );
 
+		} else if ( value.isRenderTargetTexture ) {
+
+			// rendering to a render target changes neither its uuid nor its version, so its contents are copied on
+			// every update, which also keeps them from changing under the render
+			hash = null;
+
+			// "dataReady" set to false allocates the texture on the GPU without uploading any data, since it has none
+			const { width, height } = value.image;
+			const copy = new DataTexture( null, width, height, RGBAFormat, value.type );
+			copy.colorSpace = value.colorSpace;
+			copy.minFilter = LinearFilter;
+			copy.magFilter = LinearFilter;
+			copy.source.dataReady = false;
+			copy.needsUpdate = true;
+
+			renderer.copyTextureToTexture( value, copy );
+			value = copy;
+
 		} else {
 
 			// hash the scene's texture rather than the clone, whose uuid is new on every call, so an
@@ -184,28 +202,21 @@ class TextureCache {
 
 		}
 
-		if ( hash === null ) {
+		// a texture swapped in is always the cache's own, never the scene's
+		const needsUpdate = hash === null || hash !== this.hash;
+		if ( needsUpdate ) {
+
+			// an equirect map wraps around horizontally and is clamped at the poles
+			value.wrapS = RepeatWrapping;
+			value.wrapT = ClampToEdgeWrapping;
 
 			this.texture?.dispose();
-
 			this.texture = value;
-			this.hash = null;
-			return true;
-
-		} else {
-
-			const needsUpdate = hash !== this.hash;
-			if ( needsUpdate ) {
-
-				this.texture?.dispose();
-				this.texture = value;
-				this.hash = hash;
-
-			}
-
-			return needsUpdate;
+			this.hash = hash;
 
 		}
+
+		return needsUpdate;
 
 	}
 
@@ -1384,7 +1395,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const { envInfo } = _lightsInfo;
 		if ( _environmentCache.setFromScene( scene ) ) {
 
-			envInfo.updateFrom( _environmentCache.texture );
+			envInfo.updateFrom( this._renderer, _environmentCache.texture );
 
 		}
 

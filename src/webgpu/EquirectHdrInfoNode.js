@@ -1,75 +1,50 @@
-import { Matrix3, RedFormat, FloatType } from 'three/webgpu';
+import { Matrix3, DataTexture, LinearFilter } from 'three/webgpu';
 import { texture, sampler, uniform, PI } from 'three/tsl';
-import { EquirectHdrInfoUniform } from '../uniforms/EquirectHdrInfoUniform.js';
-import { LinearDataTexture } from './LinearDataTexture.js';
-import { readCdfFn, searchCdfFn } from './nodes/cdf.wgsl.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { EnvironmentCdfTexture } from './EnvironmentCdfTexture.js';
+import { readCdfFn, searchCdfFn } from './nodes/cdf.wgsl.js';
 import { environmentSampleStruct } from './nodes/structs.wgsl.js';
 import { equirectDirectionToUvFn, equirectUvToDirectionFn } from './nodes/sampling.wgsl.js';
 
-export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
+// An equirect environment map and its importance sampling CDFs, built on the GPU, with the functions that sample it
+export class EquirectHdrInfoNode {
 
 	constructor() {
 
-		super();
+		// a black map until one is set
+		const defaultMap = new DataTexture( new Uint8Array( 4 ), 1, 1 );
+		defaultMap.minFilter = LinearFilter;
+		defaultMap.magFilter = LinearFilter;
+		defaultMap.needsUpdate = true;
 
-		// environment map with a sampler, and the importance sampling CDFs for the default 1x1 map
-		this.mapNode = texture( this.map );
+		this.defaultMap = defaultMap;
+		this.cdfTexture = new EnvironmentCdfTexture();
+
+		// the environment map with a sampler, and its CDFs
+		this.mapNode = texture( defaultMap );
 		this.mapSampler = sampler( this.mapNode );
-		this.cdfTextureNode = texture( new LinearDataTexture( new Float32Array( [ 0, 1, 0, 1 ] ), 1, RedFormat, FloatType ) ).setName( 'envCdf' );
+		this.cdfTextureNode = texture( this.cdfTexture ).setName( 'envCdf' );
 
 		// scalar parameters that assemble into the EnvironmentInfo struct in the shader
 		this.rotationNode = uniform( new Matrix3() );
 		this.intensityNode = uniform( 1 );
-		this.totalSumNode = uniform( this.totalSum );
 
 		this._initFns();
 
 	}
 
-	getPixelWeight( r, g, b, row, height ) {
+	// samples the given equirect map, building its CDFs
+	updateFrom( renderer, envMap ) {
 
-		// weight the pixel contribution by its spherical solid angle.
-		const theta = Math.PI * ( row + 0.5 ) / height;
-		return super.getPixelWeight( r, g, b ) * Math.sin( theta );
-
-	}
-
-	updateFrom( envMap ) {
-
-		super.updateFrom( envMap );
-
-		const {
-			mapNode,
-			cdfTextureNode,
-			totalSumNode,
-		} = this;
-
-		// refresh values in place on the existing nodes so no rebuild is required
-		mapNode.value = this.map;
-		totalSumNode.value = this.totalSum;
-
-		// pack the row CDF and then each row's pixel CDF into one buffer, each led by a zero so a
-		// pixel's range is two neighboring entries
-		const { width, height } = this.map.image;
-		const { cdfMarginal, cdfConditional } = this;
-		const cdf = new Float32Array( height + 1 + height * ( width + 1 ) );
-		cdf.set( cdfMarginal, 1 );
-		for ( let y = 0; y < height; y ++ ) {
-
-			cdf.set( cdfConditional.subarray( y * width, y * width + width ), height + 1 + y * ( width + 1 ) + 1 );
-
-		}
-
-		cdfTextureNode.value.dispose();
-		cdfTextureNode.value = new LinearDataTexture( cdf, 1, RedFormat, FloatType );
+		this.mapNode.value = envMap;
+		this.cdfTexture.generate( renderer, envMap );
 
 	}
 
 	dispose() {
 
-		super.dispose();
-		this.cdfTextureNode.value.dispose();
+		this.defaultMap.dispose();
+		this.cdfTexture.dispose();
 
 	}
 
@@ -79,10 +54,19 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 			mapNode,
 			mapSampler,
 			cdfTextureNode,
-			totalSumNode,
 			rotationNode,
 			intensityNode,
 		} = this;
+
+		// the sum of the map's pixel weights, the CDFs' last entry
+		this.getTotalSum = wgslTagFn/* wgsl */`
+			fn getEnvTotalSum() -> f32 {
+
+				let resolution = textureDimensions( ${ mapNode } );
+				return ${ readCdfFn }( ${ cdfTextureNode }, resolution.y + 1u + resolution.y * ( resolution.x + 1u ) );
+
+			}
+		`;
 
 		// the solid angle pdf of a direction at "v" in the given pixel, which is sampled uniformly over its area
 		const getTexelPdfFn = wgslTagFn/* wgsl */`
@@ -144,7 +128,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 			fn getEnvWeight() -> f32 {
 
 				let resolution = textureDimensions( ${ mapNode } );
-				return ${ intensityNode } * ${ PI } * ${ PI } * ${ totalSumNode } / ( 2.0 * f32( resolution.x * resolution.y ) );
+				return ${ intensityNode } * ${ PI } * ${ PI } * ${ this.getTotalSum }() / ( 2.0 * f32( resolution.x * resolution.y ) );
 
 			}
 		`;
@@ -152,7 +136,7 @@ export class EquirectHdrInfoNode extends EquirectHdrInfoUniform {
 		this.getDirPdf = wgslTagFn/* wgsl */`
 			fn getEnvDirPdf( direction: vec3f ) -> f32 {
 
-				if ( ${ totalSumNode } == 0.0 ) {
+				if ( ${ this.getTotalSum }() == 0.0 ) {
 
 					return 0.0;
 
