@@ -74,7 +74,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
 		// environment resources
-		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+		const getEnvTotalSum = proxy( 'envInfo.value.getTotalSum', params );
 		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
@@ -374,7 +374,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								let transparency = ( 1.0 - bg.a ) * avg;
 
 								var misWeight = 1.0;
-								if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0 ) {
+								if ( misEnabled != 0u && ${ getEnvTotalSum }() > 0.0 && ${ envIntensityNode } > 0.0 ) {
 
 									let envPdf = ${ getEnvDirPdf }( ray.direction );
 									misWeight = ${ misHeuristicFn }( scatterPdf, envPdf );

@@ -1384,7 +1384,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const { envInfo } = _lightsInfo;
 		if ( _environmentCache.setFromScene( scene ) ) {
 
-			envInfo.updateFrom( _environmentCache.texture );
+			envInfo.updateFrom( this._renderer, _environmentCache.texture );
 
 		}
 
