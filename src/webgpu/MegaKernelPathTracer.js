@@ -153,8 +153,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// compile the kernel before its first dispatch
 		yield* this.compileKernels( [ kernel ] );
 
-		// Number of tile cycles that have finished, ie. the sample count every pixel has reached. It is the sample
-		// index of the next cycle, as in the wavefront, and the global seed gives each render its own sequence
+		// Number of tile cycles that have finished, ie. the sample count every pixel has reached
 		let completedSamples = 0;
 
 		// the dispatches of the current update
@@ -197,7 +196,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			}
 
 			const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
-			kernel.sampleIndex = completedSamples;
 
 			// a frame rendered in one tile takes as many samples per update as fit in the budget
 			let updateSamples = 1;
