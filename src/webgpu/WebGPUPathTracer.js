@@ -121,10 +121,6 @@ class TextureCache {
 		this.texture = null;
 		this.hash = null;
 
-		// the copy of a scene's render target texture, reused across updates. Once disposed it's allocated again
-		// on its next use
-		this.copyTexture = null;
-
 		// half float, since 8 bit linear data truncates dark colors (0x080808 becomes black)
 		const colorTex = new DataTexture( toHalfFloatArray( [ 1, 1, 1, 1 ] ), 1, 1 );
 		colorTex.type = HalfFloatType;
@@ -177,25 +173,17 @@ class TextureCache {
 			// every update, which also keeps them from changing under the render
 			hash = null;
 
+			// "dataReady" set to false allocates the texture on the GPU without uploading any data, since it has none
 			const { width, height } = value.image;
-			let { copyTexture } = this;
-			if ( copyTexture === null || copyTexture.image.width !== width || copyTexture.image.height !== height ) {
+			const copy = new DataTexture( null, width, height, RGBAFormat, value.type );
+			copy.colorSpace = value.colorSpace;
+			copy.minFilter = LinearFilter;
+			copy.magFilter = LinearFilter;
+			copy.source.dataReady = false;
+			copy.needsUpdate = true;
 
-				copyTexture?.dispose();
-
-				// "dataReady" set to false allocates the texture on the GPU without uploading any data, since it has none
-				copyTexture = new DataTexture( null, width, height, RGBAFormat, value.type );
-				copyTexture.colorSpace = value.colorSpace;
-				copyTexture.minFilter = LinearFilter;
-				copyTexture.magFilter = LinearFilter;
-				copyTexture.source.dataReady = false;
-				copyTexture.needsUpdate = true;
-				this.copyTexture = copyTexture;
-
-			}
-
-			renderer.copyTextureToTexture( value, copyTexture );
-			value = copyTexture;
+			renderer.copyTextureToTexture( value, copy );
+			value = copy;
 
 		} else {
 
@@ -222,13 +210,7 @@ class TextureCache {
 			value.wrapS = RepeatWrapping;
 			value.wrapT = ClampToEdgeWrapping;
 
-			// the reused render target copy is still in use, so only a replaced texture is disposed
-			if ( this.texture !== value ) {
-
-				this.texture?.dispose();
-
-			}
-
+			this.texture?.dispose();
 			this.texture = value;
 			this.hash = hash;
 
