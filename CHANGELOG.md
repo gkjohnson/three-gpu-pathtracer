@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: The render fades in over the low res preview, which shows through the pixels the render hasn't reached yet. With a "minSamples" of 0 the preview stays until every pixel has a sample.
 - WebGPUPathTracer: The samples accumulate in place in a single float array texture rather than two RGBA float targets, halving the memory they use.
 - WebGPUPathTracer: The environment's importance sampling is built on the GPU, which is much faster.
+- WebGPUPathTracer: The wavefront path tracer sizes its path slots to the pixels left to sample, so renders with "maxSamples" finish up to 20% sooner.
+- WebGPUPathTracer: The megakernel renders several samples per "renderSample" call when the whole frame fits in "frameBudget".
+- WebGPUPathTracer: The megakernel indexes each pixel's random sequence by its own sample count, as the wavefront does.
 
 ### Removed
 - WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.
