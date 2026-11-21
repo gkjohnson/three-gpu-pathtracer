@@ -157,29 +157,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// index of the next cycle, as in the wavefront, and the global seed gives each render its own sequence
 		let completedSamples = 0;
 
-		// the tile of the current cycle dispatched next, and the cycle's grid of tiles. Every pixel in a tile finishes
-		// its sample in a single dispatch, so the sample counts can be derived from how far through the tile cycle we
-		// are without reading anything back
-		let tileIndex = 0;
-		let tileCount = 1;
-		let dispatchSize = null;
-		const tileSize = kernel.tileSize;
-
-		// a cycle splits the frame into a near square grid of tiles no larger than the budget
-		const startCycle = () => {
-
-			this.getSize( _size );
-			const budgetTiles = lowResMode ? 1 : Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
-			tiles.x = Math.ceil( Math.sqrt( budgetTiles ) );
-			tiles.y = Math.ceil( budgetTiles / tiles.x );
-			tileCount = tiles.x * tiles.y;
-
-			this.getSize( tileSize ).divide( tiles ).ceil();
-			dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
-			kernel.sampleIndex = completedSamples;
-
-		};
-
 		while ( true ) {
 
 			// skip the tile loop entirely once every pixel is finished
@@ -193,43 +170,57 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 			}
 
-			if ( tileIndex === 0 ) {
+			// split the frame into a near square grid of tiles no larger than the budget
+			this.getSize( _size );
+			const budgetTiles = lowResMode ? 1 : Math.max( 1, Math.ceil( _size.x * _size.y / this.frameBudget ) );
+			tiles.x = Math.ceil( Math.sqrt( budgetTiles ) );
+			tiles.y = Math.ceil( budgetTiles / tiles.x );
 
-				startCycle();
+			// every pixel in a tile finishes its sample in a single dispatch, so the sample counts
+			// can be derived from how far through the tile cycle we are without reading anything back
+			const tileCount = this.lowResMode ? 1 : tiles.x * tiles.y;
+			let completedTiles = 0;
+
+			const tileSize = kernel.tileSize;
+			if ( lowResMode ) {
+
+				this.getSize( tileSize );
+
+			} else {
+
+				this.getSize( tileSize ).divide( tiles ).ceil();
 
 			}
 
-			// the tiles that fit in the budget, so a budget past the pixel count runs several tile cycles. Every update
-			// takes at least one, and the low res preview only one
-			const updateTiles = lowResMode ? 1 : Math.max( 1, Math.floor( this.frameBudget / ( tileSize.x * tileSize.y ) ) );
-			for ( let i = 0; i < updateTiles; i ++ ) {
+			const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
+			kernel.sampleIndex = completedSamples;
 
-				kernel.offset.set( tileIndex % tiles.x, Math.floor( tileIndex / tiles.x ) ).multiply( tileSize );
-				this.dispatch( kernel, dispatchSize );
+			// a frame rendered in one tile takes as many samples per update as fit in the budget
+			const updateSamples = tileCount === 1 && ! lowResMode ? Math.max( 1, Math.floor( this.frameBudget / ( _size.x * _size.y ) ) ) : 1;
 
-				tileIndex ++;
-				this._completedSamples = completedSamples;
-				this._tileProgress = tileIndex / tileCount;
+			for ( let x = 0; x < tiles.x; x ++ ) {
 
-				if ( tileIndex === tileCount ) {
+				for ( let y = 0; y < tiles.y; y ++ ) {
 
-					tileIndex = 0;
-					completedSamples ++;
+					kernel.offset.set( x, y ).multiply( tileSize );
+					this.dispatch( kernel, dispatchSize );
 
-					// the update's next tile starts a new cycle, unless every pixel is finished
-					if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
+					// in low res mode the tiles past the first fall outside the target and do no work
+					completedTiles = Math.min( completedTiles + 1, tileCount );
+					this._completedSamples = completedSamples;
+					this._tileProgress = completedTiles / tileCount;
 
-						break;
+					if ( ( completedSamples + 1 ) % updateSamples === 0 ) {
+
+						yield;
 
 					}
-
-					startCycle();
 
 				}
 
 			}
 
-			yield;
+			completedSamples ++;
 
 		}
 
