@@ -133,7 +133,23 @@ class TextureCache {
 	dispose() {
 
 		this.colorTex.dispose();
-		this.texture?.dispose();
+		this.disposeTexture();
+
+	}
+
+	// disposes the current texture, a render target copy through the render target that owns it
+	disposeTexture() {
+
+		const { texture } = this;
+		if ( texture?.isRenderTargetTexture ) {
+
+			texture.renderTarget.dispose();
+
+		} else {
+
+			texture?.dispose();
+
+		}
 
 	}
 
@@ -197,7 +213,7 @@ class TextureCache {
 
 		if ( hash === null ) {
 
-			this.texture?.dispose();
+			this.disposeTexture();
 
 			this.texture = value;
 			this.hash = null;
@@ -208,7 +224,7 @@ class TextureCache {
 			const needsUpdate = hash !== this.hash;
 			if ( needsUpdate ) {
 
-				this.texture?.dispose();
+				this.disposeTexture();
 				this.texture = value;
 				this.hash = hash;
 
