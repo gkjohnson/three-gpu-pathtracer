@@ -8,8 +8,10 @@ import { SAMPLE_CONVERGED_FLAG, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
 export const OUTPUT_COLOR_LAYERS = 4;
 export const OUTPUT_ADAPTIVE_LAYERS = 7;
 
-// the samples between convergence checks, a power of two, as in Cycles
-const ADAPTIVE_STEP = 16;
+// the samples between convergence checks, a power of two. Every aligned block of 4 samples splits evenly between the
+// halves, so a check is never off balance. Cycles checks every 16 to batch its image wide passes, which a check per
+// pixel doesn't need
+const ADAPTIVE_STEP = 4;
 
 // Adds a finished sample to the half of the samples and returns the pixel's converged flag, checked every
 // "ADAPTIVE_STEP" samples past "minSamples". "blendedColor" is the pixel's color with the sample added.
