@@ -27,6 +27,19 @@ function flatTraverseMeshes( objects, cb ) {
 
 }
 
+// create a mesh representing a single instance of an InstancedMesh so it can be
+// baked like any other mesh. The uuid is derived from the instance index so the
+// intermediate geometry cache and change detection work per instance.
+function createInstanceMesh( instancedMesh, index ) {
+
+	const mesh = new Mesh( instancedMesh.geometry, instancedMesh.material );
+	mesh.uuid = `${ instancedMesh.uuid }_${ index }`;
+	instancedMesh.getMatrixAt( index, mesh.matrixWorld );
+	mesh.matrixWorld.premultiply( instancedMesh.matrixWorld );
+	return mesh;
+
+}
+
 // return the set of materials used by the provided meshes
 function getMaterials( meshes ) {
 
@@ -130,7 +143,20 @@ export class StaticGeometryGenerator {
 		const meshes = [];
 		flatTraverseMeshes( this.objects, mesh => {
 
-			meshes.push( mesh );
+			if ( mesh.isInstancedMesh ) {
+
+				// expand instances into separate meshes so each instance transform is baked
+				for ( let i = 0, l = mesh.count; i < l; i ++ ) {
+
+					meshes.push( createInstanceMesh( mesh, i ) );
+
+				}
+
+			} else {
+
+				meshes.push( mesh );
+
+			}
 
 		} );
 
