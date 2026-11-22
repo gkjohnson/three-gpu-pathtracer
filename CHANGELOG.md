@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 - WebGPUPathTracer: A camera's "getCameraRay" function takes the pixel and a [0, 1) random sample for the point within it, "( pixel, sample, resolution, ray )", in place of the jittered uv, so a camera knows exactly which pixel it renders.
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
-- ShadingModel: The traversal, medium stack and kernels read materials only through the shading model's functions, so a custom shading model's material and surface record structs only need the fields its own functions read. The base "ShadingModel" is a minimal opaque diffuse model, and the glTF material lives in "GLTFShadingModel".
+- ShadingModel: The medium stack and kernels read volumes, dispersion, matte and the denoiser guides through the shading model's functions, so a custom shading model's material and surface record structs only need the fields its own functions read, along with the alpha test fields the traversal reads. The base "ShadingModel" is a minimal diffuse model, and the glTF material lives in "GLTFShadingModel".
 - WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
 - WebGPUPathTracer: "setSize" updates the camera, so camera ray functions that depend on the render size follow it.
 - WebGPUPathTracer: Vertex colors are only stored on the GPU when the scene has them, reducing memory use.

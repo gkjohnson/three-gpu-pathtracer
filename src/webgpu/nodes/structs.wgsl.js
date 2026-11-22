@@ -18,16 +18,6 @@ export const scatterRecordStruct = new StructTypeNode( {
 	pdf: 'float',
 }, 'ScatterRecord' );
 
-// how the ray traversal treats a material's surfaces, from the shading model's "getMaterialVisibility": the side
-// they're hit from, 0 for both, whether partially transparent ones are passed by chance, the alpha test cutoff, and
-// the opacity of the whole material, which a transparent or alpha tested object is skipped at when 0
-export const materialVisibilityStruct = new StructTypeNode( {
-	side: 'float',
-	transparent: 'bool',
-	alphaTest: 'float',
-	opacity: 'float',
-}, 'MaterialVisibility' );
-
 // a material's volume, from the shading model's "getMaterialMedium": whether it's a fog volume or a closed volume
 // a refracted path enters, and its coefficients, zero extinction for none
 export const materialMediumStruct = new StructTypeNode( {

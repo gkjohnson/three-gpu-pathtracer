@@ -1,12 +1,12 @@
 /** @import { WebGPURenderer } from 'three/webgpu' */
-import { RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
+import { BackSide, FrontSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, texture, uniformArray } from 'three/tsl';
 import { wgslTagFn, proxyFn, contextProxy } from 'three-mesh-bvh/webgpu';
 import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
 import { AtlasTexture } from '../AtlasTexture.js';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
-import { hitRecordStruct, scatterRecordStruct, materialVisibilityStruct, materialMediumStruct } from '../nodes/structs.wgsl.js';
+import { hitRecordStruct, scatterRecordStruct, materialMediumStruct } from '../nodes/structs.wgsl.js';
 import { sampleTexelFunc, getTextureSizeFunc, getBasisFromNormalFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
@@ -27,8 +27,27 @@ function encodeTextureWrap( wrap ) {
 
 }
 
+// the color, and the fields the ray traversal reads for culling and alpha testing
 const materialStruct = new StructTypeNode( {
+	// offset 0 floats
 	color: 'vec3',
+	map: 'int',
+
+	// offset 4 floats
+	alphaMap: 'int',
+	vertexColors: 'int',
+	transparent: 'int',
+	opacity: 'float',
+
+	// offset 8 floats
+	alphaTest: 'float',
+	side: 'float',
+
+	// offset 12 floats
+	mapTransform: 'mat3',
+	// offset 24 floats
+	alphaMapTransform: 'mat3',
+	// total size = 36
 }, 'Material' );
 
 // the fields the kernels read
@@ -40,11 +59,12 @@ const surfaceRecordStruct = new StructTypeNode( {
 }, 'SurfaceRecord' );
 
 /**
- * Defines how the pathtracer interprets the scene's materials. The base model renders each material's color as an
- * opaque, double sided, diffuse surface. See GLTFShadingModel for the full glTF material.
+ * Defines how the pathtracer interprets the scene's materials. The base model renders each material's color as a
+ * diffuse surface. See GLTFShadingModel for the full glTF material.
  *
- * The ray traversal, medium stack and kernels read the materials only through the "fns" below, so a custom material
- * struct only needs the fields its functions read.
+ * The ray traversal reads a material struct's "side", "transparent", "alphaTest", "opacity", "vertexColors", "map",
+ * "alphaMap", "mapTransform" and "alphaMapTransform" fields for culling and alpha testing, so a custom material
+ * struct needs those along with the fields its own functions read.
  *
  * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read: "normal",
  * "color", "emission" and "opacity", along with any its functions read.
@@ -65,8 +85,6 @@ export class ShadingModel {
 			getSurfaceRecord: null,
 			bsdfSample: null,
 			bsdfEvalPdf: null,
-			getMaterialVisibility: null,
-			getHitOpacity: null,
 			getMaterialMedium: null,
 			getDispersion: null,
 			applyDispersion: null,
@@ -103,10 +121,6 @@ export class ShadingModel {
 	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
 	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.
-	 * - "fns.getMaterialVisibility": ( materialIndex ) -> MaterialVisibility, how the ray traversal culls, passes and
-	 *   alpha tests the material's surfaces. Defaults to double sided and opaque.
-	 * - "fns.getHitOpacity": ( materialIndex, objectAlpha, i0, i1, i2, barycoord ) -> f32, a traversed triangle's
-	 *   opacity at a hit, for the alpha test. Defaults to one.
 	 * - "fns.getMaterialMedium": ( materialIndex ) -> MaterialMedium, the material's volume. Defaults to none.
 	 * - "fns.getDispersion": ( surface ) -> f32, the surface's dispersion. Defaults to zero.
 	 * - "fns.applyDispersion": ( ptr<SurfaceRecord>, dispersion, wavelength ), refracting the surface at a wavelength.
@@ -178,28 +192,6 @@ export class ShadingModel {
 				record.pdf = cosine / PI;
 
 				return record;
-
-			}
-
-		`;
-
-		fns.getMaterialVisibility = wgslTagFn/* wgsl */`
-
-			fn getMaterialVisibility( materialIndex: u32 ) -> ${ materialVisibilityStruct } {
-
-				var visibility: ${ materialVisibilityStruct };
-				visibility.opacity = 1.0;
-				return visibility;
-
-			}
-
-		`;
-
-		fns.getHitOpacity = wgslTagFn/* wgsl */`
-
-			fn getHitOpacity( materialIndex: u32, objectAlpha: f32, i0: u32, i1: u32, i2: u32, barycoord: vec3f ) -> f32 {
-
-				return 1.0;
 
 			}
 
@@ -364,18 +356,36 @@ export class ShadingModel {
 		// TODO: remove this when fixed in three
 		const length = this.structs.material.proxyNode.getLength();
 		const floatArray = new Float32Array( Math.max( materials.length, 2 ) * length );
+		const intArray = new Int32Array( floatArray.buffer );
 		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
-			// materials without a color, like NodeMaterial or ShaderMaterial, default to white
 			const m = materials[ i ];
-			const index = i * length;
-			floatArray[ index + 0 ] = 'color' in m ? m.color.r : 1.0;
-			floatArray[ index + 1 ] = 'color' in m ? m.color.g : 1.0;
-			floatArray[ index + 2 ] = 'color' in m ? m.color.b : 1.0;
+			let index = i * length;
+
+			// offset 0, materials without a color, like NodeMaterial or ShaderMaterial, default to white
+			floatArray[ index ++ ] = 'color' in m ? m.color.r : 1.0;
+			floatArray[ index ++ ] = 'color' in m ? m.color.g : 1.0;
+			floatArray[ index ++ ] = 'color' in m ? m.color.b : 1.0;
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'map' );
+
+			// offset 4
+			intArray[ index ++ ] = this.getTextureDescriptor( m, 'alphaMap' );
+			intArray[ index ++ ] = Number( m.vertexColors );
+			intArray[ index ++ ] = Number( m.transparent );
+			floatArray[ index ++ ] = m.opacity;
+
+			// offset 8
+			floatArray[ index ++ ] = m.alphaTest;
+			floatArray[ index ++ ] = m.side === FrontSide ? 1 : m.side === BackSide ? - 1 : 0;
+			index += 2;
+
+			// offset 12
+			index += this.writeTextureMatrixToArray( m, 'map', floatArray, index );
+			index += this.writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
 
 		}
 
-		return { materialData: new Int32Array( floatArray.buffer ) };
+		return { materialData: intArray };
 
 	}
 

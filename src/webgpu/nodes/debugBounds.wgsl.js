@@ -27,7 +27,7 @@ const debugBoundsResultStruct = new StructTypeNode( {
 export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
 	const { transforms, index, attributes } = bvhData.storage;
-	const { getMaterialVisibility } = shadingModel.fns;
+	const { materials } = shadingModel.storage;
 
 	// uniforms
 
@@ -164,7 +164,7 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 			ray.direction = ray.direction / len;
 			${ rayScalar } = 1.0 / len;
 
-			${ materialSide } = ${ getMaterialVisibility }( object.materialIndex ).side;
+			${ materialSide } = ${ materials }[ object.materialIndex ].side;
 			${ level } = 1u;
 
 		}
