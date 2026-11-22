@@ -1,7 +1,7 @@
 /** @import { WebGPURenderer } from 'three/webgpu' */
-import { BackSide, FrontSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
+import { RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, texture, uniformArray } from 'three/tsl';
-import { wgslTagFn, proxyFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, proxyFn, contextProxy } from 'three-mesh-bvh/webgpu';
 import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
 import { AtlasTexture } from '../AtlasTexture.js';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
@@ -27,27 +27,8 @@ function encodeTextureWrap( wrap ) {
 
 }
 
-// the color, and the fields "getHitOpacity" reads for culling and alpha testing
 const materialStruct = new StructTypeNode( {
-	// offset 0 floats
 	color: 'vec3',
-	map: 'int',
-
-	// offset 4 floats
-	alphaMap: 'int',
-	vertexColors: 'int',
-	transparent: 'int',
-	opacity: 'float',
-
-	// offset 8 floats
-	alphaTest: 'float',
-	side: 'float',
-
-	// offset 12 floats
-	mapTransform: 'mat3',
-	// offset 24 floats
-	alphaMapTransform: 'mat3',
-	// total size = 36
 }, 'Material' );
 
 // the fields the kernels read
@@ -59,12 +40,11 @@ const surfaceRecordStruct = new StructTypeNode( {
 }, 'SurfaceRecord' );
 
 /**
- * Defines how the pathtracer interprets the scene's materials. The base model renders each material's color as a
- * diffuse surface. See GLTFShadingModel for the full glTF material.
+ * Defines how the pathtracer interprets the scene's materials. The base model renders each material's color as an
+ * opaque, double sided, diffuse surface. See GLTFShadingModel for the full glTF material.
  *
  * The ray traversal, medium stack and kernels read the materials only through the "fns" below, so a custom material
- * struct only needs the fields its functions read. The default "getHitOpacity" reads the "side", "transparent",
- * "alphaTest", "opacity", "vertexColors", "map", "alphaMap", "mapTransform" and "alphaMapTransform" fields.
+ * struct only needs the fields its functions read.
  *
  * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read: "normal",
  * "color", "emission" and "opacity", along with any its functions read.
@@ -124,7 +104,7 @@ export class ShadingModel {
 	 * - "fns.getHitOpacity": ( materialIndex, objectAlpha, i0, i1, i2, barycoord, side ) -> f32, the opacity of a
 	 *   triangle the ray traversal hits: 0 for a face on a side the material doesn't render, a side of 0 counting
 	 *   either side, or for a fully transparent or alpha tested surface, below 1 for a partially transparent one, and 1
-	 *   otherwise.
+	 *   otherwise. Defaults to 1.
 	 * - "fns.getMaterialMedium": ( materialIndex ) -> MaterialMedium, the material's volume. Defaults to none.
 	 * - "fns.applyDispersion": ( ptr<SurfaceRecord>, wavelength ) -> bool, refracting a dispersive surface at a
 	 *   wavelength, returning whether the surface is dispersive. Defaults to false.
@@ -200,72 +180,16 @@ export class ShadingModel {
 
 		`;
 
-		// the opacity of a hit from the material and object opacity, the vertex colors and the alpha of the map and
-		// alpha map
-		const materials = contextProxy( 'shadingModel.storage.materials' );
-		const attributes = contextProxy( 'bvhData.storage.attributes' );
-		const getUvFromChannel = contextProxyFn( 'bvhData.fns.getUvFromChannel' );
-		const getColor = contextProxyFn( 'bvhData.fns.getColor' );
+		// every surface is opaque and hit from either side by default
+		// TODO: the hit is given as triangle indices and barycentric coordinates, which lines, points and custom
+		// primitives like SDFs don't have. Pass a generic hit instead, the primitive index and a coordinate the
+		// primitive type defines, and fetch the interpolated attributes from the bvh data only when the material
+		// needs them, so opaque materials don't pay for building them in the traversal
 		fns.getHitOpacity = wgslTagFn/* wgsl */`
 
 			fn getHitOpacity( materialIndex: u32, objectAlpha: f32, i0: u32, i1: u32, i2: u32, barycoord: vec3f, side: f32 ) -> f32 {
 
-				let material = &${ materials }[ materialIndex ];
-				if ( side != 0.0 && material.side != 0.0 && side != material.side ) {
-
-					return 0.0;
-
-				}
-
-				if ( material.transparent == 0 && material.alphaTest <= 0.0 ) {
-
-					return 1.0;
-
-				}
-
-				var opacity = material.opacity * objectAlpha;
-				if ( material.vertexColors == 1 ) {
-
-					let a = ${ getColor }( ${ attributes }[ i0 ] );
-					let b = ${ getColor }( ${ attributes }[ i1 ] );
-					let c = ${ getColor }( ${ attributes }[ i2 ] );
-					opacity *= ( barycoord.x * a + barycoord.y * b + barycoord.z * c ).a;
-
-				}
-
-				if ( material.map != - 1 ) {
-
-					let a = ${ getUvFromChannel }( ${ attributes }[ i0 ], material.map );
-					let b = ${ getUvFromChannel }( ${ attributes }[ i1 ], material.map );
-					let c = ${ getUvFromChannel }( ${ attributes }[ i2 ], material.map );
-					let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-					// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
-					// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
-					let uvPrime = ${ materials }[ materialIndex ].mapTransform * vec3f( uv, 1 );
-					opacity *= ${ fns.sampleTexel }( uvPrime.xy, material.map, 0 ).a;
-
-				}
-
-				if ( material.alphaMap != - 1 ) {
-
-					let a = ${ getUvFromChannel }( ${ attributes }[ i0 ], material.alphaMap );
-					let b = ${ getUvFromChannel }( ${ attributes }[ i1 ], material.alphaMap );
-					let c = ${ getUvFromChannel }( ${ attributes }[ i2 ], material.alphaMap );
-					let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-					let uvPrime = ${ materials }[ materialIndex ].alphaMapTransform * vec3f( uv, 1 );
-					opacity *= ${ fns.sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
-
-				}
-
-				// alpha tested surfaces below the cutoff and fully transparent ones are passed, and opaque alpha tested
-				// surfaces are fully opaque
-				if ( opacity < material.alphaTest || opacity <= 0.0 ) {
-
-					return 0.0;
-
-				}
-
-				return select( 1.0, opacity, material.transparent != 0 );
+				return 1.0;
 
 			}
 
@@ -422,36 +346,18 @@ export class ShadingModel {
 		// TODO: remove this when fixed in three
 		const length = this.structs.material.proxyNode.getLength();
 		const floatArray = new Float32Array( Math.max( materials.length, 2 ) * length );
-		const intArray = new Int32Array( floatArray.buffer );
 		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
+			// materials without a color, like NodeMaterial or ShaderMaterial, default to white
 			const m = materials[ i ];
-			let index = i * length;
-
-			// offset 0, materials without a color, like NodeMaterial or ShaderMaterial, default to white
-			floatArray[ index ++ ] = 'color' in m ? m.color.r : 1.0;
-			floatArray[ index ++ ] = 'color' in m ? m.color.g : 1.0;
-			floatArray[ index ++ ] = 'color' in m ? m.color.b : 1.0;
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'map' );
-
-			// offset 4
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'alphaMap' );
-			intArray[ index ++ ] = Number( m.vertexColors );
-			intArray[ index ++ ] = Number( m.transparent );
-			floatArray[ index ++ ] = m.opacity;
-
-			// offset 8
-			floatArray[ index ++ ] = m.alphaTest;
-			floatArray[ index ++ ] = m.side === FrontSide ? 1 : m.side === BackSide ? - 1 : 0;
-			index += 2;
-
-			// offset 12
-			index += this.writeTextureMatrixToArray( m, 'map', floatArray, index );
-			index += this.writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
+			const index = i * length;
+			floatArray[ index + 0 ] = 'color' in m ? m.color.r : 1.0;
+			floatArray[ index + 1 ] = 'color' in m ? m.color.g : 1.0;
+			floatArray[ index + 2 ] = 'color' in m ? m.color.b : 1.0;
 
 		}
 
-		return { materialData: intArray };
+		return { materialData: new Int32Array( floatArray.buffer ) };
 
 	}
 
