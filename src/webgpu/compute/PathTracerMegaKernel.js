@@ -1,6 +1,7 @@
 import { DataTexture, Vector2 } from 'three/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
+import { loadOutputFn, storeOutputFn } from '../nodes/output.wgsl.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
@@ -15,7 +16,7 @@ import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFun
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { LIGHT_FAR_DISTANCE, getShadowRayFn } from '../nodes/lights.wgsl.js';
 import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
-import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../constants.js';
+import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
 
@@ -27,8 +28,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			lightsInfo: { value: null },
 
 			// targets
-			prevOutputTarget: textureStore( createOutputTarget() ).toReadOnly(),
-			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
+			outputTarget: textureStore( createOutputTarget() ).toReadWrite(),
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			// tiles
@@ -36,7 +36,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 			tileSize: uniform( new Vector2() ),
 
 			// settings
-			sampleIndex: uniform( 0 ),
 			globalSeed: uniform( 0, 'uint' ),
 			maxBounces: uniform( 5, 'uint' ),
 			maxTransparentBounces: uniform( 5, 'uint' ),
@@ -74,7 +73,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const objectsStorage = contextProxy( 'bvhData.storage.objects' );
 
 		// environment resources
-		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+		const getEnvTotalSum = proxy( 'envInfo.value.getTotalSum', params );
 		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
@@ -136,7 +135,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				tileSize: vec2u,
 
 				// settings
-				sampleIndex: u32,
 				globalSeed: u32,
 				maxBounces: u32,
 				maxTransparentBounces: u32,
@@ -169,20 +167,19 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				}
 
 				// skip the pixel once it has hit the sample limit
-				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
+				let sampleCount = textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_COUNT_MASK }u;
 				if ( maxSamples != 0u && sampleCount >= maxSamples ) {
 
 					return;
 
 				}
 
-				let uv = vec2f( indexUV ) / vec2f( targetDimensions );
-				${ rngInit }( globalSeed, indexUV.xy, sampleIndex, 0 );
+				// the sample count indexes the pixel's sequence, as in the wavefront, and the global seed gives each render its own
+				${ rngInit }( globalSeed, indexUV.xy, sampleCount, 0 );
 
 				// scene ray
-				let jitteredUv = uv + ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ) / vec2f( targetDimensions );
 				var ray: ${ rayStruct };
-				if ( ! ${ getCameraRayFn }( jitteredUv, vec2f( targetDimensions ), &ray ) ) {
+				if ( ! ${ getCameraRayFn }( indexUV, ${ rand2 }( ${ RNG_INDEX_RAY_JITTER } ), vec2f( targetDimensions ), &ray ) ) {
 
 					// a declined pixel never takes a sample, so with a cap it counts as finished
 					if ( maxSamples != 0u ) {
@@ -376,7 +373,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 								let transparency = ( 1.0 - bg.a ) * avg;
 
 								var misWeight = 1.0;
-								if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0 ) {
+								if ( misEnabled != 0u && ${ getEnvTotalSum }() > 0.0 && ${ envIntensityNode } > 0.0 ) {
 
 									let envPdf = ${ getEnvDirPdf }( ray.direction );
 									misWeight = ${ misHeuristicFn }( scatterPdf, envPdf );
@@ -675,10 +672,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				// store the color rows top down to match a rasterized render target
 				let colorIndex = vec2u( indexUV.x, targetDimensions.y - 1u - indexUV.y );
 
-				let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
+				// the color is updated in place
+				let prevColor = ${ loadOutputFn }( ${ params.outputTarget }, colorIndex );
 				let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( nextSampleCount ) );
-				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( nextSampleCount ) );
-				textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | nextSampleCount ) );
+				${ storeOutputFn }( ${ params.outputTarget }, colorIndex, blendedColor );
 
 				// the auxiliary images are blended the same way, in the same row order
 				if ( accumulateAux != 0u ) {

@@ -126,7 +126,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 	*createRenderTask() {
 
 		const {
-			renderer,
 			kernel,
 			maxBounces,
 			maxTransparentBounces,
@@ -154,9 +153,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		// compile the kernel before its first dispatch
 		yield* this.compileKernels( [ kernel ] );
 
-		// Number of tile cycles that have finished, ie. the sample count every pixel has reached. It is the sample
-		// index of the next cycle, as in the wavefront, and the global seed gives each render its own sequence
+		// Number of tile cycles that have finished, ie. the sample count every pixel has reached
 		let completedSamples = 0;
+
+		// the dispatches of the current update
+		let updateDispatches = 0;
 
 		while ( true ) {
 
@@ -166,6 +167,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			kernel.accumulateAux = this.auxTarget ? 1 : 0;
 			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
 
+				updateDispatches = 0;
 				yield;
 				continue;
 
@@ -194,14 +196,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			}
 
 			const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
-			kernel.sampleIndex = completedSamples;
 
-			// Swap targets to support devices without <rgba32float, read_write> textures
-			// Copy latest data to a new outputTarget to keep the appearance
-			renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
-			[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
-			kernel.prevOutputTarget = this.prevOutputTarget;
-			kernel.outputTarget = this.outputTarget;
+			// a frame rendered in one tile takes as many samples per update as fit in the budget
+			let updateSamples = 1;
+			if ( tileCount === 1 && ! lowResMode ) {
+
+				updateSamples = Math.max( 1, Math.floor( this.frameBudget / ( _size.x * _size.y ) ) );
+
+			}
 
 			for ( let x = 0; x < tiles.x; x ++ ) {
 
@@ -215,7 +217,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 					this._completedSamples = completedSamples;
 					this._tileProgress = completedTiles / tileCount;
 
-					yield;
+					updateDispatches ++;
+					if ( updateDispatches >= updateSamples ) {
+
+						updateDispatches = 0;
+						yield;
+
+					}
 
 				}
 

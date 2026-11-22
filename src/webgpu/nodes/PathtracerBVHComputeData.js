@@ -310,7 +310,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let b = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i1, attributesOffset ), material.map );
 						let c = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i2, attributesOffset ), material.map );
 						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-						let uvPrime = material.mapTransform * vec3f( uv, 1 );
+						// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
+						// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
+						let uvPrime = ${ materialsStorage }[ materialIndex ].mapTransform * vec3f( uv, 1 );
 
 						opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
 
@@ -323,7 +325,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						let b = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i1, attributesOffset ), material.alphaMap );
 						let c = ${ fns.getUvFromChannel }( ${ fns.getVertex }( i2, attributesOffset ), material.alphaMap );
 						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-						let uvPrime = material.alphaMapTransform * vec3f( uv, 1 );
+						let uvPrime = ${ materialsStorage }[ materialIndex ].alphaMapTransform * vec3f( uv, 1 );
 
 						opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
 

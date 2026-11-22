@@ -1,6 +1,6 @@
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 
-// the entry at "i" of a CDF held in a "LinearDataTexture"
+// the entry at "i" of the CDFs in an "EnvironmentCdfTexture"
 export const readCdfFn = wgslTagFn/* wgsl */`
 	fn readCdf( cdf: texture_2d<f32>, i: u32 ) -> f32 {
 
