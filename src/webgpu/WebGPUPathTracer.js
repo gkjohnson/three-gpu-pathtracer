@@ -701,9 +701,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// the attached denoiser's progress events are forwarded
 		this._onDenoiserProgress = e => this.dispatchEvent( { type: 'progress', stage: 'denoising', progress: e.progress } );
 
-		// the current stage. Only the latest "setSceneAsync" call sets its scene, and a geometry already building
-		// for an earlier call is awaited rather than built again
-		this._stage = STAGE_RENDERING;
+		// the current stage, building until the first scene is set. Only the latest "setScene" or "setSceneAsync" call
+		// sets its scene, and a geometry already building for an earlier call is awaited rather than built again
+		this._stage = STAGE_BUILDING;
 		this._sceneRequest = 0;
 		this._pendingBVHs = new WeakMap();
 
@@ -849,10 +849,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
 
-		// initialize the scene so it doesn't fail
 		this.setShadingModel( this._shadingModel );
 		this.setRandom( this._random );
-		this.setScene( new Scene(), new PerspectiveCamera() );
+
+		// an empty scene and a basic camera until "setScene" resolves, which nothing renders before
+		this.scene = new Scene();
+		this._bvhData = new PathtracerBVHComputeData( this.scene, this._shadingModel );
+		this._bvhData.update();
+		this._pathTracer.setBVHData( this._bvhData );
+		this.setCamera( new PerspectiveCamera() );
 
 	}
 
@@ -950,13 +955,19 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Captures the scene and camera and builds the acceleration structures the kernels trace
-	 * against. Call this once, then use the `update*` functions for later changes.
+	 * against. Call this once, then use the `update*` functions for later changes. Rendering pauses
+	 * on the last frame until the scene is ready.
 	 *
 	 * @param {Scene} scene
 	 * @param {Camera} camera
-	 * @note Geometry BVHs are built synchronously, so this blocks for large scenes.
+	 * @returns {Promise<void>} Resolves once the scene renders. A later call replaces a scene still being set.
+	 * @note Missing geometry BVHs are built on the main thread, so this blocks for large scenes. Use
+	 *   {@link WebGPUPathTracer#setSceneAsync} to build them in workers.
 	 */
-	setScene( scene, camera ) {
+	async setScene( scene, camera ) {
+
+		this._sceneRequest ++;
+		const request = this._sceneRequest;
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
@@ -1006,9 +1017,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const { _shadingModel: shadingModel } = this;
 		shadingModel.updateMaterials( scene );
 
-		// Build TLAS and compute functions
+		// Build TLAS and compute functions, keeping the last frame while the scene data is written
+		this._setStage( STAGE_BUILDING );
 		const bvhData = new PathtracerBVHComputeData( scene, shadingModel );
-		bvhData.update();
+		await bvhData.update();
+
+		// skip the scene if a later call replaced it meanwhile
+		if ( request !== this._sceneRequest ) {
+
+			bvhData.dispose();
+			return;
+
+		}
+
+		this._setStage( STAGE_COMPILING );
 		shadingModel.updateTextures( this._renderer );
 
 		if ( this._bvhData ) {
@@ -1165,7 +1187,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// skip the scene if a later call replaced it while it built
 		if ( request === this._sceneRequest ) {
 
-			this.setScene( scene, camera );
+			await this.setScene( scene, camera );
 
 		}
 

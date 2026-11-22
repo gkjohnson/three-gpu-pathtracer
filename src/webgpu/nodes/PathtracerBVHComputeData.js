@@ -684,13 +684,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
-	update() {
+	async update() {
 
 		this.updateUvAttributesFromScene();
 
 		// the material indices are written with the object records, so the shading model's materials must
 		// be updated first
-		super.update();
+		await super.update();
 
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
 		this.updateUvSampleFunction();
