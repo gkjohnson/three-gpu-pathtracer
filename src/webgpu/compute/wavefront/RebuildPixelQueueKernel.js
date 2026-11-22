@@ -6,8 +6,9 @@ import { createSampleCountTarget } from '../targets.js';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK } from '../../constants.js';
 import { pixelQueueInfoStruct } from './structs.js';
+import { isPixelConvergedFn } from '../../nodes/adaptive.wgsl.js';
 
-// Rebuilds the pixel queue, putting the pixels with fewer samples at the front
+// Rebuilds the pixel queue, putting the pixels with fewer samples at the front and leaving out the finished ones
 export class RebuildPixelQueueKernel extends ComputeKernel {
 
 	constructor() {
@@ -34,7 +35,7 @@ export class RebuildPixelQueueKernel extends ComputeKernel {
 				let combinedField = textureLoad( ${ params.sampleCountTarget }, uv ).r;
 				let samples = combinedField & ${ SAMPLE_COUNT_MASK }u;
 				let isActive = ( combinedField & ${ SAMPLE_ACTIVE_FLAG }u ) != 0u;
-				let isFinished = maxSamples != 0u && samples >= maxSamples;
+				let isFinished = ( maxSamples != 0u && samples >= maxSamples ) || ${ isPixelConvergedFn }( ${ params.sampleCountTarget }, uv );
 				if ( isActive || isFinished ) {
 
 					return;

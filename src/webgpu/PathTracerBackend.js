@@ -3,6 +3,7 @@ import { uniform } from 'three/tsl';
 import { ZeroOutKernel } from './compute/ZeroOutKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './compute/targets.js';
 import { AUX_LAYERS } from './nodes/auxiliary.wgsl.js';
+import { OUTPUT_ADAPTIVE_LAYERS, OUTPUT_COLOR_LAYERS } from './nodes/adaptive.wgsl.js';
 import {
 	PrimeSampleCountersKernel,
 	TallySampleCountsKernel,
@@ -46,6 +47,11 @@ export class PathTracerBackend {
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
 
+		// adaptive sampling's noise threshold, or zero for none, and its minimum samples, or zero to pick them from
+		// the threshold. Set with "setAdaptiveSampling"
+		this.adaptiveThreshold = 0;
+		this.adaptiveMinSamples = 0;
+
 		// whether the render task is waiting on its kernels to compile, during which nothing renders
 		this.compiling = false;
 
@@ -78,6 +84,27 @@ export class PathTracerBackend {
 		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
 		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
 		this._samplesPromise = null;
+
+	}
+
+	// Adaptive sampling keeps half of the samples in more layers of the output target, which are only allocated while
+	// it's on, so the render restarts with them
+	setAdaptiveSampling( threshold, minSamples ) {
+
+		this.adaptiveThreshold = threshold;
+		this.adaptiveMinSamples = minSamples;
+
+		const { width, height, depth } = this.outputTarget;
+		const layers = threshold > 0 ? OUTPUT_ADAPTIVE_LAYERS : OUTPUT_COLOR_LAYERS;
+		if ( depth !== layers ) {
+
+			this.outputTarget.dispose();
+			this.outputTarget = this.outputTarget.clone();
+			this.outputTarget.setSize( width, height, layers );
+
+		}
+
+		this.reset();
 
 	}
 

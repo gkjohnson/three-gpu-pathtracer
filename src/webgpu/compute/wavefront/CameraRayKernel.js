@@ -6,7 +6,7 @@ import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, pixelQueueInfoStruct, NO_PIXEL } from './structs.js';
-import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
+import { SAMPLE_ACTIVE_FLAG, SAMPLE_CONVERGED_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
 
 // queue entries a free slot tries before waiting for the next round
@@ -167,7 +167,8 @@ export class CameraRayKernel extends ComputeKernel {
 				rayDataStorage[ index ].rayIntersectionIndex = 0;
 
 				// write the active params & dispatched flag
-				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | samples ) );
+				let convergedFlag = textureLoad( ${ params.sampleCountTarget }, indexUV ).r & ${ SAMPLE_CONVERGED_FLAG }u;
+				textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_ACTIVE_FLAG }u | ${ SAMPLE_DISPATCHED_FLAG }u | convergedFlag | samples ) );
 
 			}
 		`;
