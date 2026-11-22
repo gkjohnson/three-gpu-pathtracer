@@ -21,7 +21,7 @@ import {
 	ggxShadowMaskG1Func,
 } from './ggx.wgsl.js';
 import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
-import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
 // the normal towards the geometry normal such that the perfect reflection ray is just above the
@@ -644,14 +644,95 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// takes the surface by name since the shading model defines its struct
+// The opacity of a hit from the material's side, the material and object opacity, the vertex colors and the alpha of
+// the map and alpha map, for a shading model's "getHitOpacity". Reads the materials, texture sampling and vertex data
+// through the node context so any shading model whose material struct has these fields can use it
+const materialsStorage = /* @__PURE__ */ contextProxy( 'shadingModel.storage.materials' );
+const attributesStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.attributes' );
+const sampleTexel = /* @__PURE__ */ contextProxyFn( 'shadingModel.fns.sampleTexel' );
+const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
+const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
+export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
+
+	fn getHitOpacity( materialIndex: u32, objectAlpha: f32, i0: u32, i1: u32, i2: u32, barycoord: vec3f, side: f32 ) -> f32 {
+
+		let material = &${ materialsStorage }[ materialIndex ];
+		if ( side != 0.0 && material.side != 0.0 && side != material.side ) {
+
+			return 0.0;
+
+		}
+
+		if ( material.transparent == 0 && material.alphaTest <= 0.0 ) {
+
+			return 1.0;
+
+		}
+
+		var opacity = material.opacity * objectAlpha;
+		if ( material.vertexColors == 1 ) {
+
+			let a = ${ getColor }( ${ attributesStorage }[ i0 ] );
+			let b = ${ getColor }( ${ attributesStorage }[ i1 ] );
+			let c = ${ getColor }( ${ attributesStorage }[ i2 ] );
+			opacity *= ( barycoord.x * a + barycoord.y * b + barycoord.z * c ).a;
+
+		}
+
+		if ( material.map != - 1 ) {
+
+			let a = ${ getUvFromChannel }( ${ attributesStorage }[ i0 ], material.map );
+			let b = ${ getUvFromChannel }( ${ attributesStorage }[ i1 ], material.map );
+			let c = ${ getUvFromChannel }( ${ attributesStorage }[ i2 ], material.map );
+			let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+			// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
+			// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
+			let uvPrime = ${ materialsStorage }[ materialIndex ].mapTransform * vec3f( uv, 1 );
+			opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
+
+		}
+
+		if ( material.alphaMap != - 1 ) {
+
+			let a = ${ getUvFromChannel }( ${ attributesStorage }[ i0 ], material.alphaMap );
+			let b = ${ getUvFromChannel }( ${ attributesStorage }[ i1 ], material.alphaMap );
+			let c = ${ getUvFromChannel }( ${ attributesStorage }[ i2 ], material.alphaMap );
+			let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+			let uvPrime = ${ materialsStorage }[ materialIndex ].alphaMapTransform * vec3f( uv, 1 );
+			opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
+
+		}
+
+		// alpha tested surfaces below the cutoff and fully transparent ones are passed, and opaque alpha tested
+		// surfaces are fully opaque
+		if ( opacity < material.alphaTest || opacity <= 0.0 ) {
+
+			return 0.0;
+
+		}
+
+		return select( 1.0, opacity, material.transparent != 0 );
+
+	}
+
+`;
+
+// Refracts a dispersive surface at the wavelength, returning whether the surface is dispersive: transmissive with a
+// volume, an ior above one and some dispersion. Takes the surface by name since the shading model defines its struct
 export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
-	fn applyDispersion( surf: ptr<function, SurfaceRecord>, dispersion: f32, wavelength: f32 ) -> void {
+	fn applyDispersion( surf: ptr<function, SurfaceRecord>, wavelength: f32 ) -> bool {
 
-		surf.ior = ${ dispersionIorFunc }( surf.ior, dispersion, wavelength );
+		if ( surf.dispersion <= 0.0 || surf.ior <= 1.0 || surf.transmission <= 0.0 || surf.thinWall ) {
+
+			return false;
+
+		}
+
+		surf.ior = ${ dispersionIorFunc }( surf.ior, surf.dispersion, wavelength );
 		surf.eta = select( surf.ior, 1.0 / surf.ior, surf.thinWall || surf.frontFace );
 		surf.f0 = ${ iorToF0Func }( surf.eta );
+		return true;
 
 	}
 

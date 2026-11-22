@@ -1974,7 +1974,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const debugBounds = getDebugBoundsFunction( bvhData, shadingModel );
 
 		const material = new MeshBasicNodeMaterial();
-		material.colorNode = debugBounds( varying( uv() ) );
+		material.colorNode = debugBounds( varying( uv() ) ).context( { bvhData, shadingModel } );
 
 		if ( this._debugBoundsQuad === undefined ) {
 
