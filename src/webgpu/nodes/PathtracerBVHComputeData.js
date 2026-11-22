@@ -1,8 +1,8 @@
 import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix3, Matrix4, Raycaster, Vector3, MeshBasicMaterial, DoubleSide } from 'three/webgpu';
-import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
-import { getMaterialExtinctionFn, getFogShadowDistanceFn } from './medium.wgsl.js';
+import { getFogShadowDistanceFn } from './medium.wgsl.js';
 /** @import { Box3, Mesh } from 'three/webgpu' */
 
 const _colorVec = new Vector4();
@@ -266,71 +266,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		const { storage, fns } = this;
 
-		// the shading model owns the textures. Its surface shading reads the same "sampleTexel", so both
-		// resolve to one texture info binding per pipeline
-		const sampleTexel = contextProxyFn( 'shadingModel.fns.sampleTexel' );
-		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+		// the shading model decides how a material's surfaces and volume are traversed
+		const getMaterialVisibility = contextProxyFn( 'shadingModel.fns.getMaterialVisibility' );
+		const getHitOpacity = contextProxyFn( 'shadingModel.fns.getHitOpacity' );
+		const getMaterialMedium = contextProxyFn( 'shadingModel.fns.getMaterialMedium' );
 
 		// the object being traversed, set when the ray is transformed into its space
 		const currentObjectIndex = uint().toVar( 'bvh_objectIndex' );
 		const scratchRayScalar = float( 1.0 ).toVar( 'bvh_rayScalar' );
 		const baseOpacityScalar = float( 1.0 ).toVar( 'bvh_baseOpacity' );
-
-		// the opacity of a hit triangle at its barycentric coordinate, from the object's opacity, the vertex
-		// colors and the alpha of the map and alpha map
-		const getHitOpacity = wgslTagFn/* wgsl */`
-			fn getHitOpacity( materialIndex: u32, i0: u32, i1: u32, i2: u32, barycoord: vec3f ) -> f32 {
-
-				let material = &${ materialsStorage }[ materialIndex ];
-				var opacity = ${ baseOpacityScalar };
-				if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
-
-					// add support for vertex color opacity
-					if ( material.vertexColors == 1 ) {
-
-						let a = ${ fns.getColor }( ${ storage.attributes }[ i0 ] );
-						let b = ${ fns.getColor }( ${ storage.attributes }[ i1 ] );
-						let c = ${ fns.getColor }( ${ storage.attributes }[ i2 ] );
-						let col = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-
-						opacity *= col.a;
-
-					}
-
-					// account for alpha component of albedo map
-					if ( material.map != - 1 ) {
-
-						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.map );
-						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.map );
-						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.map );
-						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-						// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
-						// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
-						let uvPrime = ${ materialsStorage }[ materialIndex ].mapTransform * vec3f( uv, 1 );
-
-						opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
-
-					}
-
-					// account for green component of alpha map
-					if ( material.alphaMap != - 1 ) {
-
-						let a = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i0 ], material.alphaMap );
-						let b = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i1 ], material.alphaMap );
-						let c = ${ fns.getUvFromChannel }( ${ storage.attributes }[ i2 ], material.alphaMap );
-						let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-						let uvPrime = ${ materialsStorage }[ materialIndex ].alphaMapTransform * vec3f( uv, 1 );
-
-						opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
-
-					}
-
-				}
-
-				return opacity;
-
-			}
-		`;
 
 		// the world distance at which the ray enters the bounds, or - 1 when it misses them
 		const rayBoundsDistance = wgslTagFn/* wgsl */`
@@ -426,19 +370,13 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					ray.direction /= len;
 					${ scratchRayScalar } = 1.0 / len;
 
-					let object = ${ storage.transforms }[ objectIndex ];
 					${ currentObjectIndex } = objectIndex;
 
-					let material = &${ materialsStorage }[ object.materialIndex ];
-					if ( material.transparent != 0 || material.alphaTest > 0.0 ) {
-
-						${ baseOpacityScalar } = material.opacity * object.color.a;
-
-					} else {
-
-						${ baseOpacityScalar } = 1.0;
-
-					}
+					// the opacity of the whole object, for skipping one that's fully transparent
+					let object = ${ storage.transforms }[ objectIndex ];
+					let visibility = ${ getMaterialVisibility }( object.materialIndex );
+					let isAlphaTested = visibility.transparent || visibility.alphaTest > 0.0;
+					${ baseOpacityScalar } = select( 1.0, visibility.opacity * object.color.a, isAlphaTested );
 
 				}
 			`,
@@ -484,10 +422,10 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) && ( ! result.didHit || triResult.dist < result.dist ) ) {
 
 							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
-							let material = &${ materialsStorage }[ object.materialIndex ];
+							let visibility = ${ getMaterialVisibility }( object.materialIndex );
 
 							// TODO: if material is a transmissive volume we may need to assume double-sidedness
-							if ( material.side != 0 && triResult.side != material.side ) {
+							if ( visibility.side != 0.0 && triResult.side != visibility.side ) {
 
 								continue;
 
@@ -495,8 +433,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							// partial opacity is resolved at surface processing, but fully transparent and alpha
 							// tested surfaces are skipped here
-							let opacity = ${ getHitOpacity }( object.materialIndex, i0, i1, i2, triResult.barycoord );
-							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
+							let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, i0, i1, i2, triResult.barycoord );
+							if ( ( visibility.transparent && opacity <= 0.0 ) || opacity < visibility.alphaTest ) {
 
 								continue;
 
@@ -546,21 +484,21 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						if ( triResult.didHit && ( ray.maxDist <= 0.0 || triResult.dist < ray.maxDist ) ) {
 
 							let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
-							let material = &${ materialsStorage }[ object.materialIndex ];
 
 							// pass fog volume boundaries, in any order: entering adds the fog's optical depth back from
 							// the fog shadow distance, and leaving takes it away
-							if ( material.fogVolume != 0 ) {
+							let medium = ${ getMaterialMedium }( object.materialIndex );
+							if ( medium.fogVolume ) {
 
-								let extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
-								let depth = extinction * ( ${ getFogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
+								let depth = medium.extinction * ( ${ getFogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
 								result.fogDepth += select( - depth, depth, triResult.side > 0.0 );
 								continue;
 
 							}
 
-							let opacity = ${ getHitOpacity }( object.materialIndex, i0, i1, i2, triResult.barycoord );
-							if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
+							let visibility = ${ getMaterialVisibility }( object.materialIndex );
+							let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, i0, i1, i2, triResult.barycoord );
+							if ( ( visibility.transparent && opacity <= 0.0 ) || opacity < visibility.alphaTest ) {
 
 								continue;
 
@@ -570,9 +508,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							// would stop: all of them if it's opaque, its opacity if it's partially transparent
 							if ( object.visibleToShadowRays == 0u ) {
 
-								if ( material.side == 0 || triResult.side == material.side ) {
+								if ( visibility.side == 0.0 || triResult.side == visibility.side ) {
 
-									result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * select( 1.0, opacity, material.transparent != 0 );
+									result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * select( 1.0, opacity, visibility.transparent );
 
 								}
 
@@ -582,7 +520,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							// pass partially transparent surfaces, each blocking its opacity's share of the light still
 							// getting through, just as bsdf rays pass them by chance
-							if ( material.transparent != 0 && opacity < 1.0 ) {
+							if ( visibility.transparent && opacity < 1.0 ) {
 
 								result.occlusion += ( 1.0 - result.occlusion ) * opacity;
 								continue;
@@ -644,7 +582,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 					}
 
 					let object = ${ storage.transforms }[ ${ currentObjectIndex } ];
-					let material = &${ materialsStorage }[ object.materialIndex ];
+					let visibility = ${ getMaterialVisibility }( object.materialIndex );
 
 					var didHit = false;
 					for ( var ti = offset; ti < offset + count; ti = ti + 1u ) {
@@ -666,8 +604,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						}
 
 						// fully transparent and alpha tested surfaces are passed, as by the first hit traversal
-						let opacity = ${ getHitOpacity }( object.materialIndex, i0, i1, i2, triResult.barycoord );
-						if ( ( material.transparent != 0 && opacity <= 0.0 ) || opacity < material.alphaTest ) {
+						let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, i0, i1, i2, triResult.barycoord );
+						if ( ( visibility.transparent && opacity <= 0.0 ) || opacity < visibility.alphaTest ) {
 
 							continue;
 
@@ -691,8 +629,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					${ raycastOptions.transformShapeFn }( ray, objectIndex );
 
-					let material = &${ materialsStorage }[ ${ storage.transforms }[ objectIndex ].materialIndex ];
-					let isVolume = material.fogVolume != 0 || ( material.transmission > 0.0 && material.thinWall == 0 );
+					let isVolume = ${ getMaterialMedium }( ${ storage.transforms }[ objectIndex ].materialIndex ).volume;
 					${ skipObject } = select( 1u, 0u, isVolume );
 
 				}

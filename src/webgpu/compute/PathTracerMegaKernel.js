@@ -3,7 +3,7 @@ import { ComputeKernel } from './ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './targets.js';
 import { loadOutputFn, storeOutputFn } from '../nodes/output.wgsl.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
-import { blendAuxFn, isAuxSurfaceFn, AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
+import { blendAuxFn, AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
 import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
 import {
@@ -15,7 +15,7 @@ import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } fr
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { LIGHT_FAR_DISTANCE, getShadowRayFn } from '../nodes/lights.wgsl.js';
-import { applyDispersionFunc, dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
+import { dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -69,6 +69,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getCameraRayFn = contextProxyFn( 'bvhData.fns.getCameraRay' );
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
+		const getMaterialMediumFn = contextProxyFn( 'shadingModel.fns.getMaterialMedium' );
+		const getDispersionFn = contextProxyFn( 'shadingModel.fns.getDispersion' );
+		const applyDispersionFn = contextProxyFn( 'shadingModel.fns.applyDispersion' );
+		const isAuxSurfaceFn = contextProxyFn( 'shadingModel.fns.isAuxSurface' );
+		const isMatteFn = contextProxyFn( 'shadingModel.fns.isMatte' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
 
@@ -471,9 +476,10 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, hit, view, blurRoughness );
+						let materialMedium = ${ getMaterialMediumFn }( objectInfo.materialIndex );
 
 						// a matte surface hit by the camera renders transparent. Lights passed stay, added after the loop
-						let isMatte = surface.matte && hit.bounce == 0u;
+						let isMatte = ${ isMatteFn }( surface ) && hit.bounce == 0u;
 						if ( isMatte ) {
 
 							resultColor = vec4f( 0.0 );
@@ -483,7 +489,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// pass through partially transparent surfaces by chance, and fog boundaries always, advancing the
 						// alpha depth but not the bounce
-						let isFogBoundary = materialInfo.fogVolume != 0;
+						let isFogBoundary = materialMedium.fogVolume;
 						let passesThrough = isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
 						if ( passesThrough ) {
 
@@ -523,11 +529,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						// dispersion, with the hero wavelength's weight applied at the first dispersive hit
-						let isDispersive = surface.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
-						if ( isDispersive ) {
+						let dispersion = ${ getDispersionFn }( surface );
+						if ( dispersion > 0.0 ) {
 
 							let wavelength = abs( dispersionWavelength );
-							${ applyDispersionFunc }( &surface, surface.dispersion, wavelength );
+							${ applyDispersionFn }( &surface, dispersion, wavelength );
 							if ( dispersionWavelength < 0.0 ) {
 
 								dispersionWavelength = wavelength;
@@ -549,7 +555,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 							shadowHitPoint = vertexData.position.xyz;
 							shadowHitNormal = hit.normal;
 							shadowStack = ${ getShadowMediumStackFn }(
-								medium.stack, objectInfo.materialIndex, hit.side, surface.thinWall,
+								medium.stack, objectInfo.materialIndex, hit.side, ! materialMedium.volume,
 								ray.direction, lightRec.direction, hit.normal,
 							);
 
@@ -574,7 +580,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						minPdf = min( minPdf, scatterRec.pdf );
 
 						// refracting through a volume's surface enters or exits it
-						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
+						if ( scatterRec.isTransmissive && materialMedium.volume ) {
 
 							var stack = medium.stack;
 							if ( hit.side > 0.0 ) {

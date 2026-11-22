@@ -6,8 +6,10 @@ import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
 import { AtlasTexture } from '../AtlasTexture.js';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
-import { hitRecordStruct, materialStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
-import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
+import { hitRecordStruct, materialStruct, scatterRecordStruct, surfaceRecordStruct, materialVisibilityStruct, materialMediumStruct } from '../nodes/structs.wgsl.js';
+import { getSurfaceRecordFunc, applyDispersionFunc } from '../nodes/material.wgsl.js';
+import { getMaterialExtinctionFn } from '../nodes/medium.wgsl.js';
+import { isAuxSurfaceFn } from '../nodes/auxiliary.wgsl.js';
 import { sampleTexelFunc, getTextureSizeFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 
@@ -31,14 +33,11 @@ function encodeTextureWrap( wrap ) {
 /**
  * Defines how the pathtracer interprets the scene's materials
  *
- * A custom material struct must keep the fields the ray traversal and medium stack read: "opacity", "side",
- * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap", "alphaMapTransform",
- * "transmission", "thinWall", "fogVolume", "attenuationColor", "attenuationDistance", "multiscatterColor",
- * "scatterStrength" and "scatterAnisotropy".
+ * The ray traversal and medium stack read the materials only through the "fns" below, so a custom material struct
+ * only needs the fields its functions read. The default functions read the fields of the glTF material struct.
  *
- * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
- * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",
- * "frontFace", "transmission", "thinWall" and "dispersion".
+ * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read: "normal",
+ * "color", "emission" and "opacity", along with any its functions read.
  *
  * The kernels read the "structs", "storage" and "fns" members through the node context as "shadingModel".
  */
@@ -50,7 +49,19 @@ export class ShadingModel {
 		// across rebuilds, like BVHComputeData
 		this.structs = new NodeProxyObject( { material: null, surfaceRecord: null } );
 		this.storage = new NodeProxyObject( { materials: null } );
-		this.fns = new NodeProxyObject( { sampleTexel: null, getSurfaceRecord: null, bsdfSample: null, bsdfEvalPdf: null }, proxyFn );
+		this.fns = new NodeProxyObject( {
+			sampleTexel: null,
+			getSurfaceRecord: null,
+			bsdfSample: null,
+			bsdfEvalPdf: null,
+			getMaterialVisibility: null,
+			getHitOpacity: null,
+			getMaterialMedium: null,
+			getDispersion: null,
+			applyDispersion: null,
+			isAuxSurface: null,
+			isMatte: null,
+		}, proxyFn );
 		this.textureAtlas = new AtlasTexture();
 		this.materials = [];
 		this.materialsMap = new Map();
@@ -80,6 +91,16 @@ export class ShadingModel {
 	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
 	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.
+	 * - "fns.getMaterialVisibility": ( materialIndex ) -> MaterialVisibility, how the ray traversal culls, passes and
+	 *   alpha tests the material's surfaces.
+	 * - "fns.getHitOpacity": ( materialIndex, objectAlpha, i0, i1, i2, barycoord ) -> f32, a traversed triangle's
+	 *   opacity at a hit, for the alpha test.
+	 * - "fns.getMaterialMedium": ( materialIndex ) -> MaterialMedium, the material's volume, zero extinction for none.
+	 * - "fns.getDispersion": ( surface ) -> f32, the surface's dispersion, zero for none.
+	 * - "fns.applyDispersion": ( ptr<SurfaceRecord>, dispersion, wavelength ), refracting the surface at a wavelength.
+	 * - "fns.isAuxSurface": ( surface, scatter ) -> bool, whether the denoiser's guides show the surface rather than
+	 *   what it reflects or transmits.
+	 * - "fns.isMatte": ( surface ) -> bool, whether the surface renders transparent to the camera.
 	 */
 	updateFunctions() {
 
@@ -135,6 +156,128 @@ export class ShadingModel {
 				record.pdf = max( wi.z, 0.0 ) / PI;
 
 				return record;
+
+			}
+
+		`;
+
+		// the ray traversal and medium stack read the materials through these, so a material struct only needs the
+		// fields its own functions read
+		const materials = contextProxy( 'shadingModel.storage.materials' );
+		const attributes = contextProxy( 'bvhData.storage.attributes' );
+		const getUvFromChannel = contextProxyFn( 'bvhData.fns.getUvFromChannel' );
+		const getColor = contextProxyFn( 'bvhData.fns.getColor' );
+
+		fns.getMaterialVisibility = wgslTagFn/* wgsl */`
+
+			fn getMaterialVisibility( materialIndex: u32 ) -> ${ materialVisibilityStruct } {
+
+				let material = &${ materials }[ materialIndex ];
+				var visibility: ${ materialVisibilityStruct };
+				visibility.side = material.side;
+				visibility.transparent = material.transparent != 0;
+				visibility.alphaTest = material.alphaTest;
+				visibility.opacity = material.opacity;
+				return visibility;
+
+			}
+
+		`;
+
+		// the opacity of a hit triangle at its barycentric coordinate, from the material and object opacity, the vertex
+		// colors and the alpha of the map and alpha map, or 1 for a surface that isn't transparent or alpha tested
+		fns.getHitOpacity = wgslTagFn/* wgsl */`
+
+			fn getHitOpacity( materialIndex: u32, objectAlpha: f32, i0: u32, i1: u32, i2: u32, barycoord: vec3f ) -> f32 {
+
+				let material = &${ materials }[ materialIndex ];
+				if ( material.transparent == 0 && material.alphaTest <= 0.0 ) {
+
+					return 1.0;
+
+				}
+
+				var opacity = material.opacity * objectAlpha;
+				if ( material.vertexColors == 1 ) {
+
+					let a = ${ getColor }( ${ attributes }[ i0 ] );
+					let b = ${ getColor }( ${ attributes }[ i1 ] );
+					let c = ${ getColor }( ${ attributes }[ i2 ] );
+					opacity *= ( barycoord.x * a + barycoord.y * b + barycoord.z * c ).a;
+
+				}
+
+				// the alpha of the map
+				if ( material.map != - 1 ) {
+
+					let a = ${ getUvFromChannel }( ${ attributes }[ i0 ], material.map );
+					let b = ${ getUvFromChannel }( ${ attributes }[ i1 ], material.map );
+					let c = ${ getUvFromChannel }( ${ attributes }[ i2 ], material.map );
+					let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+					// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
+					// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
+					let uvPrime = ${ materials }[ materialIndex ].mapTransform * vec3f( uv, 1 );
+					opacity *= ${ fns.sampleTexel }( uvPrime.xy, material.map, 0 ).a;
+
+				}
+
+				// the green channel of the alpha map
+				if ( material.alphaMap != - 1 ) {
+
+					let a = ${ getUvFromChannel }( ${ attributes }[ i0 ], material.alphaMap );
+					let b = ${ getUvFromChannel }( ${ attributes }[ i1 ], material.alphaMap );
+					let c = ${ getUvFromChannel }( ${ attributes }[ i2 ], material.alphaMap );
+					let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+					let uvPrime = ${ materials }[ materialIndex ].alphaMapTransform * vec3f( uv, 1 );
+					opacity *= ${ fns.sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
+
+				}
+
+				return opacity;
+
+			}
+
+		`;
+
+		fns.getMaterialMedium = wgslTagFn/* wgsl */`
+
+			fn getMaterialMedium( materialIndex: u32 ) -> ${ materialMediumStruct } {
+
+				let material = &${ materials }[ materialIndex ];
+				var medium: ${ materialMediumStruct };
+				medium.extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+				medium.fogVolume = material.fogVolume != 0;
+				medium.multiscatterColor = material.multiscatterColor;
+				medium.scatterStrength = material.scatterStrength;
+				medium.scatterAnisotropy = material.scatterAnisotropy;
+				medium.volume = medium.fogVolume || ( material.transmission > 0.0 && material.thinWall == 0 );
+				return medium;
+
+			}
+
+		`;
+
+		// the surface's dispersion, zero when it doesn't disperse
+		fns.getDispersion = wgslTagFn/* wgsl */`
+
+			fn getDispersion( surf: ${ structs.surfaceRecord } ) -> f32 {
+
+				let isDispersive = surf.dispersion > 0.0 && surf.ior > 1.0 && surf.transmission > 0.0 && ! surf.thinWall;
+				return select( 0.0, surf.dispersion, isDispersive );
+
+			}
+
+		`;
+
+		fns.applyDispersion = applyDispersionFunc;
+		fns.isAuxSurface = isAuxSurfaceFn;
+
+		// whether the surface renders transparent to the camera
+		fns.isMatte = wgslTagFn/* wgsl */`
+
+			fn isMatte( surf: ${ structs.surfaceRecord } ) -> bool {
+
+				return surf.matte;
 
 			}
 
