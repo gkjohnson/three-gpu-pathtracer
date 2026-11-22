@@ -42,7 +42,6 @@ export class MaterialKernel extends ComputeKernel {
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const getMaterialMediumFn = contextProxyFn( 'shadingModel.fns.getMaterialMedium' );
-		const getDispersionFn = contextProxyFn( 'shadingModel.fns.getDispersion' );
 		const applyDispersionFn = contextProxyFn( 'shadingModel.fns.applyDispersion' );
 		const isAuxSurfaceFn = contextProxyFn( 'shadingModel.fns.isAuxSurface' );
 		const isMatteFn = contextProxyFn( 'shadingModel.fns.isMatte' );
@@ -276,18 +275,12 @@ export class MaterialKernel extends ComputeKernel {
 
 						// apply the hero wavelength to dispersive surfaces, folding the spectral weight
 						// into the throughput at the path's first dispersive interaction
-						let dispersion = ${ getDispersionFn }( surface );
-						if ( dispersion > 0.0 ) {
+						let wavelength = abs( input.dispersionWavelength );
+						if ( ${ applyDispersionFn }( &surface, wavelength ) && input.dispersionWavelength < 0.0 ) {
 
-							let wavelength = abs( input.dispersionWavelength );
-							${ applyDispersionFn }( &surface, dispersion, wavelength );
-							if ( input.dispersionWavelength < 0.0 ) {
-
-								rayDataStorage[ index ].dispersionWavelength = wavelength;
-								throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
-								rayDataStorage[ index ].throughputColor = throughputColor;
-
-							}
+							rayDataStorage[ index ].dispersionWavelength = wavelength;
+							throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
+							rayDataStorage[ index ].throughputColor = throughputColor;
 
 						}
 

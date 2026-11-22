@@ -649,18 +649,6 @@ export class GLTFShadingModel extends ShadingModel {
 
 		`;
 
-		// the surface's dispersion, zero when it doesn't disperse
-		fns.getDispersion = wgslTagFn/* wgsl */`
-
-			fn getDispersion( surf: ${ surfaceRecordStruct } ) -> f32 {
-
-				let isDispersive = surf.dispersion > 0.0 && surf.ior > 1.0 && surf.transmission > 0.0 && ! surf.thinWall;
-				return select( 0.0, surf.dispersion, isDispersive );
-
-			}
-
-		`;
-
 		fns.applyDispersion = applyDispersionFunc;
 		fns.isAuxSurface = isAuxSurfaceFn;
 

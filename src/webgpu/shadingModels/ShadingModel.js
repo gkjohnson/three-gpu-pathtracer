@@ -86,7 +86,6 @@ export class ShadingModel {
 			bsdfSample: null,
 			bsdfEvalPdf: null,
 			getMaterialMedium: null,
-			getDispersion: null,
 			applyDispersion: null,
 			isAuxSurface: null,
 			isMatte: null,
@@ -122,9 +121,8 @@ export class ShadingModel {
 	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.
 	 * - "fns.getMaterialMedium": ( materialIndex ) -> MaterialMedium, the material's volume. Defaults to none.
-	 * - "fns.getDispersion": ( surface ) -> f32, the surface's dispersion. Defaults to zero.
-	 * - "fns.applyDispersion": ( ptr<SurfaceRecord>, dispersion, wavelength ), refracting the surface at a wavelength.
-	 *   Defaults to a no-op.
+	 * - "fns.applyDispersion": ( ptr<SurfaceRecord>, wavelength ) -> bool, refracting a dispersive surface at a
+	 *   wavelength, returning whether the surface is dispersive. Defaults to false.
 	 * - "fns.isAuxSurface": ( surface, scatter ) -> bool, whether the denoiser's guides show the surface rather than
 	 *   what it reflects or transmits. Defaults to true.
 	 * - "fns.isMatte": ( surface ) -> bool, whether the surface renders transparent to the camera. Defaults to false.
@@ -208,19 +206,11 @@ export class ShadingModel {
 
 		`;
 
-		fns.getDispersion = wgslTagFn/* wgsl */`
-
-			fn getDispersion( surf: ${ structs.surfaceRecord } ) -> f32 {
-
-				return 0.0;
-
-			}
-
-		`;
-
 		fns.applyDispersion = wgslTagFn/* wgsl */`
 
-			fn applyDispersion( surf: ptr<function, ${ structs.surfaceRecord }>, dispersion: f32, wavelength: f32 ) -> void {
+			fn applyDispersion( surf: ptr<function, ${ structs.surfaceRecord }>, wavelength: f32 ) -> bool {
+
+				return false;
 
 			}
 

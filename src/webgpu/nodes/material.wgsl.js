@@ -644,14 +644,22 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// takes the surface by name since the shading model defines its struct
+// Refracts a dispersive surface at the wavelength, returning whether the surface is dispersive: transmissive with a
+// volume, an ior above one and some dispersion. Takes the surface by name since the shading model defines its struct
 export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
-	fn applyDispersion( surf: ptr<function, SurfaceRecord>, dispersion: f32, wavelength: f32 ) -> void {
+	fn applyDispersion( surf: ptr<function, SurfaceRecord>, wavelength: f32 ) -> bool {
 
-		surf.ior = ${ dispersionIorFunc }( surf.ior, dispersion, wavelength );
+		if ( surf.dispersion <= 0.0 || surf.ior <= 1.0 || surf.transmission <= 0.0 || surf.thinWall ) {
+
+			return false;
+
+		}
+
+		surf.ior = ${ dispersionIorFunc }( surf.ior, surf.dispersion, wavelength );
 		surf.eta = select( surf.ior, 1.0 / surf.ior, surf.thinWall || surf.frontFace );
 		surf.f0 = ${ iorToF0Func }( surf.eta );
+		return true;
 
 	}
 

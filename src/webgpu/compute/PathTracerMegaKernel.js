@@ -70,7 +70,6 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
 		const getMaterialMediumFn = contextProxyFn( 'shadingModel.fns.getMaterialMedium' );
-		const getDispersionFn = contextProxyFn( 'shadingModel.fns.getDispersion' );
 		const applyDispersionFn = contextProxyFn( 'shadingModel.fns.applyDispersion' );
 		const isAuxSurfaceFn = contextProxyFn( 'shadingModel.fns.isAuxSurface' );
 		const isMatteFn = contextProxyFn( 'shadingModel.fns.isMatte' );
@@ -529,17 +528,11 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						// dispersion, with the hero wavelength's weight applied at the first dispersive hit
-						let dispersion = ${ getDispersionFn }( surface );
-						if ( dispersion > 0.0 ) {
+						let wavelength = abs( dispersionWavelength );
+						if ( ${ applyDispersionFn }( &surface, wavelength ) && dispersionWavelength < 0.0 ) {
 
-							let wavelength = abs( dispersionWavelength );
-							${ applyDispersionFn }( &surface, dispersion, wavelength );
-							if ( dispersionWavelength < 0.0 ) {
-
-								dispersionWavelength = wavelength;
-								throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
-
-							}
+							dispersionWavelength = wavelength;
+							throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
 
 						}
 
