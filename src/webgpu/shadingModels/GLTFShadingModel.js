@@ -2,7 +2,7 @@ import { BackSide, FrontSide, DoubleSide } from 'three/webgpu';
 import { float } from 'three/tsl';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { ShadingModel } from './ShadingModel.js';
-import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc, getSurfaceRecordFunc, applyDispersionFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc, getSurfaceRecordFunc, applyDispersionFunc, getHitOpacityFunc } from '../nodes/material.wgsl.js';
 import { getMaterialExtinctionFn } from '../nodes/medium.wgsl.js';
 import { isAuxSurfaceFn } from '../nodes/auxiliary.wgsl.js';
 import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
@@ -630,77 +630,9 @@ export class GLTFShadingModel extends ShadingModel {
 
 		`;
 
-		// the opacity of a hit from the material's side, the material and object opacity, the vertex colors and the
-		// alpha of the map and alpha map
+		fns.getHitOpacity = getHitOpacityFunc;
+
 		const materials = contextProxy( 'shadingModel.storage.materials' );
-		const attributes = contextProxy( 'bvhData.storage.attributes' );
-		const getUvFromChannel = contextProxyFn( 'bvhData.fns.getUvFromChannel' );
-		const getColor = contextProxyFn( 'bvhData.fns.getColor' );
-		fns.getHitOpacity = wgslTagFn/* wgsl */`
-
-			fn getHitOpacity( materialIndex: u32, objectAlpha: f32, i0: u32, i1: u32, i2: u32, barycoord: vec3f, side: f32 ) -> f32 {
-
-				let material = &${ materials }[ materialIndex ];
-				if ( side != 0.0 && material.side != 0.0 && side != material.side ) {
-
-					return 0.0;
-
-				}
-
-				if ( material.transparent == 0 && material.alphaTest <= 0.0 ) {
-
-					return 1.0;
-
-				}
-
-				var opacity = material.opacity * objectAlpha;
-				if ( material.vertexColors == 1 ) {
-
-					let a = ${ getColor }( ${ attributes }[ i0 ] );
-					let b = ${ getColor }( ${ attributes }[ i1 ] );
-					let c = ${ getColor }( ${ attributes }[ i2 ] );
-					opacity *= ( barycoord.x * a + barycoord.y * b + barycoord.z * c ).a;
-
-				}
-
-				if ( material.map != - 1 ) {
-
-					let a = ${ getUvFromChannel }( ${ attributes }[ i0 ], material.map );
-					let b = ${ getUvFromChannel }( ${ attributes }[ i1 ], material.map );
-					let c = ${ getUvFromChannel }( ${ attributes }[ i2 ], material.map );
-					let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-					// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
-					// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
-					let uvPrime = ${ materials }[ materialIndex ].mapTransform * vec3f( uv, 1 );
-					opacity *= ${ fns.sampleTexel }( uvPrime.xy, material.map, 0 ).a;
-
-				}
-
-				if ( material.alphaMap != - 1 ) {
-
-					let a = ${ getUvFromChannel }( ${ attributes }[ i0 ], material.alphaMap );
-					let b = ${ getUvFromChannel }( ${ attributes }[ i1 ], material.alphaMap );
-					let c = ${ getUvFromChannel }( ${ attributes }[ i2 ], material.alphaMap );
-					let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
-					let uvPrime = ${ materials }[ materialIndex ].alphaMapTransform * vec3f( uv, 1 );
-					opacity *= ${ fns.sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
-
-				}
-
-				// alpha tested surfaces below the cutoff and fully transparent ones are passed, and opaque alpha tested
-				// surfaces are fully opaque
-				if ( opacity < material.alphaTest || opacity <= 0.0 ) {
-
-					return 0.0;
-
-				}
-
-				return select( 1.0, opacity, material.transparent != 0 );
-
-			}
-
-		`;
-
 		fns.getMaterialMedium = wgslTagFn/* wgsl */`
 
 			fn getMaterialMedium( materialIndex: u32 ) -> ${ materialMediumStruct } {
