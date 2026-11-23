@@ -1,6 +1,6 @@
 import { texture, uniform } from 'three/tsl';
 import { Matrix4, Vector3, RGBAFormat, RGIntegerFormat, RGBAIntegerFormat, FloatType, UnsignedIntType } from 'three/webgpu';
-import { BVH } from 'three-mesh-bvh';
+import { BVH, CENTER } from 'three-mesh-bvh';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { LinearDataTexture } from './LinearDataTexture.js';
 import { lightRecordStruct } from './nodes/structs.wgsl.js';
@@ -11,9 +11,6 @@ import { RECORD_VISIBLE_WORD, RECORD_MATERIAL_INDEX_WORD } from './nodes/Pathtra
 // the leaf's primitive offset, and the split axis or the leaf's primitive count and flag in two 16-bit halves
 const BVH_NODE_WORDS = 8;
 const BVH_LEAF_FLAG = 0xffff;
-
-// the bins each axis is split into when picking a light tree node's split
-const SPLIT_BIN_COUNT = 12;
 
 // The floats of a light tree node, two texels:
 // - its bounds' min and its power
@@ -32,63 +29,22 @@ const _edge1 = /* @__PURE__ */ new Vector3();
 const _edge2 = /* @__PURE__ */ new Vector3();
 const _cross = /* @__PURE__ */ new Vector3();
 
-// per bin power, primitive count and bounds, and the same for the union of the bins from each one to the last
-const _binPower = /* @__PURE__ */ new Float32Array( SPLIT_BIN_COUNT );
-const _binCount = /* @__PURE__ */ new Uint32Array( SPLIT_BIN_COUNT );
-const _binBounds = /* @__PURE__ */ new Float32Array( SPLIT_BIN_COUNT * 6 );
-const _rightPower = /* @__PURE__ */ new Float32Array( SPLIT_BIN_COUNT );
-const _rightCount = /* @__PURE__ */ new Uint32Array( SPLIT_BIN_COUNT );
-const _rightBounds = /* @__PURE__ */ new Float32Array( SPLIT_BIN_COUNT * 6 );
-const _leftBounds = /* @__PURE__ */ new Float32Array( 6 );
-const _split = { axis: - 1, pos: 0 };
-
-function resetBounds( bounds, offset ) {
-
-	for ( let d = 0; d < 3; d ++ ) {
-
-		bounds[ offset + d ] = Infinity;
-		bounds[ offset + d + 3 ] = - Infinity;
-
-	}
-
-}
-
-function unionBounds( source, sourceOffset, target, targetOffset ) {
-
-	for ( let d = 0; d < 3; d ++ ) {
-
-		target[ targetOffset + d ] = Math.min( target[ targetOffset + d ], source[ sourceOffset + d ] );
-		target[ targetOffset + d + 3 ] = Math.max( target[ targetOffset + d + 3 ], source[ sourceOffset + d + 3 ] );
-
-	}
-
-}
-
-// half the surface area, which is all the split cost compares
-function getHalfSurfaceArea( bounds, offset ) {
-
-	const x = bounds[ offset + 3 ] - bounds[ offset ];
-	const y = bounds[ offset + 4 ] - bounds[ offset + 1 ];
-	const z = bounds[ offset + 5 ] - bounds[ offset + 2 ];
-	return x * y + y * z + z * x;
-
-}
-
 // The light tree over the emissive triangles, built by three-mesh-bvh with one triangle per leaf. Its primitive
 // buffer holds the triangle indices, reordered into leaf order by the build
 class LightTreeBVH extends BVH {
 
-	constructor( bounds, powers ) {
+	constructor( bounds ) {
 
 		super();
 
-		const count = powers.length;
+		const count = bounds.length / 6;
 		this.bounds = bounds;
-		this.powers = powers;
 		this.primitiveBuffer = new Uint32Array( count ).map( ( v, i ) => i );
 		this.primitiveBufferStride = 1;
 		this.init( {
-			strategy: ( ...args ) => this.splitByPower( ...args ),
+			// TODO: a split that accounts for the triangles' power may build a better tree. A power weighted SAH
+			// was tried and was no better than CENTER over the Zero-Day and Bistro scenes
+			strategy: CENTER,
 			targetLeafSize: 1,
 			_strictLeafSize: 1,
 			maxDepth: Infinity,
@@ -99,7 +55,7 @@ class LightTreeBVH extends BVH {
 
 	getRootRanges() {
 
-		return [ { offset: 0, count: this.powers.length } ];
+		return [ { offset: 0, count: this.primitiveBuffer.length } ];
 
 	}
 
@@ -110,102 +66,6 @@ class LightTreeBVH extends BVH {
 			target[ offset + k ] = this.bounds[ i * 6 + k ];
 
 		}
-
-	}
-
-	// Splits a node where the sum of each child's power times its surface area is least: a surface area heuristic
-	// weighted by power, like pbrt-v4's light BVH without its emission cones. The node is split in half when its
-	// triangles' centers don't spread
-	splitByPower( nodeBounds, centroidBounds, primitiveBounds, offset, count ) {
-
-		const { primitiveBuffer, powers } = this;
-		const boundsOffset = primitiveBounds.offset || 0;
-		let bestCost = Infinity;
-		_split.axis = - 1;
-		_split.pos = 0;
-
-		for ( let axis = 0; axis < 3; axis ++ ) {
-
-			const min = centroidBounds[ axis ];
-			const width = centroidBounds[ axis + 3 ] - min;
-			if ( ! ( width > 0 ) ) {
-
-				continue;
-
-			}
-
-			// bin the triangles by their centers
-			_binPower.fill( 0 );
-			_binCount.fill( 0 );
-			for ( let b = 0; b < SPLIT_BIN_COUNT; b ++ ) {
-
-				resetBounds( _binBounds, b * 6 );
-
-			}
-
-			for ( let i = offset, end = offset + count; i < end; i ++ ) {
-
-				const base = ( i - boundsOffset ) * 6;
-				const center = primitiveBounds[ base + axis * 2 ];
-				const bin = Math.min( Math.floor( ( center - min ) / width * SPLIT_BIN_COUNT ), SPLIT_BIN_COUNT - 1 );
-				_binPower[ bin ] += powers[ primitiveBuffer[ i ] ];
-				_binCount[ bin ] ++;
-
-				// the primitive bounds are stored as a center and half extent per axis
-				for ( let d = 0; d < 3; d ++ ) {
-
-					const c = primitiveBounds[ base + d * 2 ];
-					const h = primitiveBounds[ base + d * 2 + 1 ];
-					_binBounds[ bin * 6 + d ] = Math.min( _binBounds[ bin * 6 + d ], c - h );
-					_binBounds[ bin * 6 + d + 3 ] = Math.max( _binBounds[ bin * 6 + d + 3 ], c + h );
-
-				}
-
-			}
-
-			// accumulate the bins from the last one down
-			resetBounds( _rightBounds, ( SPLIT_BIN_COUNT - 1 ) * 6 );
-			unionBounds( _binBounds, ( SPLIT_BIN_COUNT - 1 ) * 6, _rightBounds, ( SPLIT_BIN_COUNT - 1 ) * 6 );
-			_rightPower[ SPLIT_BIN_COUNT - 1 ] = _binPower[ SPLIT_BIN_COUNT - 1 ];
-			_rightCount[ SPLIT_BIN_COUNT - 1 ] = _binCount[ SPLIT_BIN_COUNT - 1 ];
-			for ( let b = SPLIT_BIN_COUNT - 2; b >= 0; b -- ) {
-
-				_rightBounds.copyWithin( b * 6, ( b + 1 ) * 6, ( b + 2 ) * 6 );
-				unionBounds( _binBounds, b * 6, _rightBounds, b * 6 );
-				_rightPower[ b ] = _rightPower[ b + 1 ] + _binPower[ b ];
-				_rightCount[ b ] = _rightCount[ b + 1 ] + _binCount[ b ];
-
-			}
-
-			// test a split before each bin, keeping both sides non-empty
-			let leftPower = 0;
-			let leftCount = 0;
-			resetBounds( _leftBounds, 0 );
-			for ( let b = 1; b < SPLIT_BIN_COUNT; b ++ ) {
-
-				unionBounds( _binBounds, ( b - 1 ) * 6, _leftBounds, 0 );
-				leftPower += _binPower[ b - 1 ];
-				leftCount += _binCount[ b - 1 ];
-				if ( leftCount === 0 || _rightCount[ b ] === 0 ) {
-
-					continue;
-
-				}
-
-				const cost = leftPower * getHalfSurfaceArea( _leftBounds, 0 ) + _rightPower[ b ] * getHalfSurfaceArea( _rightBounds, b * 6 );
-				if ( cost < bestCost ) {
-
-					bestCost = cost;
-					_split.axis = axis;
-					_split.pos = min + width * b / SPLIT_BIN_COUNT;
-
-				}
-
-			}
-
-		}
-
-		return _split;
 
 	}
 
@@ -345,7 +205,7 @@ export class EmissiveTrianglesInfo {
 
 		}
 
-		const tree = new LightTreeBVH( bounds, powers );
+		const tree = new LightTreeBVH( bounds );
 		const root = tree._roots[ 0 ];
 		const rootF32 = new Float32Array( root );
 		const rootU32 = new Uint32Array( root );
