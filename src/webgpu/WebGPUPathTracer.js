@@ -989,8 +989,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				child.boundsTree.getBoundingBox( child.boundingBox );
 
-			} else if ( child.isMesh ) {
+			} else if ( child.isMesh && ! child.isBatchedMesh ) {
 
+				// a batched mesh is skipped since a single bvh would mix the triangles of its geometries
 				if ( ! child.geometry.boundsTree ) {
 
 					child.geometry.boundsTree = new MeshBVH( child.geometry, MESH_BVH_OPTIONS );
@@ -1066,7 +1067,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const pending = new Set();
 		scene.traverse( child => {
 
-			if ( child.isMesh && ! child.isSkinnedMesh && ! child.geometry.boundsTree ) {
+			if ( child.isMesh && ! child.isSkinnedMesh && ! child.isBatchedMesh && ! child.geometry.boundsTree ) {
 
 				const { geometry } = child;
 				if ( geometry.attributes.position.isInterleavedBufferAttribute || geometry.index && geometry.index.isInterleavedBufferAttribute ) {
