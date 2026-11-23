@@ -11,11 +11,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "renderTime" and "elapsedTime" in the sample counts, the milliseconds spent rendering and the milliseconds since rendering started.
 - WebGPUPathTracer: "renderTo", which draws the render into a render target or the canvas, either as presented with the "beauty" output or as the "accumulated" samples alone.
 - WebGPUPathTracer: Support for render target textures as the scene's environment, copied on "updateEnvironment".
+- WebGPUPathTracer: "finished" in the sample counts, the share of pixels done sampling, which "complete" waits on.
 
 ### Changed
 - WebGPUPathTracer: "setScene" returns a promise that resolves once the scene renders, since three-mesh-bvh writes the scene data asynchronously. Rendering pauses on the last frame until then.
 - WebGPUPathTracer: A camera's "getCameraRay" function takes the pixel and a [0, 1) random sample for the point within it, "( pixel, sample, resolution, ray )", in place of the jittered uv, so a camera knows exactly which pixel it renders.
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
+- ShadingModel: The ray traversal, medium stack and kernels read hit opacity, volumes, dispersion, matte and the denoiser guides through the shading model's functions, so a custom shading model's material and surface record structs only need the fields its own functions read. The base "ShadingModel" is a minimal diffuse model, and the glTF material lives in "GLTFShadingModel".
 - WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
 - WebGPUPathTracer: "setSize" updates the camera, so camera ray functions that depend on the render size follow it.
 - WebGPUPathTracer: Vertex colors are only stored on the GPU when the scene has them, reducing memory use.
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: The wavefront path tracer sizes its path slots to the pixels left to sample, so renders with "maxSamples" finish up to 20% sooner.
 - WebGPUPathTracer: The megakernel renders several samples per "renderSample" call when the whole frame fits in "frameBudget".
 - WebGPUPathTracer: The megakernel indexes each pixel's random sequence by its own sample count, as the wavefront does.
+- WebGPUPathTracer: The megakernel measures its sample counts on the GPU, as the wavefront does.
 
 ### Removed
 - WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.

@@ -33,6 +33,7 @@ import { createOutputTarget } from './compute/targets.js';
  * @property {number} min - Lowest sample count of any pixel.
  * @property {number} max - Highest sample count of any pixel.
  * @property {number} avg - Mean sample count across the image.
+ * @property {number} finished - Share of the pixels done sampling, at `maxSamples`.
  * @property {number} samplesPerSecond - Mean samples accumulated per second of render time since the last reset.
  * @property {number} renderTime - Milliseconds spent rendering samples since the last reset.
  * @property {number} elapsedTime - Milliseconds since rendering started after the last reset, including pauses but
@@ -372,8 +373,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.maxSamples = v;
 
 		// the settle point moved, so a finished pass may need to run again against a longer
-		// render. The accumulated samples are still valid
+		// render. The accumulated samples are still valid, but the pixels finished need measuring again
 		this._denoiser?.reset();
+		this._lastSampleCounts.finished = 0;
 
 	}
 
@@ -384,19 +386,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	get complete() {
 
-		const maxSamples = this.maxSamples;
 		const denoiser = this._denoiser;
-
-		// "min" so every pixel has stopped, not just the average
-		return maxSamples > 0 && this._lastSampleCounts.min >= maxSamples && ( ! denoiser || denoiser.complete );
+		return this._lastSampleCounts.finished >= 1 && ( ! denoiser || denoiser.complete );
 
 	}
 
 	/**
-	 * Measures the per pixel sample counts. Use `min` for convergence checks and `avg` to display.
+	 * Measures the per pixel sample counts. Use `finished` for convergence checks and `avg` to display.
 	 * @returns {Promise<SampleCounts>}
-	 * @note The wavefront backend reduces the counts on the GPU and reads them back, so only call
-	 *   this when the numbers are needed.
+	 * @note The counts are reduced on the GPU and read back, so only call this when the numbers are needed.
 	 */
 	async getSampleCountsAsync() {
 
@@ -409,6 +407,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		counts.min = measured.min;
 		counts.max = measured.max;
 		counts.avg = measured.avg;
+		counts.finished = measured.finished;
 
 		// averaged over the time spent rendering
 		counts.renderTime = this.getRenderTime();
@@ -648,7 +647,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._resetTime = - 1;
 		this._fadeState = 0;
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, finished: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._size = new Vector2();
 
 		// the time spent rendering, and a watchdog that notices when the app stops calling "renderSample"
@@ -1503,7 +1502,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._timer.update();
 
 		// a fresh object rather than a clear, so measurements still in flight detach
-		this._lastSampleCounts = { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
+		this._lastSampleCounts = { min: 0, max: 0, avg: 0, finished: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 };
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
 
@@ -1544,7 +1543,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} else {
 
-			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 } );
+			this._dispatchRenderProgress( { min: 0, max: 0, avg: 0, finished: 0, samplesPerSecond: 0, renderTime: 0, elapsedTime: 0 } );
 
 		}
 
@@ -1736,7 +1735,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		// update the samples, stopping once every pixel has reached "maxSamples"
-		const samplesComplete = maxSamples > 0 && this._lastSampleCounts.min >= maxSamples;
+		const samplesComplete = this._lastSampleCounts.finished >= 1;
 		let rendered = false;
 		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
@@ -1806,8 +1805,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// the low res preview is replaced moments later, so it is neither denoised nor upscaled
 		if ( ! lowResMode ) {
 
-			// "min" so every pixel has stopped, not just the average
-			if ( awaitingDenoise && this._lastSampleCounts.min >= maxSamples ) {
+			if ( awaitingDenoise && samplesComplete ) {
 
 				denoiser.update( this._renderInput(), pathTracer.auxTarget );
 
@@ -1997,7 +1995,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const debugBounds = getDebugBoundsFunction( bvhData, shadingModel );
 
 		const material = new MeshBasicNodeMaterial();
-		material.colorNode = debugBounds( varying( uv() ) );
+		material.colorNode = debugBounds( varying( uv() ) ).context( { bvhData, shadingModel } );
 
 		if ( this._debugBoundsQuad === undefined ) {
 

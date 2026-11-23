@@ -18,6 +18,17 @@ export const scatterRecordStruct = new StructTypeNode( {
 	pdf: 'float',
 }, 'ScatterRecord' );
 
+// a material's volume, from the shading model's "getMaterialMedium": whether it's a fog volume or a closed volume
+// a refracted path enters, and its coefficients, zero extinction for none
+export const materialMediumStruct = new StructTypeNode( {
+	extinction: 'vec3f',
+	fogVolume: 'bool',
+	multiscatterColor: 'vec3f',
+	scatterStrength: 'float',
+	scatterAnisotropy: 'float',
+	volume: 'bool',
+}, 'MaterialMedium' );
+
 export const transmissionFresnelStruct = new StructTypeNode( {
 	reflectance: 'vec3f',
 	transmittance: 'vec3f',
