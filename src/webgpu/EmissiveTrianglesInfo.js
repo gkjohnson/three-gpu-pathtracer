@@ -389,13 +389,10 @@ export class EmissiveTrianglesInfo {
 	_initFns() {
 
 		const { treeTextureNode, trianglesTextureNode, objectsTextureNode, countNode } = this;
-		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
 		const objectsStorage = contextProxy( 'bvhData.storage.objects' );
 		const getTriangleIndices = contextProxyFn( 'bvhData.fns.getTriangleIndices' );
 		const getVertexPosition = contextProxyFn( 'bvhData.fns.getVertexPosition' );
-		const getVertex = contextProxyFn( 'bvhData.fns.getVertex' );
-		const getUvFromChannel = contextProxyFn( 'bvhData.fns.getUvFromChannel' );
-		const sampleTexel = contextProxyFn( 'shadingModel.fns.sampleTexel' );
+		const getEmission = contextProxyFn( 'shadingModel.fns.getEmission' );
 
 		// texel "texel", 0 or 1, of node "node"
 		const readNodeFn = wgslTagFn/* wgsl */`
@@ -503,7 +500,6 @@ export class EmissiveTrianglesInfo {
 				let triangleIndex = triangleInfo.y;
 				let area = bitcast<f32>( triangleInfo.w );
 				let objectInfo = &${ objectsStorage }[ objectIndex ];
-				let materialInfo = &${ materialsStorage }[ objectInfo.materialIndex ];
 
 				let indices = ${ getTriangleIndices }( triangleIndex, objectInfo.indexOffset );
 				let p0 = ( objectInfo.matrixWorld * vec4f( ${ getVertexPosition }( indices.x, objectInfo.attributesOffset ), 1.0 ) ).xyz;
@@ -522,25 +518,14 @@ export class EmissiveTrianglesInfo {
 				let triangleNormal = normalize( cross( p1 - p0, p2 - p0 ) );
 				let direction = toLight * inverseSqrt( distSq );
 
-				// whether the side facing "position" emits: front, back or both, by the material's side
+				// the light the point emits from the side facing "position", from the shading model
 				let cosLight = - dot( triangleNormal, direction );
-				let facing = select( cosLight * materialInfo.side, abs( cosLight ), materialInfo.side == 0.0 );
-				if ( distSq <= 0.0 || facing <= 0.0 || area <= 0.0 ) {
+				let side = select( - 1.0, 1.0, cosLight > 0.0 );
+				let facing = abs( cosLight );
+				let emission = ${ getEmission }( objectInfo.materialIndex, indices.x, indices.y, indices.z, objectInfo.attributesOffset, vec3f( b0, b1, b2 ), side );
+				if ( distSq <= 0.0 || facing <= 0.0 || area <= 0.0 || all( emission == vec3f( 0.0 ) ) ) {
 
 					return lightRec;
-
-				}
-
-				// the emissive color, times the emissive map at the point
-				var emission = materialInfo.emissiveIntensity * materialInfo.emissive;
-				if ( materialInfo.emissiveMap != - 1 ) {
-
-					let uv0 = ${ getUvFromChannel }( ${ getVertex }( indices.x, objectInfo.attributesOffset ), materialInfo.emissiveMap );
-					let uv1 = ${ getUvFromChannel }( ${ getVertex }( indices.y, objectInfo.attributesOffset ), materialInfo.emissiveMap );
-					let uv2 = ${ getUvFromChannel }( ${ getVertex }( indices.z, objectInfo.attributesOffset ), materialInfo.emissiveMap );
-					let uv = b0 * uv0 + b1 * uv1 + b2 * uv2;
-					let uvPrime = materialInfo.emissiveMapTransform * vec3f( uv, 1.0 );
-					emission *= ${ sampleTexel }( uvPrime.xy, materialInfo.emissiveMap, 0.0 ).rgb;
 
 				}
 

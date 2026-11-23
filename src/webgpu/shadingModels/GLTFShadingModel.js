@@ -2,7 +2,7 @@ import { BackSide, FrontSide, DoubleSide } from 'three/webgpu';
 import { float } from 'three/tsl';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { ShadingModel } from './ShadingModel.js';
-import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc, getSurfaceRecordFunc, applyDispersionFunc, getHitOpacityFunc } from '../nodes/material.wgsl.js';
+import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc, getSurfaceRecordFunc, applyDispersionFunc, getHitOpacityFunc, getEmissionFunc } from '../nodes/material.wgsl.js';
 import { getMaterialExtinctionFn } from '../nodes/medium.wgsl.js';
 import { isAuxSurfaceFn } from '../nodes/auxiliary.wgsl.js';
 import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
@@ -631,6 +631,7 @@ export class GLTFShadingModel extends ShadingModel {
 		`;
 
 		fns.getHitOpacity = getHitOpacityFunc;
+		fns.getEmission = getEmissionFunc;
 
 		const materials = contextProxy( 'shadingModel.storage.materials' );
 		fns.getMaterialMedium = wgslTagFn/* wgsl */`

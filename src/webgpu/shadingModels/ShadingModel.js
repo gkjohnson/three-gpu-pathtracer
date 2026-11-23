@@ -66,6 +66,7 @@ export class ShadingModel {
 			bsdfSample: null,
 			bsdfEvalPdf: null,
 			getHitOpacity: null,
+			getEmission: null,
 			getMaterialMedium: null,
 			applyDispersion: null,
 			isAuxSurface: null,
@@ -105,6 +106,8 @@ export class ShadingModel {
 	 *   opacity of a triangle the ray traversal hits, with its vertices read at "attributesOffset": 0 for a face on a
 	 *   side the material doesn't render, a side of 0 counting either side, or for a fully transparent or alpha tested
 	 *   surface, below 1 for a partially transparent one, and 1 otherwise. Defaults to 1.
+	 * - "fns.getEmission": ( materialIndex, i0, i1, i2, attributesOffset, barycoord, side ) -> vec3f, the light a point
+	 *   on a triangle emits from the side "side", read by the emissive triangle light sampling. Defaults to none.
 	 * - "fns.getMaterialMedium": ( materialIndex ) -> MaterialMedium, the material's volume. Defaults to none.
 	 * - "fns.applyDispersion": ( ptr<SurfaceRecord>, wavelength ) -> bool, refracting a dispersive surface at a
 	 *   wavelength, returning whether the surface is dispersive. Defaults to false.
@@ -190,6 +193,17 @@ export class ShadingModel {
 			fn getHitOpacity( materialIndex: u32, objectAlpha: f32, i0: u32, i1: u32, i2: u32, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
 
 				return 1.0;
+
+			}
+
+		`;
+
+		// nothing emits by default
+		fns.getEmission = wgslTagFn/* wgsl */`
+
+			fn getEmission( materialIndex: u32, i0: u32, i1: u32, i2: u32, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> vec3f {
+
+				return vec3f( 0.0 );
 
 			}
 
