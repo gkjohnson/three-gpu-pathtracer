@@ -1,5 +1,5 @@
 import { StructTypeNode } from 'three/webgpu';
-import { wgslTagFn, rayStruct, contextProxy } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, rayStruct, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { LIGHT_FAR_DISTANCE } from './lights.wgsl.js';
 import { rand2, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from './random.wgsl.js';
 import { sampleHenyeyGreensteinFn } from './sampling.wgsl.js';
@@ -78,7 +78,7 @@ const getSingleScatterAlbedoFn = wgslTagFn/* wgsl */`
 
 `;
 
-const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
+const getMaterialMedium = contextProxyFn( 'shadingModel.fns.getMaterialMedium' );
 const raycastOutput = contextProxy( 'bvhData.fns.raycastFirstHit.outputType' );
 const raycastFirstHitFn = contextProxy( 'bvhData.fns.raycastFirstHit' );
 
@@ -104,9 +104,8 @@ export const isSubsurfaceMaterialFn = wgslTagFn/* wgsl */`
 
 	fn isSubsurfaceMaterial( materialIndex: u32 ) -> bool {
 
-		let material = &${ materialsStorage }[ materialIndex ];
-		return material.scatterStrength > 0.0 && any( material.multiscatterColor > vec3f( 0.0 ) ) &&
-			any( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) > vec3f( 0.0 ) );
+		let material = ${ getMaterialMedium }( materialIndex );
+		return material.scatterStrength > 0.0 && any( material.multiscatterColor > vec3f( 0.0 ) ) && any( material.extinction > vec3f( 0.0 ) );
 
 	}
 
@@ -117,11 +116,11 @@ export const getSubsurfaceMediumFn = wgslTagFn/* wgsl */`
 
 	fn getSubsurfaceMedium( materialIndex: u32 ) -> ${ mediumStruct } {
 
-		let material = &${ materialsStorage }[ materialIndex ];
+		let material = ${ getMaterialMedium }( materialIndex );
 		let anisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
 
 		var medium: ${ mediumStruct };
-		medium.extinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+		medium.extinction = material.extinction;
 		medium.albedo = ${ getSingleScatterAlbedoFn }( material.multiscatterColor * material.scatterStrength, anisotropy );
 		medium.anisotropy = anisotropy;
 		medium.scatters = 1u;
@@ -138,8 +137,7 @@ export const addToMediumStackFn = wgslTagFn/* wgsl */`
 
 	fn addToMediumStack( stack: ptr<function, ${ mediumStackStruct }>, materialIndex: u32 ) -> void {
 
-		let material = &${ materialsStorage }[ materialIndex ];
-		if ( all( ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance ) <= vec3f( 0.0 ) ) || ${ isSubsurfaceMaterialFn }( materialIndex ) ) {
+		if ( all( ${ getMaterialMedium }( materialIndex ).extinction <= vec3f( 0.0 ) ) || ${ isSubsurfaceMaterialFn }( materialIndex ) ) {
 
 			return;
 
@@ -291,12 +289,12 @@ export const getCombinedMediumFn = wgslTagFn/* wgsl */`
 
 			}
 
-			let material = &${ materialsStorage }[ ids[ i ] ];
+			let material = ${ getMaterialMedium }( ids[ i ] );
 			let entryAnisotropy = clamp( material.scatterAnisotropy, - ${ MEDIUM_MAX_ANISOTROPY }, ${ MEDIUM_MAX_ANISOTROPY } );
-			let entryExtinction = ${ getMaterialExtinctionFn }( material.attenuationColor, material.attenuationDistance );
+			let entryExtinction = material.extinction;
 
 			// a fog volume's color is its single scatter albedo already
-			let entryAlbedo = select( vec3f( 0.0 ), material.multiscatterColor, material.fogVolume != 0 );
+			let entryAlbedo = select( vec3f( 0.0 ), material.multiscatterColor, material.fogVolume );
 			let entryScattering = entryAlbedo * entryExtinction;
 			let weight = dot( entryScattering, vec3f( 1.0 / 3.0 ) );
 			extinction += entryExtinction;

@@ -26,10 +26,8 @@ export class HDRImageGenerator {
 		const renderer = this.renderer;
 		const { width, height } = renderTarget;
 
-		// The path tracer output is a StorageTexture, so read it back asynchronously through a render
-		// target stub ( WebGPU has no synchronous readback ).
-		const stub = { textures: [ renderTarget ] };
-		const result = await renderer.readRenderTargetPixelsAsync( stub, 0, 0, width, height );
+		// WebGPU has no synchronous readback
+		const result = await renderer.readRenderTargetPixelsAsync( renderTarget, 0, 0, width, height );
 		const buffer = result instanceof Float32Array ? result : new Float32Array( result.buffer, result.byteOffset, result.byteLength / 4 );
 
 		const imageInformation = {

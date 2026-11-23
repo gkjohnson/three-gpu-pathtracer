@@ -16,17 +16,17 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	const viewports = uniformArray( [], 'vec4' );
 
 	result.fn = wgslTagFn/* wgsl */`
-		fn getCameraRay( uv: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
+		fn getCameraRay( pixel: vec2u, sample: vec2f, resolution: vec2f, ray: ptr<function, ${ rayStruct }> ) -> bool {
 
-			let pixel = uv * resolution;
+			let point = vec2f( pixel ) + sample;
 
 			for ( var i = 0u; i < ${ cameraCount }u; i ++ ) {
 
 				let viewport = ${ viewports }[ i ];
 				let viewportMax = viewport.xy + viewport.zw;
-				if ( all( pixel >= viewport.xy ) && all( pixel < viewportMax ) ) {
+				if ( all( point >= viewport.xy ) && all( point < viewportMax ) ) {
 
-					let cameraUv = ( pixel - viewport.xy ) / viewport.zw;
+					let cameraUv = ( point - viewport.xy ) / viewport.zw;
 					let ndc = cameraUv * 2.0 - vec2f( 1.0 );
 					*ray = ${ ndcToCameraRay }( ndc, ${ cameraWorldMatrices }[ i ], ${ inverseProjectionMatrices }[ i ] );
 					return true;
@@ -43,8 +43,8 @@ ArrayCamera.prototype.getCameraRayFn = function getCameraRayFn() {
 	result.update = () => {
 
 		const { cameras } = this;
-		const needsRebuild = cameraCount.node.value !== cameras.length;
-		cameraCount.node.value = cameras.length;
+		const needsRebuild = cameraCount.value !== cameras.length;
+		cameraCount.value = cameras.length;
 
 		while ( viewports.array.length < cameras.length ) {
 

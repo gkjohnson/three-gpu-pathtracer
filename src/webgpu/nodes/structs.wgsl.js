@@ -18,6 +18,17 @@ export const scatterRecordStruct = new StructTypeNode( {
 	pdf: 'float',
 }, 'ScatterRecord' );
 
+// a material's volume, from the shading model's "getMaterialMedium": whether it's a fog volume or a closed volume
+// a refracted path enters, and its coefficients, zero extinction for none
+export const materialMediumStruct = new StructTypeNode( {
+	extinction: 'vec3f',
+	fogVolume: 'bool',
+	multiscatterColor: 'vec3f',
+	scatterStrength: 'float',
+	scatterAnisotropy: 'float',
+	volume: 'bool',
+}, 'MaterialMedium' );
+
 export const transmissionFresnelStruct = new StructTypeNode( {
 	reflectance: 'vec3f',
 	transmittance: 'vec3f',
@@ -237,13 +248,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	specularColor: 'vec3f',
 	specularIntensity: 'f32',
 }, 'SurfaceRecord' );
-
-export const environmentInfoStruct = new StructTypeNode( {
-	rotation: 'mat3x3f',
-	intensity: 'float',
-	blur: 'float',
-	totalSum: 'float',
-}, 'EnvironmentInfo' );
 
 // Result of importance-sampling the environment map: a world-space direction,
 // its radiance, and the pdf (in solid-angle measure) of having sampled it.

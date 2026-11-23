@@ -10,21 +10,35 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "interpolateDisplay", set to false to show the render without interpolation when it's drawn at a different size than the canvas.
 - WebGPUPathTracer: "renderTime" and "elapsedTime" in the sample counts, the milliseconds spent rendering and the milliseconds since rendering started.
 - WebGPUPathTracer: Emissive surfaces are sampled as lights, picked with a light tree by their power and distance, so scenes lit by emissive geometry converge much faster.
+- WebGPUPathTracer: "renderTo", which draws the render into a render target or the canvas, either as presented with the "beauty" output or as the "accumulated" samples alone.
+- WebGPUPathTracer: Support for render target textures as the scene's environment, copied on "updateEnvironment".
+- WebGPUPathTracer: "finished" in the sample counts, the share of pixels done sampling, which "complete" waits on.
 
 ### Changed
+- WebGPUPathTracer: "setScene" returns a promise that resolves once the scene renders, since three-mesh-bvh writes the scene data asynchronously. Rendering pauses on the last frame until then.
+- WebGPUPathTracer: A camera's "getCameraRay" function takes the pixel and a [0, 1) random sample for the point within it, "( pixel, sample, resolution, ray )", in place of the jittered uv, so a camera knows exactly which pixel it renders.
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
+- ShadingModel: The ray traversal, medium stack and kernels read hit opacity, volumes, dispersion, matte and the denoiser guides through the shading model's functions, so a custom shading model's material and surface record structs only need the fields its own functions read. The base "ShadingModel" is a minimal diffuse model, and the glTF material lives in "GLTFShadingModel".
 - WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
 - WebGPUPathTracer: "setSize" updates the camera, so camera ray functions that depend on the render size follow it.
 - WebGPUPathTracer: Vertex colors are only stored on the GPU when the scene has them, reducing memory use.
 - WebGPUPathTracer: Russian roulette starts at the second vertex, as in Cycles, so paths end sooner and samples are cheaper.
 - WebGPUPathTracer: The wavefront path tracer rebuilds its pixel queue after each pass, skipping finished pixels and the ones the camera declines and sampling the pixels that fall behind first, so renders with "maxSamples" finish sooner and more evenly. The queue shrinks with the render size, except during the low res preview.
 - WebGPUPathTracer: The render fades in over the low res preview, which shows through the pixels the render hasn't reached yet. With a "minSamples" of 0 the preview stays until every pixel has a sample.
+- WebGPUPathTracer: The samples accumulate in place in a single float array texture rather than two RGBA float targets, halving the memory they use.
+- WebGPUPathTracer: The environment's importance sampling is built on the GPU, which is much faster.
+- WebGPUPathTracer: The wavefront path tracer sizes its path slots to the pixels left to sample, so renders with "maxSamples" finish up to 20% sooner.
+- WebGPUPathTracer: The megakernel renders several samples per "renderSample" call when the whole frame fits in "frameBudget".
+- WebGPUPathTracer: The megakernel indexes each pixel's random sequence by its own sample count, as the wavefront does.
+- WebGPUPathTracer: The megakernel measures its sample counts on the GPU, as the wavefront does.
 
 ### Removed
 - WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.
 - WebGPUPathTracer: "asyncCompile". The kernels always compile asynchronously, so nothing new renders while "compiling" is true.
+- WebGPUPathTracer: "target". Use "renderTo" to draw the render into a render target.
 
 ### Fixed
+- WebGPUPathTracer: Setting an ArrayCamera throwing an error.
 - WebGPUPathTracer: "getRenderTime" and "samplesPerSecond" counting the time spent paused, finished, with the page hidden or between "renderSample" calls, such as after "maxSamples" is reached and then raised.
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
 - WebGPUPathTracer: Rays parallel to an axis missing bounds they lie on the face of.

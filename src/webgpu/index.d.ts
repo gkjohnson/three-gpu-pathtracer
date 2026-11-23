@@ -1,4 +1,4 @@
-import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture } from 'three';
+import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture, RenderTarget } from 'three';
 import { StorageArrayTexture, WebGPURenderer, MeshBasicNodeMaterial, MeshBasicNodeMaterialParameters } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
@@ -105,8 +105,10 @@ export class FSRUpscaler {
 	Upscaler: Function;
 	sharpness: number;
 
+	readonly texture: Texture | null;
+
 	init( renderer: WebGPURenderer ): void;
-	upscale( source: Texture, camera: Camera ): Texture;
+	upscale( source: Texture, camera: Camera, width: number, height: number ): Texture;
 	dispose(): void;
 
 }
@@ -161,6 +163,7 @@ export interface SampleCounts {
 	min: number;
 	max: number;
 	avg: number;
+	finished: number;
 	samplesPerSecond: number;
 	renderTime: number;
 	elapsedTime: number;
@@ -223,7 +226,6 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	stableNoise: boolean;
 	pause: boolean;
 
-	readonly target: Texture | null;
 	readonly frameTime: number;
 	readonly complete: boolean;
 	readonly fadeState: number;
@@ -237,7 +239,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	setDenoiser( denoiser: OIDNDenoiser | null ): void;
 	setUpscaler( upscaler: FSRUpscaler | null ): void;
 
-	setScene( scene: Scene, camera: Camera ): void;
+	setScene( scene: Scene, camera: Camera ): Promise<void>;
 	setBVHWorker( WorkerConstructor: new () => BVHWorker & { dispose(): void } ): void;
 	setSceneAsync( scene: Scene, camera: Camera ): Promise<void>;
 	setRandom( random: RandomStrategy ): void;
@@ -252,6 +254,7 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 
 	reset(): void;
 	renderSample(): void;
+	renderTo( target?: RenderTarget | null, options?: { output?: 'beauty' | 'accumulated', resize?: boolean } ): void;
 	renderDebugBounds( options?: DebugBoundsOptions ): void;
 	renderTextureAtlas( layer?: number ): void;
 	renderSampleDensity(): void;

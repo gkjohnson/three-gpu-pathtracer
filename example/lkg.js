@@ -5,6 +5,7 @@ import {
 	DoubleSide,
 	EquirectangularReflectionMapping,
 	Group,
+	HalfFloatType,
 	LoadingManager,
 	MathUtils,
 	Matrix4,
@@ -13,6 +14,7 @@ import {
 	MeshStandardMaterial,
 	PerspectiveCamera,
 	PlaneGeometry,
+	RenderTarget,
 	Scene,
 	Sphere,
 	Vector2,
@@ -90,6 +92,9 @@ let loader, distEl;
 let renderer, camera, quiltCamera;
 let pathTracer, previewQuad, scene;
 
+// the accumulated quilt, drawn from the path tracer every frame
+const quiltTarget = new RenderTarget( 1, 1, { type: HalfFloatType, depthBuffer: false } );
+
 // sample counts are measured asynchronously, so the average is kept for the frame
 const _translation = new Matrix4();
 const _size = new Vector2();
@@ -146,7 +151,7 @@ async function init() {
 
 	// initialize quads
 	previewQuad = new FullScreenQuad( new QuiltPreviewNodeMaterial( {
-		quiltMap: pathTracer.target,
+		quiltMap: quiltTarget.texture,
 		quiltDimensions: new Vector2(),
 		aspectRatio: DISPLAY_WIDTH / DISPLAY_HEIGHT,
 	} ) );
@@ -287,6 +292,7 @@ function animate() {
 
 	pathTracer.pause = params.pause;
 	pathTracer.renderSample();
+	pathTracer.renderTo( quiltTarget, { output: 'accumulated' } );
 
 	if ( params.tiltingPreview ) {
 
@@ -302,7 +308,6 @@ function animate() {
 
 	}
 
-	previewQuad.material.quiltMap = pathTracer.target;
 	previewQuad.render( renderer );
 
 	distEl.innerText = `Distance: ${ camera.position.length().toFixed( 2 ) }`;
@@ -343,7 +348,6 @@ function onLkgParamsChange() {
 	const width = Math.max( 1, Math.floor( renderScale * lkgParams.quiltWidth ) );
 	const height = Math.max( 1, Math.floor( renderScale * lkgParams.quiltHeight ) );
 	pathTracer.setSize( width, height );
-	previewQuad.material.quiltMap = pathTracer.target;
 	previewQuad.material.quiltDimensions.set( lkgParams.quiltTilesX, lkgParams.quiltTilesY );
 
 	pathTracer.updateCamera();
@@ -425,15 +429,14 @@ function onResize() {
 // save the canvas
 function saveQuilt() {
 
-	const target = pathTracer.target;
+	const { width, height } = quiltTarget;
 	renderer.getSize( _size );
 	const pixelRatio = renderer.getPixelRatio();
 	const displayIndex = previewQuad.material.displayIndex;
 
 	renderer.setPixelRatio( 1 );
-	renderer.setSize( target.width, target.height, false );
-	renderer.setViewport( 0, 0, target.width, target.height );
-	previewQuad.material.quiltMap = target;
+	renderer.setSize( width, height, false );
+	renderer.setViewport( 0, 0, width, height );
 	previewQuad.material.displayIndex = - 1;
 	previewQuad.render( renderer );
 
