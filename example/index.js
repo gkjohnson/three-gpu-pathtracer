@@ -814,6 +814,12 @@ async function updateModel() {
 
 		model.traverse( c => {
 
+			if ( c.isBatchedMesh ) {
+
+				c.dispose();
+
+			}
+
 			if ( c.material ) {
 
 				const material = c.material;
@@ -838,11 +844,19 @@ async function updateModel() {
 
 	try {
 
-		model = await loadModel( modelInfo.url, v => {
+		if ( modelInfo.generateScene ) {
 
-			loader.setProgress( 'Loading', v );
+			model = await modelInfo.generateScene();
 
-		}, modelInfo.fileMap );
+		} else {
+
+			model = await loadModel( modelInfo.url, v => {
+
+				loader.setProgress( 'Loading', v );
+
+			}, modelInfo.fileMap );
+
+		}
 
 	} catch ( err ) {
 
@@ -888,7 +902,9 @@ async function updateModel() {
 	const scale = 1 / sphere.radius;
 	model.scale.setScalar( scale );
 	model.position.multiplyScalar( scale );
-	box.setFromObject( model, true );
+
+	// the precise bounds of a BatchedMesh don't include its instances
+	box.setFromObject( model, ! modelInfo.generateScene );
 
 	// attenuation and light dimensions are measured in world units and ignore the object
 	// hierarchy scale, so they must be scaled with the model
