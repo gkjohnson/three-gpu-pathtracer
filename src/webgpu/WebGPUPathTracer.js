@@ -712,8 +712,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// the current stage, building until the first scene is set. Only the latest "setScene" call sets its scene
 		this._stage = STAGE_BUILDING;
-		this._sceneRequest = 0;
-		this._cancelBVHBuild = null;
+		this._sceneAbortController = new AbortController();
 
 		// options
 
@@ -974,11 +973,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	async setScene( scene, camera ) {
 
-		this._sceneRequest ++;
-		const request = this._sceneRequest;
+		// replace a scene still being set. The BVHs already built for it are kept on their geometry
+		this._sceneAbortController.abort();
+		this._sceneAbortController = new AbortController();
 
-		// the BVHs a replaced call already built are kept on their geometry
-		this._cancelBVHBuild?.();
+		const { signal } = this._sceneAbortController;
 
 		// stop rendering the previous scene while the next one builds, keeping the last frame. The denoiser runs
 		// its tiles on its own schedule, so it's reset separately
@@ -990,10 +989,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 			const missingBVHs = getMissingBVHs( scene );
 			if ( this._BVHWorker && missingBVHs.size > 0 ) {
 
-				await this._buildBVHsInWorkers( missingBVHs );
-
-				// skip the scene if a later call replaced it meanwhile
-				if ( request !== this._sceneRequest ) {
+				await this._buildBVHsInWorkers( missingBVHs, signal );
+				if ( signal.aborted ) {
 
 					return;
 
@@ -1001,12 +998,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			}
 
-			await this._setBuiltScene( scene, camera, request );
+			await this._setBuiltScene( scene, camera, signal );
 
 		} catch ( error ) {
 
 			// render the previous scene again
-			if ( request === this._sceneRequest ) {
+			if ( ! signal.aborted ) {
 
 				this._setStage( STAGE_COMPILING );
 
@@ -1031,8 +1028,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// builds the BVHs from "getMissingBVHs" in workers, resolving early if "_cancelBVHBuild" is called
-	async _buildBVHsInWorkers( missingBVHs ) {
+	// builds the BVHs from "getMissingBVHs" in workers, resolving early when aborted
+	async _buildBVHsInWorkers( missingBVHs, signal ) {
 
 		// each worker runs one job at a time so they pull from a shared queue
 		const queue = [ ...missingBVHs.values() ];
@@ -1068,11 +1065,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		};
 
-		// a disposed worker's build never settles
-		const cancelled = new Promise( resolve => this._cancelBVHBuild = resolve );
+		// TODO: a disposed worker's build never settles. Remove this once fixed in three-mesh-bvh#1026
+		const aborted = new Promise( resolve => signal.addEventListener( 'abort', resolve ) );
 		try {
 
-			await Promise.race( [ cancelled, Promise.all( workers.map( build ) ) ] );
+			await Promise.race( [ aborted, Promise.all( workers.map( build ) ) ] );
 
 		} finally {
 
@@ -1083,8 +1080,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// sets the scene, building the BVHs still missing, for the "setScene" call "request"
-	async _setBuiltScene( scene, camera, request ) {
+	// sets the scene, building the BVHs still missing, unless aborted
+	async _setBuiltScene( scene, camera, signal ) {
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
@@ -1136,8 +1133,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const bvhData = new PathtracerBVHComputeData( scene, shadingModel );
 		await bvhData.update();
 
-		// skip the scene if a later call replaced it meanwhile
-		if ( request !== this._sceneRequest ) {
+		if ( signal.aborted ) {
 
 			bvhData.dispose();
 			return;
