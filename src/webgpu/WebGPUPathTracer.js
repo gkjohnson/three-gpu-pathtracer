@@ -996,6 +996,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				}
 
+			} else {
+
+				missingBVHs.forEach( ( { geometry, options, setBVH } ) => {
+
+					setBVH( new MeshBVH( geometry, options ) );
+
+				} );
+
 			}
 
 			await this._setBuiltScene( scene, camera, signal );
@@ -1080,13 +1088,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// sets the scene, building the BVHs still missing, unless aborted
+	// sets the scene once its geometry BVHs are built, unless aborted
 	async _setBuiltScene( scene, camera, signal ) {
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
 
-		// Build BVH for each mesh geometry
 		scene.traverse( child => {
 
 			if ( this.generateMissingAttributes && child.geometry?.isBufferGeometry ) {
@@ -1116,12 +1123,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 				child.boundsTree.getBoundingBox( child.boundingBox );
 
 			}
-
-		} );
-
-		getMissingBVHs( scene ).forEach( ( { geometry, options, setBVH } ) => {
-
-			setBVH( new MeshBVH( geometry, options ) );
 
 		} );
 
