@@ -447,6 +447,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			this._transmissiveBackground = v;
 			this._pathTracer.setTransmissiveBackground( v );
+			this.reset();
 
 		}
 

@@ -17,16 +17,22 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import { WebGPUPathTracer, OIDNDenoiser, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
+import {
+	WebGPUPathTracer,
+	OIDNDenoiser,
+	TRANSMISSIVE_BACKGROUND_ENVIRONMENT,
+	TRANSMISSIVE_BACKGROUND_OVERLAY,
+	TRANSMISSIVE_BACKGROUND_TRANSPARENT,
+} from 'three-gpu-pathtracer/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { initUNetFromURL } from 'oidn-webgpu';
 import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { LoaderElement } from './src/LoaderElement.js';
 
-const RANDOM_STRATEGIES = {
-	'Sobol': RANDOM_SOBOL,
-	'Blue Dither': RANDOM_BLUE_DITHER,
-	'PCG': RANDOM_PCG,
+const TRANSMISSIVE_BACKGROUNDS = {
+	'Overlay': TRANSMISSIVE_BACKGROUND_OVERLAY,
+	'Environment': TRANSMISSIVE_BACKGROUND_ENVIRONMENT,
+	'Transparent': TRANSMISSIVE_BACKGROUND_TRANSPARENT,
 };
 
 const CONFIG_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/config.json';
@@ -35,7 +41,6 @@ const BASE_URL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Render-Fid
 
 const urlParams = new URLSearchParams( window.location.search );
 const hideUI = urlParams.get( 'hideUI' ) === 'true';
-const frameBudget = parseInt( urlParams.get( 'frameBudget' ) ) || 250000;
 const scale = parseInt( urlParams.get( 'scale' ) ) || 1;
 
 const params = {
@@ -46,26 +51,21 @@ const params = {
 	enable: true,
 	maxSamples: parseInt( urlParams.get( 'samples' ) ) || 16,
 	renderScale: scale,
-	pause: false,
 	acesToneMapping: true,
-	frameBudget: frameBudget,
-	randomStrategy: 'Sobol',
-	denoise: urlParams.get( 'denoise' ) !== '0',
-
-	iterationsPerFrame: 1,
+	transmissiveBackground: 'Overlay',
 
 	model: '',
 	checkerboardTransparency: true,
 	displayImage: false,
 	imageMode: 'overlay',
 	imageOpacity: 1.0,
-	imageType: 'dspbr-pt',
+	imageType: 'blender-cycles',
 
 };
 
 let containerEl, imgEl, loader;
 let gui, model, envMap;
-let pathTracer, renderer, camera, scene, controls, denoiser;
+let pathTracer, renderer, camera, scene, controls;
 let loadingModel = false;
 let delaySamples = 0;
 let modelDatabase;
@@ -137,9 +137,8 @@ async function createRenderer() {
 	pathTracer = new WebGPUPathTracer( renderer );
 	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.useMegakernel( params.useMegakernel );
-	pathTracer.frameBudget = params.frameBudget;
+	pathTracer.renderScale = params.renderScale;
 	pathTracer.maxSamples = params.maxSamples;
-	pathTracer.setRandom( RANDOM_STRATEGIES[ params.randomStrategy ] );
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
 		loader.setStage( stage, progress, samples );
@@ -147,13 +146,13 @@ async function createRenderer() {
 	} );
 
 	// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
-	denoiser = new OIDNDenoiser( {
+	const denoiser = new OIDNDenoiser( {
 		initUNetFromURL,
 		auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
 		maxTileSize: 512,
 		dynamicTile: false,
 	} );
-	pathTracer.setDenoiser( params.denoise ? denoiser : null );
+	pathTracer.setDenoiser( denoiser );
 
 	// forwarded for the screenshot tooling
 	pathTracer.addEventListener( 'complete', () => {
@@ -175,13 +174,6 @@ function animate() {
 	imgEl.style.width = renderer.domElement.style.width;
 	imgEl.style.height = renderer.domElement.style.height;
 
-	// if rendering has completed then don't render
-	if ( pathTracer.complete ) {
-
-		return;
-
-	}
-
 	if ( loadingModel ) {
 
 		return;
@@ -199,13 +191,7 @@ function animate() {
 	// TODO: use a delay field from WebGLPathTracer
 	if ( params.enable && delaySamples === 0 ) {
 
-		pathTracer.pause = params.pause;
-
-		for ( let i = 0; i < params.iterationsPerFrame; i ++ ) {
-
-			pathTracer.renderSample();
-
-		}
+		pathTracer.renderSample();
 
 	} else if ( ( delaySamples > 0 || ! params.enable ) && renderer.initialized !== false ) {
 
@@ -225,24 +211,9 @@ function onModelChange() {
 
 }
 
-function onParamsChange() {
+function updateCheckerboard() {
 
-	delaySamples = 1;
-	if ( params.checkerboardTransparency ) {
-
-		containerEl.classList.add( 'checkerboard' );
-
-	} else {
-
-		containerEl.classList.remove( 'checkerboard' );
-
-	}
-
-	pathTracer.renderScale = params.renderScale;
-
-	const model = modelDatabase[ params.model ];
-	scene.background = model && model.renderSkybox ? scene.environment : null;
-	pathTracer.updateEnvironment();
+	containerEl.classList.toggle( 'checkerboard', params.checkerboardTransparency );
 
 }
 
@@ -288,17 +259,9 @@ function buildGui() {
 
 	const pathTracingFolder = gui.addFolder( 'Path Tracer' );
 	pathTracingFolder.add( params, 'enable' );
-	pathTracingFolder.add( params, 'pause' );
 	pathTracingFolder.add( params, 'useMegakernel' ).onChange( () => {
 
 		pathTracer.useMegakernel( params.useMegakernel );
-
-	} );
-	pathTracingFolder.add( params, 'showAtlas', atlasOptions );
-	pathTracingFolder.add( params, 'renderScale', 0.1, 1 ).onChange( onParamsChange );
-	pathTracingFolder.add( params, 'acesToneMapping' ).onChange( v => {
-
-		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
 
 	} );
 	pathTracingFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
@@ -306,18 +269,24 @@ function buildGui() {
 		pathTracer.maxSamples = v;
 
 	} );
-	pathTracingFolder.add( params, 'randomStrategy', Object.keys( RANDOM_STRATEGIES ) ).onChange( v => {
+	pathTracingFolder.add( params, 'renderScale', 0.1, 1 ).onChange( v => {
 
-		pathTracer.setRandom( RANDOM_STRATEGIES[ v ] );
-
-	} );
-	pathTracingFolder.add( params, 'denoise' ).onChange( v => {
-
-		pathTracer.setDenoiser( v ? denoiser : null );
+		pathTracer.renderScale = v;
 
 	} );
+	pathTracingFolder.add( params, 'transmissiveBackground', Object.keys( TRANSMISSIVE_BACKGROUNDS ) ).onChange( v => {
 
-	pathTracingFolder.add( params, 'iterationsPerFrame', 1, 30, 1 );
+		pathTracer.transmissiveBackground = TRANSMISSIVE_BACKGROUNDS[ v ];
+
+	} );
+
+	const displayFolder = gui.addFolder( 'Display' );
+	displayFolder.add( params, 'acesToneMapping' ).onChange( v => {
+
+		renderer.toneMapping = v ? ACESFilmicToneMapping : NoToneMapping;
+
+	} );
+	displayFolder.add( params, 'checkerboardTransparency' ).onChange( updateCheckerboard );
 
 	const comparisonFolder = gui.addFolder( 'Comparison' );
 	comparisonFolder.add( params, 'displayImage' );
@@ -337,7 +306,9 @@ function buildGui() {
 		'vk-gltf-renderer',
 	] ).onChange( updateImage );
 	comparisonFolder.add( params, 'imageOpacity', 0, 1.0 );
-	comparisonFolder.add( params, 'checkerboardTransparency' ).onChange( onParamsChange );
+
+	const debugFolder = gui.addFolder( 'Debug' );
+	debugFolder.add( params, 'showAtlas', atlasOptions );
 
 }
 
@@ -445,6 +416,7 @@ async function updateModel() {
 	}
 
 	scene.environment = envMap;
+	scene.background = modelInfo.renderSkybox ? envMap : null;
 
 	model = gltf.scene;
 
@@ -501,8 +473,9 @@ async function updateModel() {
 	loader.setCredits( modelInfo.credit || '' );
 	containerEl.style.display = 'flex';
 	loadingModel = false;
+	delaySamples = 1;
 
-	onParamsChange();
+	updateCheckerboard();
 	buildGui();
 	updateImage();
 
