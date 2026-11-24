@@ -94,6 +94,8 @@ export class EmissiveTrianglesInfo {
 
 	// Rebuilds the triangles and their tree from the bvh data. Call when the scene, its materials or its
 	// transforms change
+	// TODO: material changes only need a new tree when an object starts or stops emitting. Otherwise rewrite just the
+	// powers, or nothing if the emission is unchanged
 	update( bvhData, shadingModel ) {
 
 		// no scene data has been written yet
@@ -260,6 +262,7 @@ export class EmissiveTrianglesInfo {
 		const getTriangleIndices = contextProxyFn( 'bvhData.fns.getTriangleIndices' );
 		const getVertexPosition = contextProxyFn( 'bvhData.fns.getVertexPosition' );
 		const getEmission = contextProxyFn( 'shadingModel.fns.getEmission' );
+		const getHitOpacity = contextProxyFn( 'shadingModel.fns.getHitOpacity' );
 
 		// texel "texel", 0 or 1, of node "node"
 		const readNodeFn = wgslTagFn/* wgsl */`
@@ -388,11 +391,14 @@ export class EmissiveTrianglesInfo {
 				let triangleNormal = winding * normalize( cross( p1 - p0, p2 - p0 ) );
 				let direction = toLight * inverseSqrt( distSq );
 
-				// the light the point emits from the side facing "position", from the shading model
+				// the light the point emits from the side facing "position", from the shading model, and the share of
+				// rays that don't pass through it
 				let cosLight = - dot( triangleNormal, direction );
 				let side = select( - 1.0, 1.0, cosLight > 0.0 );
 				let facing = abs( cosLight );
-				let emission = ${ getEmission }( objectInfo.materialIndex, indices, objectInfo.attributesOffset, vec3f( b0, b1, b2 ), side );
+				let barycoord = vec3f( b0, b1, b2 );
+				var emission = ${ getEmission }( objectInfo.materialIndex, indices, objectInfo.attributesOffset, barycoord, side );
+				emission *= ${ getHitOpacity }( objectInfo.materialIndex, objectInfo.color.a, indices, objectInfo.attributesOffset, barycoord, side );
 				if ( distSq <= 0.0 || facing <= 0.0 || area <= 0.0 || all( emission == vec3f( 0.0 ) ) ) {
 
 					return lightRec;
