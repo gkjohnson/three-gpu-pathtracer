@@ -199,7 +199,7 @@ async function init() {
 	// prep for rendering
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 
 	initializeSize();
 	rebuildGUI();

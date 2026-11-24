@@ -117,7 +117,7 @@ async function init() {
 	backdrop.position.set( center.x, box.min.y - 1e-3, box.min.z );
 	scene.add( backdrop );
 
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );

@@ -22,7 +22,7 @@ import {
 	PMREMGenerator
 } from 'three';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
-import { MeshBVH, MeshBVHOptions } from 'three-mesh-bvh';
+import { MeshBVH, BVHOptions } from 'three-mesh-bvh';
 
 // three.js type augmentation
 
@@ -66,7 +66,7 @@ export interface PathTracingSceneGeneratorResult {
 
 export interface BVHWorker {
 
-	generate( geometry : BufferGeometry, options?: MeshBVHOptions ) : Promise<MeshBVH>
+	generate( geometry : BufferGeometry, options?: BVHOptions ) : Promise<MeshBVH>
 
 }
 
@@ -80,7 +80,7 @@ export class PathTracingSceneGenerator {
 
 	readonly initialized: boolean;
 
-	bvhOptions: MeshBVHOptions;
+	bvhOptions: BVHOptions;
 	attributes: Array<string>;
 	generateBVH: boolean;
 

@@ -101,7 +101,7 @@ async function init() {
 	scene.add( gltf.scene );
 
 	// initialize the path tracer
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );

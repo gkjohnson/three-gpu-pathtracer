@@ -149,7 +149,7 @@ async function init() {
 	scene.add( floorPlane );
 
 	// initialize the path tracer
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 
 	loader.setCredits( CREDITS );
 	loader.setDescription( DESCRIPTION );

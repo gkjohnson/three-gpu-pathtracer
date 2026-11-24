@@ -194,7 +194,7 @@ async function init() {
 	loader.setCredits( CREDITS );
 
 	onParamsChange();
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 	onResize();
 	window.addEventListener( 'resize', onResize );
 

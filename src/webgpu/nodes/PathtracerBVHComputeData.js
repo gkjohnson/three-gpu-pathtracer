@@ -22,8 +22,8 @@ const _raycastTarget = {
 
 // three-mesh-bvh's object record with the material fields appended, and the words they're written at
 export const RECORD_VISIBLE_WORD = 32;
-export const RECORD_MATERIAL_INDEX_WORD = 36;
-const RECORD_VISIBLE_TO_SHADOW_RAYS_WORD = 37;
+export const RECORD_MATERIAL_INDEX_WORD = 35;
+const RECORD_VISIBLE_TO_SHADOW_RAYS_WORD = 36;
 const RECORD_COLOR_WORD = 40;
 const objectRecordStruct = new StructTypeNode( {
 	matrixWorld: 'mat4x4f',
@@ -31,9 +31,9 @@ const objectRecordStruct = new StructTypeNode( {
 	visible: 'uint',
 	indexOffset: 'uint',
 	attributesOffset: 'uint',
-	_alignment0: 'uint',
 	materialIndex: 'uint',
 	visibleToShadowRays: 'uint',
+	_alignment0: 'uint',
 	_alignment1: 'uint',
 	_alignment2: 'uint',
 	color: 'vec4f',
@@ -171,7 +171,19 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 					if ( keys.has( key ) ) {
 
-						attributes[ key ] = key === 'color' ? '4x16float' : 'vec2f';
+						if ( key === 'color' ) {
+
+							attributes[ key ] = '4x16float';
+
+						} else if ( /^uv/.test( key ) ) {
+
+							attributes[ key ] = 'vec2f';
+
+						} else {
+
+							attributes[ key ] = 'vec4f';
+
+						}
 
 					}
 
@@ -607,6 +619,17 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
+	updateTransforms() {
+
+		// the first "update" writes them
+		if ( this.bvh !== null ) {
+
+			super.updateTransforms();
+
+		}
+
+	}
+
 	setShadingModel( shadingModel ) {
 
 		this.shadingModel = shadingModel;
@@ -616,7 +639,14 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	updateMaterialIndices() {
 
+		// the first "update" writes them with the object records
 		const objectsStorage = this.storage.objects.proxyNode;
+		if ( objectsStorage === null ) {
+
+			return;
+
+		}
+
 		this.getAllObjectInfo().forEach( info => {
 
 			this.writeMaterialData( info, info.objectIndex, objectsStorage.value.array.buffer );

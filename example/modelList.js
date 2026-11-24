@@ -1,5 +1,6 @@
-import { Box3, Color, CylinderGeometry, DirectionalLight, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, RectAreaLight, Sphere, Vector3 } from 'three';
+import { BatchedMesh, Box3, BoxGeometry, CapsuleGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight, IcosahedronGeometry, MathUtils, Matrix4, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, SphereGeometry, TorusGeometry, TorusKnotGeometry, Vector3 } from 'three';
 import { FogVolumeNodeMaterial } from 'three-gpu-pathtracer/webgpu';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
@@ -805,6 +806,60 @@ export const MODEL_LIST = {
 			} );
 
 		}
+	},
+
+	'Batched Mesh': {
+		// a sphere covered in shapes, with a geometry, transform and color for each, as one BatchedMesh
+		generateScene() {
+
+			const count = 1000;
+
+			// shapes around one unit in size, all indexed as a BatchedMesh requires
+			const geometries = [
+				new SphereGeometry( 0.5, 48, 24 ),
+				new BoxGeometry( 0.75, 0.75, 0.75 ),
+				new TorusGeometry( 0.38, 0.16, 24, 64 ),
+				new TorusKnotGeometry( 0.32, 0.11, 128, 16 ),
+				new ConeGeometry( 0.45, 0.9, 48 ),
+				new CylinderGeometry( 0.35, 0.35, 0.75, 48 ),
+				new CapsuleGeometry( 0.25, 0.5, 16, 32 ),
+				mergeVertices( new IcosahedronGeometry( 0.5 ) ),
+			];
+
+			const vertexCount = geometries.reduce( ( sum, geometry ) => sum + geometry.attributes.position.count, 0 );
+			const indexCount = geometries.reduce( ( sum, geometry ) => sum + geometry.index.count, 0 );
+			const material = new MeshPhysicalMaterial( { roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.1 } );
+			const mesh = new BatchedMesh( count, vertexCount, indexCount, material );
+			const geometryIds = geometries.map( geometry => mesh.addGeometry( geometry ) );
+			const colors = [ 0xe63946, 0xf4a261, 0xe9c46a, 0x2a9d8f, 0x457b9d, 0xf1faee ].map( hex => new Color( hex ) );
+
+			MathUtils.seededRandom( 1 );
+
+			const up = new Vector3( 0, 1, 0 );
+			const position = new Vector3();
+			const quaternion = new Quaternion();
+			const scale = new Vector3();
+			const matrix = new Matrix4();
+			const spacing = Math.sqrt( 4 * Math.PI / count );
+			for ( let i = 0; i < count; i ++ ) {
+
+				// evenly spaced points on a sphere
+				const y = 1 - 2 * ( i + 0.5 ) / count;
+				const theta = i * Math.PI * ( 3 - Math.sqrt( 5 ) );
+				position.setFromSphericalCoords( 1, Math.acos( y ), theta );
+				quaternion.setFromUnitVectors( up, position );
+				scale.setScalar( spacing * MathUtils.lerp( 0.9, 1.25, MathUtils.seededRandom() ) );
+				matrix.compose( position, quaternion, scale );
+
+				const id = mesh.addInstance( geometryIds[ Math.floor( MathUtils.seededRandom() * geometryIds.length ) ] );
+				mesh.setMatrixAt( id, matrix );
+				mesh.setColorAt( id, colors[ Math.floor( MathUtils.seededRandom() * colors.length ) ] );
+
+			}
+
+			return mesh;
+
+		},
 	},
 
 	'LEGO Allied Avenger': ldrawModel( '6887-1 - Allied Avenger.mpd' ),

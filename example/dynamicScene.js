@@ -427,7 +427,7 @@ async function init() {
 	orbit.target.copy( center );
 	orbit.update();
 
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );

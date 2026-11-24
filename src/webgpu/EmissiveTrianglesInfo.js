@@ -96,6 +96,13 @@ export class EmissiveTrianglesInfo {
 	// transforms change
 	update( bvhData, shadingModel ) {
 
+		// no scene data has been written yet
+		if ( bvhData.bvh === null ) {
+
+			return;
+
+		}
+
 		const { storage: bvhStorage, structs } = bvhData;
 		const geometryU32 = bvhStorage.geometry.proxyNode.value.array;
 		const geometryF32 = new Float32Array( geometryU32.buffer, geometryU32.byteOffset, geometryU32.length );
