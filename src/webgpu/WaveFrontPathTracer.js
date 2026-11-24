@@ -111,19 +111,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	resetSeed() {
-
-		this.globalSeed = 0;
-
-	}
-
-	reset() {
-
-		super.reset();
-		this.globalSeed ++;
-
-	}
-
 	setBVHData( bvhData ) {
 
 		this.materialKernel.context.bvhData = bvhData;
@@ -465,7 +452,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
 		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
-		// the sample count indexes each pixel's sequence, and the global seed gives each render its own
+		// the sample count indexes each pixel's sequence, and the global seed gives each render its own without "stableNoise"
+		this.globalSeed = this.stableNoise ? 0 : this.globalSeed + 1;
 		logicKernel.globalSeed = this.globalSeed;
 		materialKernel.globalSeed = this.globalSeed;
 		cameraRayKernel.globalSeed = this.globalSeed;
