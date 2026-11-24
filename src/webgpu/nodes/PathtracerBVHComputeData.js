@@ -619,6 +619,17 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
+	updateTransforms() {
+
+		// the first "update" writes them
+		if ( this.bvh !== null ) {
+
+			super.updateTransforms();
+
+		}
+
+	}
+
 	setShadingModel( shadingModel ) {
 
 		this.shadingModel = shadingModel;
