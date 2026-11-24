@@ -648,13 +648,13 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 // the map and alpha map, for a shading model's "getHitOpacity". Reads the materials, texture sampling and vertex data
 // through the node context so any shading model whose material struct has these fields can use it
 const materialsStorage = /* @__PURE__ */ contextProxy( 'shadingModel.storage.materials' );
-const getVertex = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getVertex' );
+const sampleTrianglePoint = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 const sampleTexel = /* @__PURE__ */ contextProxyFn( 'shadingModel.fns.sampleTexel' );
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
 const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
 export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
-	fn getHitOpacity( materialIndex: u32, objectAlpha: f32, i0: u32, i1: u32, i2: u32, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
+	fn getHitOpacity( materialIndex: u32, objectAlpha: f32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
 
 		let material = &${ materialsStorage }[ materialIndex ];
 		if ( side != 0.0 && material.side != 0.0 && side != material.side ) {
@@ -669,22 +669,17 @@ export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
 		}
 
+		let vertex = ${ sampleTrianglePoint }( barycoord, indices, attributesOffset );
 		var opacity = material.opacity * objectAlpha;
 		if ( material.vertexColors == 1 ) {
 
-			let a = ${ getColor }( ${ getVertex }( i0, attributesOffset ) );
-			let b = ${ getColor }( ${ getVertex }( i1, attributesOffset ) );
-			let c = ${ getColor }( ${ getVertex }( i2, attributesOffset ) );
-			opacity *= ( barycoord.x * a + barycoord.y * b + barycoord.z * c ).a;
+			opacity *= ${ getColor }( vertex ).a;
 
 		}
 
 		if ( material.map != - 1 ) {
 
-			let a = ${ getUvFromChannel }( ${ getVertex }( i0, attributesOffset ), material.map );
-			let b = ${ getUvFromChannel }( ${ getVertex }( i1, attributesOffset ), material.map );
-			let c = ${ getUvFromChannel }( ${ getVertex }( i2, attributesOffset ), material.map );
-			let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+			let uv = ${ getUvFromChannel }( vertex, material.map );
 			// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
 			// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
 			let uvPrime = ${ materialsStorage }[ materialIndex ].mapTransform * vec3f( uv, 1 );
@@ -694,10 +689,7 @@ export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
 		if ( material.alphaMap != - 1 ) {
 
-			let a = ${ getUvFromChannel }( ${ getVertex }( i0, attributesOffset ), material.alphaMap );
-			let b = ${ getUvFromChannel }( ${ getVertex }( i1, attributesOffset ), material.alphaMap );
-			let c = ${ getUvFromChannel }( ${ getVertex }( i2, attributesOffset ), material.alphaMap );
-			let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+			let uv = ${ getUvFromChannel }( vertex, material.alphaMap );
 			let uvPrime = ${ materialsStorage }[ materialIndex ].alphaMapTransform * vec3f( uv, 1 );
 			opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
 

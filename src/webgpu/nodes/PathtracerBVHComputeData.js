@@ -411,7 +411,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							// partial opacity is resolved at surface processing, but faces on the side the material
 							// doesn't render, fully transparent and alpha tested surfaces are skipped here
 							let object = ${ storage.objects }[ ${ currentObjectIndex } ];
-							let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices.x, indices.y, indices.z, attributesOffset, triResult.barycoord, triResult.side );
+							let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices, attributesOffset, triResult.barycoord, triResult.side );
 							if ( opacity <= 0.0 ) {
 
 								continue;
@@ -472,7 +472,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							}
 
 							// faces on either side block the light, past fully transparent and alpha tested surfaces
-							let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices.x, indices.y, indices.z, attributesOffset, triResult.barycoord, 0.0 );
+							let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices, attributesOffset, triResult.barycoord, 0.0 );
 							if ( opacity <= 0.0 ) {
 
 								continue;
@@ -484,7 +484,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							// it's partially transparent
 							if ( object.visibleToShadowRays == 0u ) {
 
-								let sideOpacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices.x, indices.y, indices.z, attributesOffset, triResult.barycoord, triResult.side );
+								let sideOpacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices, attributesOffset, triResult.barycoord, triResult.side );
 								result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * sideOpacity;
 								continue;
 
@@ -556,7 +556,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						}
 
 						// fully transparent and alpha tested surfaces on either side are passed
-						let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices.x, indices.y, indices.z, attributesOffset, triResult.barycoord, 0.0 );
+						let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices, attributesOffset, triResult.barycoord, 0.0 );
 						if ( opacity <= 0.0 ) {
 
 							continue;
@@ -617,19 +617,20 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	updateMaterialIndices() {
 
 		const objectsStorage = this.storage.objects.proxyNode;
-		this.getAllObjectInfo().forEach( ( { object, instanceId, group, objectIndex } ) => {
+		this.getAllObjectInfo().forEach( info => {
 
-			this.writeMaterialData( object, instanceId, group, objectIndex, objectsStorage.value.array.buffer );
+			this.writeMaterialData( info, info.objectIndex, objectsStorage.value.array.buffer );
 
 		} );
 		objectsStorage.value.needsUpdate = true;
 
 	}
 
-	writeMaterialData( object, instanceId, group, writeOffset, targetBuffer ) {
+	writeMaterialData( info, writeOffset, targetBuffer ) {
 
 		// write material data to the object record
 		const { shadingModel } = this;
+		const { object, instanceId, group } = info;
 
 		// get the material associated with the bvh group
 		let material = object.material;
@@ -679,7 +680,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	writeObjectRecord( info, premultiplyMatrix, writeOffset, targetBuffer ) {
 
 		super.writeObjectRecord( info, premultiplyMatrix, writeOffset, targetBuffer );
-		this.writeMaterialData( info.object, info.instanceId, info.group, writeOffset, targetBuffer );
+		this.writeMaterialData( info, writeOffset, targetBuffer );
 
 		// whether shadow rays see the object
 		const recordBufferU32 = new Uint32Array( targetBuffer );
@@ -695,22 +696,6 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 			const data = bvhMap.get( bvh );
 			Object.assign( rangeTarget, data.range );
-
-			// make sure the mesh and bvh are updated if it's being reused across updates
-			if ( bvh !== data.bvh && bvh instanceof SkinnedMeshBVH ) {
-
-				const sourceMesh = bvh.mesh;
-				const clonedMesh = data.bvh.mesh;
-				clonedMesh.matrixWorld
-					.copy( sourceMesh.matrixWorld )
-					.decompose( clonedMesh.position, clonedMesh.quaternion, clonedMesh.scale );
-
-				bvh.refit();
-				bvh.getBoundingBox( clonedMesh.boundingBox );
-				bvh.geometry.computeBoundingBox();
-
-			}
-
 			return data.bvh;
 
 		} else if ( bvh.indirect ) {

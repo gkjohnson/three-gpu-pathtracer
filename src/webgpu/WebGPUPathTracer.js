@@ -1164,14 +1164,20 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			} ) ] );
 
-		} finally {
+		} catch ( error ) {
 
-			workers.forEach( worker => worker.dispose() );
+			// render the previous scene again
 			if ( request === this._sceneRequest ) {
 
 				this._setStage( STAGE_COMPILING );
 
 			}
+
+			throw error;
+
+		} finally {
+
+			workers.forEach( worker => worker.dispose() );
 
 		}
 
