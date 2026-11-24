@@ -137,7 +137,7 @@ async function init() {
 	scene.add( rightLight );
 
 	// initialize scene
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );

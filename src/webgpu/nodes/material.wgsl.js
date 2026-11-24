@@ -137,8 +137,8 @@ export const getSurfaceRecordFunc = ( {
 	materialStruct,
 	surfaceRecordStruct,
 	attributesStruct,
-	attributesStorage,
-	transformsStorage,
+	getVertex,
+	objectsStorage,
 	sampleTexel,
 	getTextureSize,
 	getUvFromChannel,
@@ -191,10 +191,10 @@ export const getSurfaceRecordFunc = ( {
 			// "Bump Mapping Unparametrized Surfaces on the GPU" by Morten S. Mikkelsen, as in three.js, with the
 			// triangle's edges in place of the screen-space derivatives
 			// https://mmikk.github.io/papers3d/mm_sfgrad_bump.pdf
-			let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
-			let a0 = ${ attributesStorage }[ hit.indices.x ];
-			let a1 = ${ attributesStorage }[ hit.indices.y ];
-			let a2 = ${ attributesStorage }[ hit.indices.z ];
+			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
+			let a0 = ${ getVertex }( hit.indices.x, objectInfo.attributesOffset );
+			let a1 = ${ getVertex }( hit.indices.y, objectInfo.attributesOffset );
+			let a2 = ${ getVertex }( hit.indices.z, objectInfo.attributesOffset );
 
 			// the triangle's edges in world space, and in the bump map's uv space
 			let sigmaX = ( objectInfo.matrixWorld * vec4f( a1.position.xyz - a0.position.xyz, 0.0 ) ).xyz;
@@ -648,13 +648,13 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 // the map and alpha map, for a shading model's "getHitOpacity". Reads the materials, texture sampling and vertex data
 // through the node context so any shading model whose material struct has these fields can use it
 const materialsStorage = /* @__PURE__ */ contextProxy( 'shadingModel.storage.materials' );
-const attributesStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.attributes' );
+const sampleTrianglePoint = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 const sampleTexel = /* @__PURE__ */ contextProxyFn( 'shadingModel.fns.sampleTexel' );
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
 const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
 export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
-	fn getHitOpacity( materialIndex: u32, objectAlpha: f32, i0: u32, i1: u32, i2: u32, barycoord: vec3f, side: f32 ) -> f32 {
+	fn getHitOpacity( materialIndex: u32, objectAlpha: f32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
 
 		let material = &${ materialsStorage }[ materialIndex ];
 		if ( side != 0.0 && material.side != 0.0 && side != material.side ) {
@@ -669,22 +669,17 @@ export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
 		}
 
+		let vertex = ${ sampleTrianglePoint }( barycoord, indices, attributesOffset );
 		var opacity = material.opacity * objectAlpha;
 		if ( material.vertexColors == 1 ) {
 
-			let a = ${ getColor }( ${ attributesStorage }[ i0 ] );
-			let b = ${ getColor }( ${ attributesStorage }[ i1 ] );
-			let c = ${ getColor }( ${ attributesStorage }[ i2 ] );
-			opacity *= ( barycoord.x * a + barycoord.y * b + barycoord.z * c ).a;
+			opacity *= ${ getColor }( vertex ).a;
 
 		}
 
 		if ( material.map != - 1 ) {
 
-			let a = ${ getUvFromChannel }( ${ attributesStorage }[ i0 ], material.map );
-			let b = ${ getUvFromChannel }( ${ attributesStorage }[ i1 ], material.map );
-			let c = ${ getUvFromChannel }( ${ attributesStorage }[ i2 ], material.map );
-			let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+			let uv = ${ getUvFromChannel }( vertex, material.map );
 			// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
 			// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
 			let uvPrime = ${ materialsStorage }[ materialIndex ].mapTransform * vec3f( uv, 1 );
@@ -694,10 +689,7 @@ export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
 		if ( material.alphaMap != - 1 ) {
 
-			let a = ${ getUvFromChannel }( ${ attributesStorage }[ i0 ], material.alphaMap );
-			let b = ${ getUvFromChannel }( ${ attributesStorage }[ i1 ], material.alphaMap );
-			let c = ${ getUvFromChannel }( ${ attributesStorage }[ i2 ], material.alphaMap );
-			let uv = barycoord.x * a + barycoord.y * b + barycoord.z * c;
+			let uv = ${ getUvFromChannel }( vertex, material.alphaMap );
 			let uvPrime = ${ materialsStorage }[ materialIndex ].alphaMapTransform * vec3f( uv, 1 );
 			opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
 

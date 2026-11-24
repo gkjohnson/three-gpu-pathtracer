@@ -938,7 +938,7 @@ async function updateModel() {
 
 	alignBackdropToCamera();
 
-	await pathTracer.setSceneAsync( scene, activeCamera );
+	await pathTracer.setScene( scene, activeCamera );
 
 	// otherwise the "rendering" progress event hides the loading line
 	if ( ! params.enable ) {

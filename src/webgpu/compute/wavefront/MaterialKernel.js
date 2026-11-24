@@ -46,7 +46,7 @@ export class MaterialKernel extends ComputeKernel {
 		const isAuxSurfaceFn = contextProxyFn( 'shadingModel.fns.isAuxSurface' );
 		const isMatteFn = contextProxyFn( 'shadingModel.fns.isMatte' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
-		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
+		const objectsStorage = contextProxy( 'bvhData.storage.objects' );
 
 		// Queues the NEE shadow ray toward the light LogicKernel selected, from the hit point and its normal ( zero in
 		// fog ), starting in the given media, and returns its index in the queue. A whole struct is written to the
@@ -168,13 +168,13 @@ export class MaterialKernel extends ComputeKernel {
 
 					} else {
 
-						let objectInfo = ${ transformsStorage }[ u32( input.hit.objectIndex ) ];
+						let objectInfo = ${ objectsStorage }[ u32( input.hit.objectIndex ) ];
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
-						var vertexData = ${ sampleTrianglePointFn }( input.hit.barycoord, input.hit.indices );
-						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+						var vertexData = ${ sampleTrianglePointFn }( input.hit.barycoord, input.hit.indices, objectInfo.attributesOffset );
+						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vec4f( vertexData.normal.xyz, 0.0 ) );
 						vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
-						vertexData.position = objectInfo.matrixWorld * vertexData.position;
+						vertexData.position = ( objectInfo.matrixWorld * vec4f( vertexData.position, 1.0 ) ).xyz;
 
 						let view = - input.direction;
 

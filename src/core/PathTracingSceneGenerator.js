@@ -216,7 +216,7 @@ export class PathTracingSceneGenerator {
 
 				const bvhOptions = {
 					strategy: SAH,
-					maxLeafTris: 1,
+					targetLeafSize: 1,
 					indirect: true,
 					onProgress,
 					...this.bvhOptions,

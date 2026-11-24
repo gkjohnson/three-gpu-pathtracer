@@ -74,7 +74,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const isAuxSurfaceFn = contextProxyFn( 'shadingModel.fns.isAuxSurface' );
 		const isMatteFn = contextProxyFn( 'shadingModel.fns.isMatte' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
-		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
+		const objectsStorage = contextProxy( 'bvhData.storage.objects' );
 
 		// environment resources
 		const getEnvTotalSum = proxy( 'envInfo.value.getTotalSum', params );
@@ -463,13 +463,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						hit.dist = hitResult.dist;
 
 						// whole structs, not pointer aliases, which Safari fails to compile
-						let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
+						let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
-						var vertexData = ${ sampleTrianglePointFn }( hit.barycoord, hit.indices );
-						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+						var vertexData = ${ sampleTrianglePointFn }( hit.barycoord, hit.indices, objectInfo.attributesOffset );
+						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vec4f( vertexData.normal.xyz, 0.0 ) );
 						vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
-						vertexData.position = objectInfo.matrixWorld * vertexData.position;
+						vertexData.position = ( objectInfo.matrixWorld * vec4f( vertexData.position, 1.0 ) ).xyz;
 
 						let view = - ray.direction;
 

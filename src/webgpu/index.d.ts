@@ -239,9 +239,8 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	setDenoiser( denoiser: OIDNDenoiser | null ): void;
 	setUpscaler( upscaler: FSRUpscaler | null ): void;
 
-	setScene( scene: Scene, camera: Camera ): void;
-	setBVHWorker( WorkerConstructor: new () => BVHWorker & { dispose(): void } ): void;
-	setSceneAsync( scene: Scene, camera: Camera ): Promise<void>;
+	setScene( scene: Scene, camera: Camera ): Promise<void>;
+	setBVHWorker( WorkerConstructor: ( new () => BVHWorker & { dispose(): void } ) | null ): void;
 	setRandom( random: RandomStrategy ): void;
 	setCamera( camera: Camera ): void;
 	setSize( x: number, y: number ): void;

@@ -63,7 +63,7 @@ document.body.appendChild( renderer.domElement );
 // path tracer
 const pathTracer = new WebGPUPathTracer( renderer );
 pathTracer.setBVHWorker( GenerateMeshBVHWorker );
-pathTracer.setSceneAsync( scene, camera ).then( () => renderer.setAnimationLoop( animate ) );
+pathTracer.setScene( scene, camera ).then( () => renderer.setAnimationLoop( animate ) );
 
 // controls
 const controls = new OrbitControls( camera, renderer.domElement );

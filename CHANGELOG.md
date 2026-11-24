@@ -14,10 +14,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "finished" in the sample counts, the share of pixels done sampling, which "complete" waits on.
 
 ### Changed
+- WebGPUPathTracer: "setScene" returns a promise that resolves once the scene renders, since three-mesh-bvh writes the scene data asynchronously. Rendering pauses on the last frame until then. It builds the mesh BVHs in the workers set with "setBVHWorker", replacing "setSceneAsync".
 - WebGPUPathTracer: A camera's "getCameraRay" function takes the pixel and a [0, 1) random sample for the point within it, "( pixel, sample, resolution, ray )", in place of the jittered uv, so a camera knows exactly which pixel it renders.
 - WebGPUPathTracer: Renamed the material models to shading models, "ShadingModel" and "GLTFShadingModel", set with "setShadingModel".
 - ShadingModel: The ray traversal, medium stack and kernels read hit opacity, volumes, dispersion, matte and the denoiser guides through the shading model's functions, so a custom shading model's material and surface record structs only need the fields its own functions read. The base "ShadingModel" is a minimal diffuse model, and the glTF material lives in "GLTFShadingModel".
-- WebGPUPathTracer: Requires three-mesh-bvh 0.9.18. Shadow rays end their traversal at the first opaque hit.
+- WebGPUPathTracer: Requires three-mesh-bvh 0.10.0. Shadow rays end their traversal at the first opaque hit.
 - WebGPUPathTracer: "setSize" updates the camera, so camera ray functions that depend on the render size follow it.
 - WebGPUPathTracer: Vertex colors are only stored on the GPU when the scene has them, reducing memory use.
 - WebGPUPathTracer: Russian roulette starts at the second vertex, as in Cycles, so paths end sooner and samples are cheaper.
@@ -31,6 +32,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: The megakernel measures its sample counts on the GPU, as the wavefront does.
 
 ### Removed
+- WebGPUPathTracer: "setSceneAsync". Use "setScene", which uses the workers when they're set.
 - WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.
 - WebGPUPathTracer: "asyncCompile". The kernels always compile asynchronously, so nothing new renders while "compiling" is true.
 - WebGPUPathTracer: "target". Use "renderTo" to draw the render into a render target.
@@ -47,6 +49,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "sheenRoughnessMap" being read from the red channel instead of alpha.
 - WebGPUPathTracer: Dark background and clear colors rendering darker than set, quantized to 8 bits.
 - WebGPUPathTracer: Pixels staying flagged as active after a smaller frame budget drops their path.
+- WebGPUPathTracer: The triangles of a BatchedMesh's geometries being mixed together.
 - WebGPUPathTracer: "stableNoise" not always rendering the same noise.
 - WebGPUPathTracer: Never rendering with "dynamicLowRes" off and a "renderDelay".
 

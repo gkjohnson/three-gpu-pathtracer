@@ -71,45 +71,55 @@ const STAGE_BUILDING = 0;
 const STAGE_COMPILING = 1;
 const STAGE_RENDERING = 2;
 
-// Builds a geometry's BVH in a worker without giving up its buffers. The workers transfer the position and
-// index buffers, which neuters them for every other array viewing them, such as the attributes of other
-// meshes in a glTF. So the worker gets copies, the original arrays are restored, and the reordered index
-// is written back into the original. Shared array buffers aren't transferred, so they're sent as is.
-// TODO: this is imperfect, and depends on how the worker transfers. Remove once three-mesh-bvh's worker
-// has an option not to transfer
-async function generateBVHInWorker( worker, geometry, options ) {
+// Returns the BVHs to build for the scene's meshes, keyed by the geometry. The geometries of a BatchedMesh are built
+// separately, since a single BVH would mix their triangles, and are keyed by their geometry info.
+function getMissingBVHs( scene ) {
 
-	const getCopy = array => {
+	const result = new Map();
+	scene.traverse( child => {
 
-		const isShared = typeof SharedArrayBuffer !== 'undefined' && array.buffer instanceof SharedArrayBuffer;
-		return isShared ? array : array.slice();
+		const { geometry } = child;
+		if ( child.isBatchedMesh ) {
 
-	};
+			child._geometryInfo.forEach( ( info, geometryId ) => {
 
-	const { position } = geometry.attributes;
-	const { index } = geometry;
-	const positionArray = position.array;
-	const indexArray = index ? index.array : null;
+				if ( info.active && ! child.boundsTrees?.[ geometryId ] ) {
 
-	position.array = getCopy( positionArray );
-	if ( index ) {
+					const range = child.getGeometryRangeAt( geometryId );
+					result.set( info, {
+						geometry,
+						options: { ...MESH_BVH_OPTIONS, range },
+						triangles: range.count / 3,
+						setBVH: bvh => {
 
-		index.array = getCopy( indexArray );
+							child.boundsTrees = child.boundsTrees || [];
+							child.boundsTrees[ geometryId ] = bvh;
 
-	}
+						},
+					} );
 
-	const bvh = await worker.generate( geometry, options );
+				}
 
-	position.array = positionArray;
-	if ( index ) {
+			} );
 
-		indexArray.set( index.array );
-		index.array = indexArray;
-		index.needsUpdate = true;
+		} else if ( child.isMesh && ! child.isSkinnedMesh && ! geometry.boundsTree ) {
 
-	}
+			result.set( geometry, {
+				geometry,
+				options: MESH_BVH_OPTIONS,
+				triangles: ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3,
+				setBVH: bvh => {
 
-	return bvh;
+					geometry.boundsTree = bvh;
+
+				},
+			} );
+
+		}
+
+	} );
+
+	return result;
 
 }
 
@@ -700,11 +710,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// the attached denoiser's progress events are forwarded
 		this._onDenoiserProgress = e => this.dispatchEvent( { type: 'progress', stage: 'denoising', progress: e.progress } );
 
-		// the current stage. Only the latest "setSceneAsync" call sets its scene, and a geometry already building
-		// for an earlier call is awaited rather than built again
-		this._stage = STAGE_RENDERING;
-		this._sceneRequest = 0;
-		this._pendingBVHs = new WeakMap();
+		// the current stage, building until the first scene is set. Only the latest "setScene" call sets its scene
+		this._stage = STAGE_BUILDING;
+		this._sceneAbortController = new AbortController();
 
 		// options
 
@@ -838,9 +846,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._shadingModel = new GLTFShadingModel();
 
 		// default camera ray generation ( perspective / orthographic ), assigned onto each bvh compute
-		// data's fns so the kernels can proxy it. The uniform is the inverse view-projection
-		// ( world * inverseProjection ), premultiplied on the CPU so no matrix multiply runs per ray.
-		this._invViewProjectionMatrix = uniform( new Matrix4() );
+		// data's fns so the kernels can proxy it
+		this._cameraWorldMatrix = uniform( new Matrix4() );
+		this._cameraProjectionInverse = uniform( new Matrix4() );
 		this._cameraRayFnHandle = null;
 		this._BVHWorker = null;
 
@@ -848,10 +856,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
 
-		// initialize the scene so it doesn't fail
 		this.setShadingModel( this._shadingModel );
 		this.setRandom( this._random );
-		this.setScene( new Scene(), new PerspectiveCamera() );
+
+		// an empty scene and a basic camera until "setScene" resolves, which nothing renders before
+		this.scene = new Scene();
+		this._bvhData = new PathtracerBVHComputeData( this.scene, this._shadingModel );
+		this._bvhData.update();
+		this._pathTracer.setBVHData( this._bvhData );
+		this.setCamera( new PerspectiveCamera() );
 
 	}
 
@@ -949,18 +962,139 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	/**
 	 * Captures the scene and camera and builds the acceleration structures the kernels trace
-	 * against. Call this once, then use the `update*` functions for later changes.
+	 * against. Call this once, then use the `update*` functions for later changes. Rendering pauses
+	 * on the last frame until the scene is ready.
 	 *
 	 * @param {Scene} scene
 	 * @param {Camera} camera
-	 * @note Geometry BVHs are built synchronously, so this blocks for large scenes.
+	 * @returns {Promise<void>} Resolves once the scene renders. A later call replaces a scene still being set.
+	 * @note Missing geometry BVHs are built in the workers set with {@link WebGPUPathTracer#setBVHWorker}, or else on
+	 *   the main thread, which blocks for large scenes. Skinned mesh BVHs are always built on the main thread.
 	 */
-	setScene( scene, camera ) {
+	async setScene( scene, camera ) {
+
+		// replace a scene still being set. The BVHs already built for it are kept on their geometry
+		this._sceneAbortController.abort();
+		this._sceneAbortController = new AbortController();
+
+		const { signal } = this._sceneAbortController;
+
+		// stop rendering the previous scene while the next one builds, keeping the last frame. The denoiser runs
+		// its tiles on its own schedule, so it's reset separately
+		this._setStage( STAGE_BUILDING );
+		this._denoiser?.reset();
+
+		try {
+
+			const missingBVHs = getMissingBVHs( scene );
+			if ( this._BVHWorker && missingBVHs.size > 0 ) {
+
+				await this._buildBVHsInWorkers( missingBVHs, signal );
+				if ( signal.aborted ) {
+
+					return;
+
+				}
+
+			} else {
+
+				missingBVHs.forEach( ( { geometry, options, setBVH } ) => {
+
+					setBVH( new MeshBVH( geometry, options ) );
+
+				} );
+
+			}
+
+			await this._setBuiltScene( scene, camera, signal );
+
+		} catch ( error ) {
+
+			// render the previous scene again, whose materials may have been replaced
+			if ( ! signal.aborted ) {
+
+				this._setStage( STAGE_COMPILING );
+				this.updateMaterials();
+
+			}
+
+			throw error;
+
+		}
+
+	}
+
+	/**
+	 * Sets the worker class {@link WebGPUPathTracer#setScene} builds the mesh geometry BVHs with, such as
+	 * `GenerateMeshBVHWorker` from three-mesh-bvh, so the page is not blocked. Several are created and
+	 * disposed per call so geometries build in parallel. They're built on the main thread without one.
+	 *
+	 * @param {Function|null} WorkerConstructor
+	 */
+	setBVHWorker( WorkerConstructor ) {
+
+		this._BVHWorker = WorkerConstructor;
+
+	}
+
+	// builds the BVHs from "getMissingBVHs" in workers, resolving early when aborted
+	async _buildBVHsInWorkers( missingBVHs, signal ) {
+
+		// each worker runs one job at a time so they pull from a shared queue
+		const queue = [ ...missingBVHs.values() ];
+		const workers = [];
+		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
+
+			workers.push( new this._BVHWorker() );
+
+		}
+
+		// build progress, weighted by triangle count
+		const totalTriangles = queue.reduce( ( sum, job ) => sum + job.triangles, 0 );
+		let builtTriangles = 0;
+
+		const build = async worker => {
+
+			while ( queue.length > 0 ) {
+
+				const { geometry, options, triangles, setBVH } = queue.shift();
+				let reported = 0;
+				const onProgress = progress => {
+
+					builtTriangles += ( progress - reported ) * triangles;
+					reported = progress;
+					this.dispatchEvent( { type: 'progress', stage: 'building', progress: builtTriangles / totalTriangles } );
+
+				};
+
+				setBVH( await worker.generate( geometry, { ...options, onProgress } ) );
+				onProgress( 1 );
+
+			}
+
+		};
+
+		// TODO: a disposed worker's build never settles. Remove this once fixed in three-mesh-bvh#1026
+		const aborted = new Promise( resolve => signal.addEventListener( 'abort', resolve ) );
+		try {
+
+			await Promise.race( [ aborted, Promise.all( workers.map( build ) ) ] );
+
+		} finally {
+
+			queue.length = 0;
+			workers.forEach( worker => worker.dispose() );
+
+		}
+
+	}
+
+	// sets the scene once its geometry BVHs are built, unless aborted
+	async _setBuiltScene( scene, camera, signal ) {
 
 		scene.updateMatrixWorld( true );
 		camera.updateMatrixWorld();
 
-		// Build BVH for each mesh geometry
 		scene.traverse( child => {
 
 			if ( this.generateMissingAttributes && child.geometry?.isBufferGeometry ) {
@@ -989,14 +1123,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				child.boundsTree.getBoundingBox( child.boundingBox );
 
-			} else if ( child.isMesh ) {
-
-				if ( ! child.geometry.boundsTree ) {
-
-					child.geometry.boundsTree = new MeshBVH( child.geometry, MESH_BVH_OPTIONS );
-
-				}
-
 			}
 
 		} );
@@ -1007,7 +1133,16 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene, shadingModel );
-		bvhData.update();
+		await bvhData.update();
+
+		if ( signal.aborted ) {
+
+			bvhData.dispose();
+			return;
+
+		}
+
+		this._setStage( STAGE_COMPILING );
 		shadingModel.updateTextures( this._renderer );
 
 		if ( this._bvhData ) {
@@ -1022,151 +1157,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.setCamera( camera );
 		this.updateEnvironment();
 		this.updateLights();
-
-	}
-
-	/**
-	 * Sets the worker class {@link WebGPUPathTracer#setSceneAsync} builds the mesh geometry BVHs
-	 * with, such as `GenerateMeshBVHWorker` from three-mesh-bvh. Several are created and disposed
-	 * per call so geometries build in parallel.
-	 *
-	 * @param {Function} WorkerConstructor
-	 */
-	setBVHWorker( WorkerConstructor ) {
-
-		this._BVHWorker = WorkerConstructor;
-
-	}
-
-	/**
-	 * Like {@link WebGPUPathTracer#setScene} but builds the mesh geometry BVHs in the workers set
-	 * with {@link WebGPUPathTracer#setBVHWorker} so the page is not blocked. Skinned meshes are
-	 * still built synchronously.
-	 *
-	 * @param {Scene} scene
-	 * @param {Camera} camera
-	 * @returns {Promise<void>}
-	 */
-	async setSceneAsync( scene, camera ) {
-
-		const WorkerConstructor = this._BVHWorker;
-		if ( ! WorkerConstructor ) {
-
-			throw new Error( 'WebGPUPathTracer: "setBVHWorker" must be called before "setSceneAsync" can be called.' );
-
-		}
-
-		this._sceneRequest ++;
-
-		const request = this._sceneRequest;
-		const pendingBVHs = this._pendingBVHs;
-
-		// the worker doesn't support interleaved attributes, so those geometries are built in "setScene" instead
-		const geometries = new Set();
-		const pending = new Set();
-		scene.traverse( child => {
-
-			if ( child.isMesh && ! child.isSkinnedMesh && ! child.geometry.boundsTree ) {
-
-				const { geometry } = child;
-				if ( geometry.attributes.position.isInterleavedBufferAttribute || geometry.index && geometry.index.isInterleavedBufferAttribute ) {
-
-					return;
-
-				}
-
-				if ( pendingBVHs.has( geometry ) ) {
-
-					pending.add( pendingBVHs.get( geometry ) );
-
-				} else {
-
-					geometries.add( geometry );
-
-				}
-
-			}
-
-		} );
-
-		// each worker runs one job at a time so they pull from a shared queue
-		const queue = Array.from( geometries );
-
-		// build progress, weighted by triangle count
-		const getTriangleCount = geometry => ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
-		const totalTriangles = queue.reduce( ( sum, geometry ) => sum + getTriangleCount( geometry ), 0 );
-		let builtTriangles = 0;
-
-		const workers = [];
-		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
-
-			workers.push( new WorkerConstructor() );
-
-		}
-
-		// stop rendering the previous scene while the next one builds, keeping the last frame. The denoiser runs
-		// its tiles on its own schedule, so it's reset separately
-		this._setStage( STAGE_BUILDING );
-		this._denoiser?.reset();
-
-		try {
-
-			await Promise.all( [ ...pending, ...workers.map( async worker => {
-
-				while ( queue.length > 0 ) {
-
-					const geometry = queue.shift();
-					const triangles = getTriangleCount( geometry );
-					let reported = 0;
-					const onProgress = progress => {
-
-						builtTriangles += ( progress - reported ) * triangles;
-						reported = progress;
-
-						// skip if a later call replaced this scene
-						if ( request === this._sceneRequest ) {
-
-							this.dispatchEvent( { type: 'progress', stage: 'building', progress: builtTriangles / totalTriangles } );
-
-						}
-
-					};
-
-					const promise = generateBVHInWorker( worker, geometry, { ...MESH_BVH_OPTIONS, onProgress } );
-					pendingBVHs.set( geometry, promise );
-
-					try {
-
-						geometry.boundsTree = await promise;
-						onProgress( 1 );
-
-					} finally {
-
-						pendingBVHs.delete( geometry );
-
-					}
-
-				}
-
-			} ) ] );
-
-		} finally {
-
-			workers.forEach( worker => worker.dispose() );
-			if ( request === this._sceneRequest ) {
-
-				this._setStage( STAGE_COMPILING );
-
-			}
-
-		}
-
-		// skip the scene if a later call replaced it while it built
-		if ( request === this._sceneRequest ) {
-
-			this.setScene( scene, camera );
-
-		}
 
 	}
 
@@ -1241,7 +1231,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			// add a default camera ray getter. the update function is called when the camera is
 			// updated to trigger any necessary uniform updates.
-			const invViewProjectionMatrix = this._invViewProjectionMatrix;
+			const { _cameraWorldMatrix, _cameraProjectionInverse } = this;
 			this._cameraRayFnHandle = {
 				update: () => {
 
@@ -1254,7 +1244,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 					}
 
-					invViewProjectionMatrix.value.multiplyMatrices( camera.matrixWorld, camera.projectionMatrixInverse );
+					_cameraWorldMatrix.value.copy( camera.matrixWorld );
+					_cameraProjectionInverse.value.copy( camera.projectionMatrixInverse );
 					return false;
 
 				},
@@ -1263,7 +1254,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 						let uv = ( vec2f( pixel ) + sample ) / resolution;
 						let ndc = uv * 2.0 - vec2f( 1.0 );
-						*ray = ${ ndcToCameraRay }( ndc, ${ invViewProjectionMatrix } );
+						*ray = ${ ndcToCameraRay }( ndc, ${ _cameraWorldMatrix }, ${ _cameraProjectionInverse } );
 						return true;
 
 					}
