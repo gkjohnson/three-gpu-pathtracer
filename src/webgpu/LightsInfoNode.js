@@ -26,9 +26,6 @@ import {
 	isMISWeightLightFn,
 } from './nodes/lights.wgsl.js';
 
-// the smallest total weight the emissive triangles' share of light samples divides by
-const EMISSIVE_SHARE_EPSILON = 1e-20;
-
 export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	constructor() {
@@ -172,11 +169,11 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// the total estimated weight of the lights and the environment at the position
+		// the total estimated weight of the lights, the environment and the emissive triangles at the position
 		this.getLightsWeight = wgslTagFn/* wgsl */`
 			fn getLightsWeight( position: vec3f ) -> f32 {
 
-				var total = ${ envInfo.getWeight }();
+				var total = ${ envInfo.getWeight }() + ${ emissiveTriangles.getWeight }( position );
 				for ( var i = 0u; i < ${ countNode }; i ++ ) {
 
 					total += ${ this.getLightWeight }( i, position );
@@ -184,23 +181,6 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				}
 
 				return total;
-
-			}
-		`;
-
-		// The share of light samples the emissive triangles take at the position: their estimated light there, the
-		// light tree root's importance, against the lights' and environment's total weight "lightsWeight"
-		this.getEmissiveShare = wgslTagFn/* wgsl */`
-			fn getEmissiveShare( position: vec3f, lightsWeight: f32 ) -> f32 {
-
-				if ( ${ emissiveTriangles.countNode } == 0u ) {
-
-					return 0.0;
-
-				}
-
-				let emissiveWeight = ${ emissiveTriangles.getImportance }( 0u, position );
-				return emissiveWeight / max( emissiveWeight + lightsWeight, ${ EMISSIVE_SHARE_EPSILON } );
 
 			}
 		`;
@@ -217,20 +197,20 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
-				let lightsWeight = ${ this.getLightsWeight }( position );
-				return ${ envInfo.getDirPdf }( direction ) * envWeight / lightsWeight * ( 1.0 - ${ this.getEmissiveShare }( position, lightsWeight ) );
+				return ${ envInfo.getDirPdf }( direction ) * envWeight / ${ this.getLightsWeight }( position );
 
 			}
 		`;
 
-		// Chooses a light, or the environment when the returned index equals the light count, in
-		// proportion to the estimated weights, "totalWeight" in all. The pdf is zero when nothing can light the
-		// position.
+		// Chooses a light, or the environment when the returned index equals the light count, or the emissive
+		// triangles when it's one more, in proportion to the estimated weights. The pdf is zero when nothing can
+		// light the position.
 		this.selectLight = wgslTagFn/* wgsl */`
-			fn selectLight( position: vec3f, totalWeight: f32, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
+			fn selectLight( position: vec3f, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
 
 				let count = ${ countNode };
 				let envWeight = ${ envInfo.getWeight }();
+				let totalWeight = ${ this.getLightsWeight }( position );
 				if ( totalWeight <= 0.0 ) {
 
 					*selectionPdf = 0.0;
@@ -238,8 +218,17 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
+				// the emissive triangles are first so the values of "r" that choose them start at zero
 				let targetWeight = r * totalWeight;
-				var accumulated = 0.0;
+				let emissiveWeight = ${ emissiveTriangles.getWeight }( position );
+				if ( targetWeight < emissiveWeight ) {
+
+					*selectionPdf = emissiveWeight / totalWeight;
+					return count + 1u;
+
+				}
+
+				var accumulated = emissiveWeight;
 				var lastWeighted = 0u;
 				var index = count;
 				for ( var i = 0u; i < count; i ++ ) {
@@ -355,34 +344,27 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// Picks the emissive triangles by their share, or else one light or the environment by its estimated
-		// contribution at the position, and samples a direction to it. The record's pdf includes the selection's, and
-		// is zero when nothing is picked
+		// Picks one light, the environment or the emissive triangles by their estimated contribution at the position,
+		// and samples a direction to it. The record's pdf includes the selection's, and is zero when nothing is picked
 		this.sampleLight = wgslTagFn/* wgsl */`
 			fn sampleLight( position: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
 
 				var lightRec: ${ lightRecordStruct };
-				let lightsWeight = ${ this.getLightsWeight }( position );
-				let emissiveShare = ${ this.getEmissiveShare }( position, lightsWeight );
-				if ( ruv.x < emissiveShare ) {
-
-					lightRec = ${ emissiveTriangles.sample }( position, vec3f( ruv.x / emissiveShare, ruv.yz ) );
-					lightRec.pdf *= emissiveShare;
-					return lightRec;
-
-				}
-
 				var selectionPdf = 0.0;
-				let r = ( ruv.x - emissiveShare ) / ( 1.0 - emissiveShare );
-				let lightIndex = ${ this.selectLight }( position, lightsWeight, r, &selectionPdf );
-				selectionPdf *= 1.0 - emissiveShare;
+				let lightIndex = ${ this.selectLight }( position, ruv.x, &selectionPdf );
 				if ( selectionPdf <= 0.0 ) {
 
 					return lightRec;
 
 				}
 
-				if ( lightIndex == ${ countNode } ) {
+				if ( lightIndex > ${ countNode } ) {
+
+					// the emissive triangles, chosen when "ruv.x" is below the selection pdf, so it's reused as a new
+					// random number
+					lightRec = ${ emissiveTriangles.sample }( position, vec3f( ruv.x / selectionPdf, ruv.yz ) );
+
+				} else if ( lightIndex == ${ countNode } ) {
 
 					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
 					let envSample = ${ envInfo.sampleDir }( ruv.yz );
@@ -480,13 +462,11 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				throughput: vec3f, scatterPdf: f32, isMISWeighted: bool, bounce: u32,
 			) -> vec4f {
 
-				// NEE's total weight at the ray's origin, and the share of it left after the emissive triangles
+				// NEE's total weight at the ray's origin
 				var lightTotalWeight = 0.0;
-				var lightsShare = 1.0;
 				if ( isMISWeighted ) {
 
 					lightTotalWeight = ${ this.getLightsWeight }( origin );
-					lightsShare = 1.0 - ${ this.getEmissiveShare }( origin, lightTotalWeight );
 
 				}
 
@@ -506,7 +486,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 						var misWeight = 1.0;
 						if ( isMISWeighted ) {
 
-							let selectionPdf = ${ this.getLightWeight }( i, origin ) / lightTotalWeight * lightsShare;
+							let selectionPdf = ${ this.getLightWeight }( i, origin ) / lightTotalWeight;
 							misWeight = ${ misHeuristicFn }( scatterPdf, lightRec.pdf * selectionPdf );
 
 						}
@@ -537,8 +517,8 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
-				let emissiveShare = ${ this.getEmissiveShare }( origin, ${ this.getLightsWeight }( origin ) );
-				return ${ misHeuristicFn }( scatterPdf, trianglePdf * emissiveShare );
+				let selectionPdf = ${ emissiveTriangles.getWeight }( origin ) / ${ this.getLightsWeight }( origin );
+				return ${ misHeuristicFn }( scatterPdf, trianglePdf * selectionPdf );
 
 			}
 		`;

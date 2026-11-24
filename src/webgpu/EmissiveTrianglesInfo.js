@@ -79,6 +79,7 @@ class LightTreeBVH extends BVH {
 // - "emissiveTriangles": each triangle's object index, triangle index, leaf node and area.
 // - "emissiveObjects": each object's first triangle in that list and its first triangle in the bvh, to find a
 //   hit triangle's leaf.
+// TODO: "emissiveObjects" could be one offset between the two in a spare word of the object records instead
 export class EmissiveTrianglesInfo {
 
 	constructor() {
@@ -288,7 +289,7 @@ export class EmissiveTrianglesInfo {
 		// How much light a node could send to "position": its power over the squared distance to its center, held at
 		// least its radius squared so positions near or inside it don't dominate. A simpler LightBounds::Importance()
 		// from pbrt-v4, without its emission cones
-		this.getImportance = wgslTagFn/* wgsl */`
+		const getImportanceFn = wgslTagFn/* wgsl */`
 			fn getEmissiveNodeImportance( node: u32, position: vec3f ) -> f32 {
 
 				let boundsMinPower = ${ readNodeFn }( node, 0u );
@@ -305,13 +306,28 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
+		// the estimated light at "position" from all the triangles, for weighing them against the lights
+		this.getWeight = wgslTagFn/* wgsl */`
+			fn getEmissiveWeight( position: vec3f ) -> f32 {
+
+				if ( ${ countNode } == 0u ) {
+
+					return 0.0;
+
+				}
+
+				return ${ getImportanceFn }( 0u, position );
+
+			}
+		`;
+
 		// The chance of the walk picking the first child of "node" for "position", by the children's importance.
 		// Negative when neither child can light the position
 		const getFirstChildChanceFn = wgslTagFn/* wgsl */`
 			fn getEmissiveFirstChildChance( node: u32, secondChild: u32, position: vec3f ) -> f32 {
 
-				let firstImportance = ${ this.getImportance }( node + 1u, position );
-				let secondImportance = ${ this.getImportance }( secondChild, position );
+				let firstImportance = ${ getImportanceFn }( node + 1u, position );
+				let secondImportance = ${ getImportanceFn }( secondChild, position );
 				let total = firstImportance + secondImportance;
 				if ( total <= 0.0 ) {
 
@@ -364,31 +380,28 @@ export class EmissiveTrianglesInfo {
 
 				}
 
-				// the picked triangle's object, material and world space vertices
+				// the picked triangle's object, material and vertices
 				let triangleInfo = ${ readTriangleInfoFn }( u32( - link - 1.0 ) );
 				let objectIndex = triangleInfo.x;
 				let triangleIndex = triangleInfo.y;
 				let area = bitcast<f32>( triangleInfo.w );
-				let objectInfo = &${ objectsStorage }[ objectIndex ];
+				let objectInfo = ${ objectsStorage }[ objectIndex ];
 
 				let indices = ${ getTriangleIndices }( triangleIndex, objectInfo.indexOffset );
-				let p0 = ( objectInfo.matrixWorld * vec4f( ${ getVertexPosition }( indices.x, objectInfo.attributesOffset ), 1.0 ) ).xyz;
-				let p1 = ( objectInfo.matrixWorld * vec4f( ${ getVertexPosition }( indices.y, objectInfo.attributesOffset ), 1.0 ) ).xyz;
-				let p2 = ( objectInfo.matrixWorld * vec4f( ${ getVertexPosition }( indices.z, objectInfo.attributesOffset ), 1.0 ) ).xyz;
+				let a = ${ getVertexPosition }( indices.x, objectInfo.attributesOffset );
+				let b = ${ getVertexPosition }( indices.y, objectInfo.attributesOffset );
+				let c = ${ getVertexPosition }( indices.z, objectInfo.attributesOffset );
 
 				// a random point, uniform over the triangle's area
 				let su = sqrt( ruv.y );
 				let b0 = 1.0 - su;
 				let b1 = ruv.z * su;
 				let b2 = 1.0 - b0 - b1;
-				let point = b0 * p0 + b1 * p1 + b2 * p2;
+				let point = ( objectInfo.matrixWorld * vec4f( b0 * a + b1 * b + b2 * c, 1.0 ) ).xyz;
+				let triangleNormal = normalize( ( transpose( objectInfo.inverseMatrixWorld ) * vec4f( cross( b - a, c - a ), 0.0 ) ).xyz );
 
 				let toLight = point - position;
 				let distSq = dot( toLight, toLight );
-				// a mirrored object's triangles wind the other way in world space
-				let matrixWorld = objectInfo.matrixWorld;
-				let winding = sign( determinant( mat3x3f( matrixWorld[ 0 ].xyz, matrixWorld[ 1 ].xyz, matrixWorld[ 2 ].xyz ) ) );
-				let triangleNormal = winding * normalize( cross( p1 - p0, p2 - p0 ) );
 				let direction = toLight * inverseSqrt( distSq );
 
 				// the light the point emits from the side facing "position", from the shading model, and the share of
