@@ -710,11 +710,10 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// the attached denoiser's progress events are forwarded
 		this._onDenoiserProgress = e => this.dispatchEvent( { type: 'progress', stage: 'denoising', progress: e.progress } );
 
-		// the current stage, building until the first scene is set. Only the latest "setScene" call sets its scene, and
-		// a geometry already building for an earlier call is awaited rather than built again
+		// the current stage, building until the first scene is set. Only the latest "setScene" call sets its scene
 		this._stage = STAGE_BUILDING;
 		this._sceneRequest = 0;
-		this._pendingBVHs = new WeakMap();
+		this._cancelBVHBuild = null;
 
 		// options
 
@@ -978,6 +977,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._sceneRequest ++;
 		const request = this._sceneRequest;
 
+		// the BVHs a replaced call already built are kept on their geometry
+		this._cancelBVHBuild?.();
+
 		// stop rendering the previous scene while the next one builds, keeping the last frame. The denoiser runs
 		// its tiles on its own schedule, so it's reset separately
 		this._setStage( STAGE_BUILDING );
@@ -988,7 +990,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			const missingBVHs = getMissingBVHs( scene );
 			if ( this._BVHWorker && missingBVHs.size > 0 ) {
 
-				await this._buildBVHsInWorkers( missingBVHs, request );
+				await this._buildBVHsInWorkers( missingBVHs );
 
 				// skip the scene if a later call replaced it meanwhile
 				if ( request !== this._sceneRequest ) {
@@ -1029,80 +1031,52 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// builds the BVHs from "getMissingBVHs" in workers for the "setScene" call "request"
-	async _buildBVHsInWorkers( missingBVHs, request ) {
+	// builds the BVHs from "getMissingBVHs" in workers, resolving early if "_cancelBVHBuild" is called
+	async _buildBVHsInWorkers( missingBVHs ) {
 
 		// each worker runs one job at a time so they pull from a shared queue
-		const { _BVHWorker: WorkerConstructor, _pendingBVHs: pendingBVHs } = this;
-		const pending = [];
-		const queue = [];
-		missingBVHs.forEach( ( job, key ) => {
+		const queue = [ ...missingBVHs.values() ];
+		const workers = [];
+		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
 
-			if ( pendingBVHs.has( key ) ) {
+			workers.push( new this._BVHWorker() );
 
-				pending.push( pendingBVHs.get( key ) );
-
-			} else {
-
-				queue.push( { key, ...job } );
-
-			}
-
-		} );
+		}
 
 		// build progress, weighted by triangle count
 		const totalTriangles = queue.reduce( ( sum, job ) => sum + job.triangles, 0 );
 		let builtTriangles = 0;
 
-		const workers = [];
-		for ( let i = 0, l = Math.min( MAX_BVH_WORKERS, queue.length ); i < l; i ++ ) {
+		const build = async worker => {
 
-			workers.push( new WorkerConstructor() );
+			while ( queue.length > 0 ) {
 
-		}
+				const { geometry, options, triangles, setBVH } = queue.shift();
+				let reported = 0;
+				const onProgress = progress => {
 
+					builtTriangles += ( progress - reported ) * triangles;
+					reported = progress;
+					this.dispatchEvent( { type: 'progress', stage: 'building', progress: builtTriangles / totalTriangles } );
+
+				};
+
+				setBVH( await worker.generate( geometry, { ...options, onProgress } ) );
+				onProgress( 1 );
+
+			}
+
+		};
+
+		// a disposed worker's build never settles
+		const cancelled = new Promise( resolve => this._cancelBVHBuild = resolve );
 		try {
 
-			await Promise.all( [ ...pending, ...workers.map( async worker => {
-
-				while ( queue.length > 0 ) {
-
-					const { key, geometry, options, triangles, setBVH } = queue.shift();
-					let reported = 0;
-					const onProgress = progress => {
-
-						builtTriangles += ( progress - reported ) * triangles;
-						reported = progress;
-
-						// skip if a later call replaced this scene
-						if ( request === this._sceneRequest ) {
-
-							this.dispatchEvent( { type: 'progress', stage: 'building', progress: builtTriangles / totalTriangles } );
-
-						}
-
-					};
-
-					const promise = worker.generate( geometry, { ...options, onProgress } );
-					pendingBVHs.set( key, promise );
-
-					try {
-
-						setBVH( await promise );
-						onProgress( 1 );
-
-					} finally {
-
-						pendingBVHs.delete( key );
-
-					}
-
-				}
-
-			} ) ] );
+			await Promise.race( [ cancelled, Promise.all( workers.map( build ) ) ] );
 
 		} finally {
 
+			queue.length = 0;
 			workers.forEach( worker => worker.dispose() );
 
 		}
