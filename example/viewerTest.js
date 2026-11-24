@@ -6,6 +6,8 @@ import {
 	Scene,
 	PerspectiveCamera,
 	EquirectangularReflectionMapping,
+	SRGBColorSpace,
+	TextureLoader,
 	MathUtils,
 	Group,
 	Sphere,
@@ -112,17 +114,8 @@ async function init() {
 	modelDatabase = {};
 	scenarios.forEach( s => modelDatabase[ s.name ] = s );
 
-	// add local scenarios for any sample assets the fidelity repo does not cover
-	const covered = new Set( scenarios.map( getSampleAssetName ) );
-	extraScenarios.forEach( s => {
-
-		if ( ! covered.has( getSampleAssetName( s ) ) ) {
-
-			modelDatabase[ s.name ] = s;
-
-		}
-
-	} );
+	// add local scenarios the fidelity repo does not have
+	extraScenarios.forEach( s => modelDatabase[ s.name ] = s );
 
 	window.addEventListener( 'popstate', onModelChange );
 	onModelChange();
@@ -253,14 +246,6 @@ function onParamsChange() {
 
 }
 
-// the sample asset folder a scenario points at
-function getSampleAssetName( scenario ) {
-
-	const match = ( scenario.model || '' ).match( /glTF-Sample-Assets\/Models\/([^/]+)\// );
-	return match ? match[ 1 ] : null;
-
-}
-
 function buildGui() {
 
 	if ( hideUI ) {
@@ -343,10 +328,13 @@ function buildGui() {
 		'babylon',
 		'gltf-sample-viewer',
 		'model-viewer',
+		'three',
+		'phasma-viewer',
 		'rhodonite',
 		'stellar',
 		'vray',
 		'blender-cycles',
+		'vk-gltf-renderer',
 	] ).onChange( updateImage );
 	comparisonFolder.add( params, 'imageOpacity', 0, 1.0 );
 	comparisonFolder.add( params, 'checkerboardTransparency' ).onChange( onParamsChange );
@@ -423,11 +411,13 @@ async function updateModel() {
 	const envUrl = new URL( lighting, BASE_URL ).toString();
 	const modelUrl = new URL( modelInfo.model, BASE_URL )
 		.toString()
-		.replace( /.*?glTF-Sample-Assets/, 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main' );
+		.replace( /.*?(glTF-Sample-Assets|glTF-Test-Assets-Interactivity)/, 'https://raw.githubusercontent.com/KhronosGroup/$1/main' );
 
 	const manager = new LoadingManager();
+	const isHDR = /\.hdr$/.test( envUrl );
+	const envLoader = isHDR ? new HDRLoader( manager ) : new TextureLoader( manager );
 	const [ envTexture, gltf ] = await Promise.all( [
-		new HDRLoader( manager ).loadAsync( envUrl ),
+		envLoader.loadAsync( envUrl ),
 		new GLTFLoader( manager ).setMeshoptDecoder( MeshoptDecoder )
 			.loadAsync( modelUrl, progress => {
 
@@ -448,6 +438,12 @@ async function updateModel() {
 
 	envMap = envTexture;
 	envMap.mapping = EquirectangularReflectionMapping;
+	if ( ! isHDR ) {
+
+		envMap.colorSpace = SRGBColorSpace;
+
+	}
+
 	scene.environment = envMap;
 
 	model = gltf.scene;
@@ -514,6 +510,6 @@ async function updateModel() {
 
 function updateImage() {
 
-	imgEl.src = `https://media.githubusercontent.com/media/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/goldens/${ params.model }/${ params.imageType }-golden.png`;
+	imgEl.src = `https://media.githubusercontent.com/media/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/goldens/${ params.model }/${ params.imageType }-golden.webp`;
 
 }
