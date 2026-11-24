@@ -84,6 +84,12 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	compileKernels() {
+
+		super.compileKernels( [ this.kernel ] );
+
+	}
+
 	*createRenderTask() {
 
 		const {
@@ -110,9 +116,6 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		kernel.maxSubsurfaceBounces = maxSubsurfaceBounces;
 		kernel.maxFogBounces = maxFogBounces;
 		kernel.cameraInVolume = Number( cameraInVolume );
-
-		// compile the kernel before its first dispatch
-		yield* this.compileKernels( [ kernel ] );
 
 		// each render gets its own seed without "stableNoise"
 		kernel.globalSeed = this.stableNoise ? 0 : kernel.globalSeed + 1;

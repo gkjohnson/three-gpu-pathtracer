@@ -1646,6 +1646,14 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		// compile the kernels even while the render is delayed
+		if ( ! this.pause && this._stage > STAGE_BUILDING ) {
+
+			pathTracer.compileKernels();
+			this._setStage( pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING );
+
+		}
+
 		let delta = 1000 * timer.getDelta();
 		const firstFrame = this._resetTime === - 1;
 		if ( firstFrame ) {
@@ -1708,14 +1716,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// update the samples, stopping once every pixel has reached "maxSamples"
 		const samplesComplete = this._lastSampleCounts.finished >= 1;
 		let rendered = false;
-		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
+		if ( ! this.pause && ! samplesComplete && this._stage === STAGE_RENDERING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
 			pathTracer.stableNoise = this.stableNoise;
 			pathTracer.update();
 			this._readTiming();
-			this._setStage( pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING );
-			rendered = this._stage === STAGE_RENDERING;
+			rendered = true;
 
 		}
 

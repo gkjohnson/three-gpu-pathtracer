@@ -381,6 +381,31 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	compileKernels() {
+
+		// including the pool resize's
+		super.compileKernels( [
+			this.logicKernel,
+			this.materialKernel,
+			this.traceRayKernel,
+			this.traceShadowRayKernel,
+			this.subsurfaceKernel,
+			this.queueMediumWalksKernel,
+			this.cameraRayKernel,
+			this.cameraMediumKernel,
+			this.rayDispatchConverter,
+			this.shadowDispatchConverter,
+			this.mediumDispatchConverter,
+			this.zeroDispatchKernel,
+			this.populatePixelIndicesKernel,
+			this.resetSlotsKernel,
+			this.copyRayDataKernel,
+			this.pixelQueueRebuildDispatchKernel,
+			this.rebuildPixelQueueKernel,
+		] );
+
+	}
+
 	*createRenderTask() {
 
 		const {
@@ -399,32 +424,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			mediumDispatchConverter,
 			zeroDispatchKernel,
 			populatePixelIndicesKernel,
-			resetSlotsKernel,
-			copyRayDataKernel,
 			pixelQueueRebuildDispatchKernel,
 			rebuildPixelQueueKernel,
 		} = this;
-
-		// compile the kernels before their first dispatch, including the pool resize's below
-		yield* this.compileKernels( [
-			logicKernel,
-			materialKernel,
-			traceRayKernel,
-			traceShadowRayKernel,
-			subsurfaceKernel,
-			queueMediumWalksKernel,
-			cameraRayKernel,
-			cameraMediumKernel,
-			rayDispatchConverter,
-			shadowDispatchConverter,
-			mediumDispatchConverter,
-			zeroDispatchKernel,
-			populatePixelIndicesKernel,
-			resetSlotsKernel,
-			copyRayDataKernel,
-			pixelQueueRebuildDispatchKernel,
-			rebuildPixelQueueKernel,
-		] );
 
 		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
 		// lifetime. The slot pool starts tight, at the budget, and is resized in the loop below.
