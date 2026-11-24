@@ -22,6 +22,11 @@ export const getShadowRayFn = wgslFn( /* wgsl */ `
 
 	fn getShadowRay( hitPoint: vec3f, hitNormal: vec3f, lightDirection: vec3f, lightDist: f32, outRay: ptr<function, Ray> ) -> void {
 
+		// the end's offset as a fraction of the largest coordinate, 256 steps of float precision, and the smallest
+		// coordinate it's scaled by, as in "offsetRayOrigin"
+		const END_SCALE = 1.0 / 32768.0;
+		const ORIGIN_SCALE = 1.0 / 32.0;
+
 		var rayStart = hitPoint;
 		if ( any( hitNormal != vec3f( 0.0 ) ) ) {
 
@@ -36,8 +41,11 @@ export const getShadowRayFn = wgslFn( /* wgsl */ `
 		// lights at infinity have no point to end at
 		if ( lightDist < ${ LIGHT_FAR_DISTANCE } ) {
 
+			// moved straight back along the ray, as offsetting each axis by its own scale can end behind a tilted light
 			let lightPoint = hitPoint + lightDirection * lightDist;
-			let rayEnd = offsetRayOrigin( lightPoint, - lightDirection, - lightDirection );
+			let extents = max( abs( hitPoint ), abs( lightPoint ) );
+			let offset = max( max( extents.x, max( extents.y, extents.z ) ), ORIGIN_SCALE ) * END_SCALE;
+			let rayEnd = lightPoint - lightDirection * offset;
 			outRay.maxDist = length( rayEnd - rayStart );
 			outRay.direction = ( rayEnd - rayStart ) / outRay.maxDist;
 

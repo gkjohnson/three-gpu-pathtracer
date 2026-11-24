@@ -375,7 +375,10 @@ export class EmissiveTrianglesInfo {
 
 				let toLight = point - position;
 				let distSq = dot( toLight, toLight );
-				let triangleNormal = normalize( cross( p1 - p0, p2 - p0 ) );
+				// a mirrored object's triangles wind the other way in world space
+				let matrixWorld = objectInfo.matrixWorld;
+				let winding = sign( determinant( mat3x3f( matrixWorld[ 0 ].xyz, matrixWorld[ 1 ].xyz, matrixWorld[ 2 ].xyz ) ) );
+				let triangleNormal = winding * normalize( cross( p1 - p0, p2 - p0 ) );
 				let direction = toLight * inverseSqrt( distSq );
 
 				// the light the point emits from the side facing "position", from the shading model
