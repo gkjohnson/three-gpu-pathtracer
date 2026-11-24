@@ -1010,10 +1010,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} catch ( error ) {
 
-			// render the previous scene again
+			// render the previous scene again, whose materials may have been replaced
 			if ( ! signal.aborted ) {
 
 				this._setStage( STAGE_COMPILING );
+				this.updateMaterials();
 
 			}
 
