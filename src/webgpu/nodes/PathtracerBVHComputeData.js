@@ -616,7 +616,14 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	updateMaterialIndices() {
 
+		// the first "update" writes them with the object records
 		const objectsStorage = this.storage.objects.proxyNode;
+		if ( objectsStorage === null ) {
+
+			return;
+
+		}
+
 		this.getAllObjectInfo().forEach( info => {
 
 			this.writeMaterialData( info, info.objectIndex, objectsStorage.value.array.buffer );
