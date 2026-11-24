@@ -687,6 +687,16 @@ export class GLTFShadingModel extends ShadingModel {
 
 	}
 
+	detectFeatures( material, features ) {
+
+		if ( material.isFogVolumeMaterial ) {
+
+			features.setUsed( 'FOG' );
+
+		}
+
+	}
+
 	writeMaterialsBuffer( materials ) {
 
 		let index = 0;
@@ -697,8 +707,6 @@ export class GLTFShadingModel extends ShadingModel {
 		const floatArray = new Float32Array( materialBufferLength * this.structs.material.proxyNode.getLength() );
 		const intArray = new Int32Array( floatArray.buffer );
 
-		// TODO: make features work
-		// features.reset();
 		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
 			const m = materials[ i ];

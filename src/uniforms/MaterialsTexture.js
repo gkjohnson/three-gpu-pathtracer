@@ -5,7 +5,7 @@ import { bufferToHash } from '../utils/bufferToHash.js';
 export const MATERIAL_PIXELS = 47;
 const MATERIAL_STRIDE = MATERIAL_PIXELS * 4;
 
-class MaterialFeatures {
+export class MaterialFeatures {
 
 	constructor() {
 
