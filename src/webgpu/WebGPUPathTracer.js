@@ -1483,12 +1483,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lastCompleteCheck = 0;
 		this._wasComplete = false;
 
-		if ( this.stableNoise ) {
-
-			this._pathTracer.resetSeed();
-
-		}
-
 		// undo the adaptation's last changes, unless the app has since taken over the budget
 		if ( this.adaptiveFrameBudget && this._fullFrameBudget !== null ) {
 
@@ -1717,6 +1711,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( ! this.pause && ! samplesComplete && this._stage > STAGE_BUILDING && ( ! lowResMode || ( lowResMode && dynamicLowRes ) ) ) {
 
 			pathTracer.lowResMode = lowResMode;
+			pathTracer.stableNoise = this.stableNoise;
 			pathTracer.update();
 			this._readTiming();
 			this._setStage( pathTracer.compiling ? STAGE_COMPILING : STAGE_RENDERING );

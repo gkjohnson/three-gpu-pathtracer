@@ -35,6 +35,7 @@ export class PathTracerBackend {
 		this.maxSubsurfaceBounces = 256;
 		this.maxFogBounces = 0;
 		this.lowResMode = false;
+		this.stableNoise = true;
 
 		// whether camera rays may start inside a volume
 		this.cameraInVolume = true;
@@ -387,8 +388,6 @@ export class PathTracerBackend {
 		};
 
 	}
-
-	resetSeed() {}
 
 	reset() {
 
