@@ -382,7 +382,7 @@ export class EmissiveTrianglesInfo {
 				let cosLight = - dot( triangleNormal, direction );
 				let side = select( - 1.0, 1.0, cosLight > 0.0 );
 				let facing = abs( cosLight );
-				let emission = ${ getEmission }( objectInfo.materialIndex, indices.x, indices.y, indices.z, objectInfo.attributesOffset, vec3f( b0, b1, b2 ), side );
+				let emission = ${ getEmission }( objectInfo.materialIndex, indices, objectInfo.attributesOffset, vec3f( b0, b1, b2 ), side );
 				if ( distSq <= 0.0 || facing <= 0.0 || area <= 0.0 || all( emission == vec3f( 0.0 ) ) ) {
 
 					return lightRec;

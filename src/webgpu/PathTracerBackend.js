@@ -35,6 +35,7 @@ export class PathTracerBackend {
 		this.maxSubsurfaceBounces = 256;
 		this.maxFogBounces = 0;
 		this.lowResMode = false;
+		this.stableNoise = true;
 
 		// whether camera rays may start inside a volume
 		this.cameraInVolume = true;
@@ -46,7 +47,7 @@ export class PathTracerBackend {
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
 
-		// whether the render task is waiting on its kernels to compile, during which nothing renders
+		// whether the kernels are compiling, during which nothing renders
 		this.compiling = false;
 
 		// the gpu time of the last timed update and the budget it ran with. "count" increments per measurement
@@ -141,15 +142,14 @@ export class PathTracerBackend {
 
 	}
 
-	// Compiles the kernels asynchronously and yields until they're ready so the first dispatch doesn't
-	// block on a synchronous compile. A kernel is only requested once, so a render task started by a
-	// reset waits on a compile already in flight rather than dispatching before its pipeline exists.
-	*compileKernels( kernels ) {
+	// Compiles the kernels asynchronously, with "compiling" set until they're ready, so the first dispatch
+	// doesn't block on a synchronous compile. Called every frame before rendering.
+	compileKernels( kernels ) {
 
 		const { renderer, _compileState } = this;
 
 		// three.js <= r185 has no async compute compile
-		if ( ! renderer.compileComputeAsync ) {
+		if ( ! renderer.compileComputeAsync || this._renderTask ) {
 
 			return;
 
@@ -159,12 +159,9 @@ export class PathTracerBackend {
 		// immediately. If it returned the pending compile instead, this state tracking could be removed.
 		const computeNodes = kernels.map( kernel => kernel.kernel );
 		const requested = computeNodes.filter( computeNode => ! _compileState.has( computeNode ) );
-		if ( requested.length > 0 ) {
+		if ( this.compiling && requested.length > 0 ) {
 
-			// let a frame present before the compile blocks the main thread
-			this.compiling = true;
-			yield;
-
+			// requested on the second call to let a frame present before the compile blocks the main thread
 			requested.forEach( computeNode => _compileState.set( computeNode, COMPILE_STARTED ) );
 			renderer.compileComputeAsync( requested )
 				.catch( () => {
@@ -180,14 +177,7 @@ export class PathTracerBackend {
 
 		}
 
-		while ( computeNodes.some( computeNode => _compileState.get( computeNode ) !== COMPILE_COMPLETE ) ) {
-
-			this.compiling = true;
-			yield;
-
-		}
-
-		this.compiling = false;
+		this.compiling = computeNodes.some( computeNode => _compileState.get( computeNode ) !== COMPILE_COMPLETE );
 
 	}
 
@@ -387,8 +377,6 @@ export class PathTracerBackend {
 		};
 
 	}
-
-	resetSeed() {}
 
 	reset() {
 

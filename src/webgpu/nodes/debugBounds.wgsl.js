@@ -197,7 +197,6 @@ export function getDebugBoundsFunction( bvhData, shadingModel ) {
 
 			let ndc = vUv * 2.0 - vec2f( 1.0 );
 			var ray = ${ ndcToCameraRay }( ndc, ${ cameraToModelMatrix }, ${ inverseProjectionMatrix } );
-			ray.direction = normalize( ray.direction );
 
 			// count the boxes the ray crosses, pruning those behind the nearest hit surface
 			var result: ${ debugBoundsResultStruct };

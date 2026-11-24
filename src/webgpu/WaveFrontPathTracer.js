@@ -111,19 +111,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	resetSeed() {
-
-		this.globalSeed = 0;
-
-	}
-
-	reset() {
-
-		super.reset();
-		this.globalSeed ++;
-
-	}
-
 	setBVHData( bvhData ) {
 
 		this.materialKernel.context.bvhData = bvhData;
@@ -396,6 +383,31 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	compileKernels() {
+
+		// including the pool resize's
+		super.compileKernels( [
+			this.logicKernel,
+			this.materialKernel,
+			this.traceRayKernel,
+			this.traceShadowRayKernel,
+			this.subsurfaceKernel,
+			this.queueMediumWalksKernel,
+			this.cameraRayKernel,
+			this.cameraMediumKernel,
+			this.rayDispatchConverter,
+			this.shadowDispatchConverter,
+			this.mediumDispatchConverter,
+			this.zeroDispatchKernel,
+			this.populatePixelIndicesKernel,
+			this.resetSlotsKernel,
+			this.copyRayDataKernel,
+			this.pixelQueueRebuildDispatchKernel,
+			this.rebuildPixelQueueKernel,
+		] );
+
+	}
+
 	*createRenderTask() {
 
 		const {
@@ -414,32 +426,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			mediumDispatchConverter,
 			zeroDispatchKernel,
 			populatePixelIndicesKernel,
-			resetSlotsKernel,
-			copyRayDataKernel,
 			pixelQueueRebuildDispatchKernel,
 			rebuildPixelQueueKernel,
 		} = this;
-
-		// compile the kernels before their first dispatch, including the pool resize's below
-		yield* this.compileKernels( [
-			logicKernel,
-			materialKernel,
-			traceRayKernel,
-			traceShadowRayKernel,
-			subsurfaceKernel,
-			queueMediumWalksKernel,
-			cameraRayKernel,
-			cameraMediumKernel,
-			rayDispatchConverter,
-			shadowDispatchConverter,
-			mediumDispatchConverter,
-			zeroDispatchKernel,
-			populatePixelIndicesKernel,
-			resetSlotsKernel,
-			copyRayDataKernel,
-			pixelQueueRebuildDispatchKernel,
-			rebuildPixelQueueKernel,
-		] );
 
 		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
 		// lifetime. The slot pool starts tight, at the budget, and is resized in the loop below.
@@ -467,7 +456,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
 		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
-		// the sample count indexes each pixel's sequence, and the global seed gives each render its own
+		// the sample count indexes each pixel's sequence, and the global seed gives each render its own without "stableNoise"
+		this.globalSeed = this.stableNoise ? 0 : this.globalSeed + 1;
 		logicKernel.globalSeed = this.globalSeed;
 		materialKernel.globalSeed = this.globalSeed;
 		cameraRayKernel.globalSeed = this.globalSeed;

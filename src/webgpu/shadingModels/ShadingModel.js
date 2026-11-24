@@ -102,11 +102,11 @@ export class ShadingModel {
 	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
 	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.
-	 * - "fns.getHitOpacity": ( materialIndex, objectAlpha, i0, i1, i2, attributesOffset, barycoord, side ) -> f32, the
+	 * - "fns.getHitOpacity": ( materialIndex, objectAlpha, indices, attributesOffset, barycoord, side ) -> f32, the
 	 *   opacity of a triangle the ray traversal hits, with its vertices read at "attributesOffset": 0 for a face on a
 	 *   side the material doesn't render, a side of 0 counting either side, or for a fully transparent or alpha tested
 	 *   surface, below 1 for a partially transparent one, and 1 otherwise. Defaults to 1.
-	 * - "fns.getEmission": ( materialIndex, i0, i1, i2, attributesOffset, barycoord, side ) -> vec3f, the light a point
+	 * - "fns.getEmission": ( materialIndex, indices, attributesOffset, barycoord, side ) -> vec3f, the light a point
 	 *   on a triangle emits from the side "side", read by the emissive triangle light sampling. Defaults to none.
 	 * - "fns.getMaterialMedium": ( materialIndex ) -> MaterialMedium, the material's volume. Defaults to none.
 	 * - "fns.applyDispersion": ( ptr<SurfaceRecord>, wavelength ) -> bool, refracting a dispersive surface at a
@@ -190,7 +190,7 @@ export class ShadingModel {
 		// needs them, so opaque materials don't pay for building them in the traversal
 		fns.getHitOpacity = wgslTagFn/* wgsl */`
 
-			fn getHitOpacity( materialIndex: u32, objectAlpha: f32, i0: u32, i1: u32, i2: u32, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
+			fn getHitOpacity( materialIndex: u32, objectAlpha: f32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
 
 				return 1.0;
 
@@ -201,7 +201,7 @@ export class ShadingModel {
 		// nothing emits by default
 		fns.getEmission = wgslTagFn/* wgsl */`
 
-			fn getEmission( materialIndex: u32, i0: u32, i1: u32, i2: u32, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> vec3f {
+			fn getEmission( materialIndex: u32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> vec3f {
 
 				return vec3f( 0.0 );
 
