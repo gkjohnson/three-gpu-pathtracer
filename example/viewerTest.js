@@ -500,7 +500,7 @@ async function updateModel() {
 	controls.target.set( 0, 0, 0 );
 	controls.update();
 
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 
 	loader.setCredits( modelInfo.credit || '' );
 	containerEl.style.display = 'flex';

@@ -265,7 +265,7 @@ async function init() {
 		scene.environment = envTexture;
 		scene.background = envTexture;
 
-		await pathTracer.setSceneAsync( scene, quiltCamera );
+		await pathTracer.setScene( scene, quiltCamera );
 
 		loader.setPercentage( 1 );
 		renderer.domElement.style.visibility = 'visible';

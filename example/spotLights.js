@@ -202,7 +202,7 @@ async function init() {
 	fillLight.target.position.set( 0, targetHeight, 0 );
 	scene.add( fillLight.target );
 
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );
