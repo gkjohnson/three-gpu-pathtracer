@@ -679,7 +679,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	writeObjectRecord( info, premultiplyMatrix, writeOffset, targetBuffer ) {
 
 		super.writeObjectRecord( info, premultiplyMatrix, writeOffset, targetBuffer );
-		this.writeMaterialData( info.object, info.instanceId, info.root, writeOffset, targetBuffer );
+		this.writeMaterialData( info.object, info.instanceId, info.group, writeOffset, targetBuffer );
 
 		// whether shadow rays see the object
 		const recordBufferU32 = new Uint32Array( targetBuffer );

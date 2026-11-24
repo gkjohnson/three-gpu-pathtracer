@@ -71,45 +71,55 @@ const STAGE_BUILDING = 0;
 const STAGE_COMPILING = 1;
 const STAGE_RENDERING = 2;
 
-// Builds a geometry's BVH in a worker without giving up its buffers. The workers transfer the position and
-// index buffers, which neuters them for every other array viewing them, such as the attributes of other
-// meshes in a glTF. So the worker gets copies, the original arrays are restored, and the reordered index
-// is written back into the original. Shared array buffers aren't transferred, so they're sent as is.
-// TODO: this is imperfect, and depends on how the worker transfers. Remove once three-mesh-bvh's worker
-// has an option not to transfer
-async function generateBVHInWorker( worker, geometry, options ) {
+// Returns the BVHs to build for the scene's meshes, keyed by the geometry. The geometries of a BatchedMesh are built
+// separately, since a single BVH would mix their triangles, and are keyed by their geometry info.
+function getMissingBVHs( scene ) {
 
-	const getCopy = array => {
+	const result = new Map();
+	scene.traverse( child => {
 
-		const isShared = typeof SharedArrayBuffer !== 'undefined' && array.buffer instanceof SharedArrayBuffer;
-		return isShared ? array : array.slice();
+		const { geometry } = child;
+		if ( child.isBatchedMesh ) {
 
-	};
+			child._geometryInfo.forEach( ( info, geometryId ) => {
 
-	const { position } = geometry.attributes;
-	const { index } = geometry;
-	const positionArray = position.array;
-	const indexArray = index ? index.array : null;
+				if ( info.active && ! child.boundsTrees?.[ geometryId ] ) {
 
-	position.array = getCopy( positionArray );
-	if ( index ) {
+					const range = child.getGeometryRangeAt( geometryId );
+					result.set( info, {
+						geometry,
+						options: { ...MESH_BVH_OPTIONS, range },
+						triangles: range.count / 3,
+						setBVH: bvh => {
 
-		index.array = getCopy( indexArray );
+							child.boundsTrees = child.boundsTrees || [];
+							child.boundsTrees[ geometryId ] = bvh;
 
-	}
+						},
+					} );
 
-	const bvh = await worker.generate( geometry, options );
+				}
 
-	position.array = positionArray;
-	if ( index ) {
+			} );
 
-		indexArray.set( index.array );
-		index.array = indexArray;
-		index.needsUpdate = true;
+		} else if ( child.isMesh && ! child.isSkinnedMesh && ! geometry.boundsTree ) {
 
-	}
+			result.set( geometry, {
+				geometry,
+				options: MESH_BVH_OPTIONS,
+				triangles: ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3,
+				setBVH: bvh => {
 
-	return bvh;
+					geometry.boundsTree = bvh;
+
+				},
+			} );
+
+		}
+
+	} );
+
+	return result;
 
 }
 
@@ -1000,16 +1010,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				child.boundsTree.getBoundingBox( child.boundingBox );
 
-			} else if ( child.isMesh && ! child.isBatchedMesh ) {
-
-				// a batched mesh is skipped since a single bvh would mix the triangles of its geometries
-				if ( ! child.geometry.boundsTree ) {
-
-					child.geometry.boundsTree = new MeshBVH( child.geometry, MESH_BVH_OPTIONS );
-
-				}
-
 			}
+
+		} );
+
+		getMissingBVHs( scene ).forEach( ( { geometry, options, setBVH } ) => {
+
+			setBVH( new MeshBVH( geometry, options ) );
 
 		} );
 
@@ -1084,40 +1091,25 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const request = this._sceneRequest;
 		const pendingBVHs = this._pendingBVHs;
 
-		// the worker doesn't support interleaved attributes, so those geometries are built in "setScene" instead
-		const geometries = new Set();
-		const pending = new Set();
-		scene.traverse( child => {
+		// each worker runs one job at a time so they pull from a shared queue
+		const pending = [];
+		const queue = [];
+		getMissingBVHs( scene ).forEach( ( job, key ) => {
 
-			if ( child.isMesh && ! child.isSkinnedMesh && ! child.isBatchedMesh && ! child.geometry.boundsTree ) {
+			if ( pendingBVHs.has( key ) ) {
 
-				const { geometry } = child;
-				if ( geometry.attributes.position.isInterleavedBufferAttribute || geometry.index && geometry.index.isInterleavedBufferAttribute ) {
+				pending.push( pendingBVHs.get( key ) );
 
-					return;
+			} else {
 
-				}
-
-				if ( pendingBVHs.has( geometry ) ) {
-
-					pending.add( pendingBVHs.get( geometry ) );
-
-				} else {
-
-					geometries.add( geometry );
-
-				}
+				queue.push( { key, ...job } );
 
 			}
 
 		} );
 
-		// each worker runs one job at a time so they pull from a shared queue
-		const queue = Array.from( geometries );
-
 		// build progress, weighted by triangle count
-		const getTriangleCount = geometry => ( geometry.index ? geometry.index.count : geometry.attributes.position.count ) / 3;
-		const totalTriangles = queue.reduce( ( sum, geometry ) => sum + getTriangleCount( geometry ), 0 );
+		const totalTriangles = queue.reduce( ( sum, job ) => sum + job.triangles, 0 );
 		let builtTriangles = 0;
 
 		const workers = [];
@@ -1138,8 +1130,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 				while ( queue.length > 0 ) {
 
-					const geometry = queue.shift();
-					const triangles = getTriangleCount( geometry );
+					const { key, geometry, options, triangles, setBVH } = queue.shift();
 					let reported = 0;
 					const onProgress = progress => {
 
@@ -1155,17 +1146,17 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 					};
 
-					const promise = generateBVHInWorker( worker, geometry, { ...MESH_BVH_OPTIONS, onProgress } );
-					pendingBVHs.set( geometry, promise );
+					const promise = worker.generate( geometry, { ...options, onProgress } );
+					pendingBVHs.set( key, promise );
 
 					try {
 
-						geometry.boundsTree = await promise;
+						setBVH( await promise );
 						onProgress( 1 );
 
 					} finally {
 
-						pendingBVHs.delete( geometry );
+						pendingBVHs.delete( key );
 
 					}
 
