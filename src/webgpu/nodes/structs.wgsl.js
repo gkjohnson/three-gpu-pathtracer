@@ -285,22 +285,22 @@ export const lightRecordStruct = new StructTypeNode( {
 	lightType: 'int',
 }, 'LightRecord' );
 
-// A light tree node. Leaves have the list index of their triangle instead of children
+// A light tree node. Leaves have an emissive triangle instead of children
 export const lightTreeNodeStruct = new StructTypeNode( {
 	boundsMin: 'vec3f',
 	power: 'float',
 	boundsMax: 'vec3f',
 	isLeaf: 'bool',
-	firstChild: 'uint',
-	secondChild: 'uint',
-	listIndex: 'uint',
+	firstChildIndex: 'uint',
+	secondChildIndex: 'uint',
+	emissiveTriangleIndex: 'uint',
 }, 'LightTreeNode' );
 
 // An emissive triangle and its leaf in the light tree
 export const emissiveTriangleStruct = new StructTypeNode( {
-	objectIndex: 'uint',
-	triangleIndex: 'uint',
-	leafNode: 'uint',
+	bvhObjectIndex: 'uint',
+	bvhTriangleIndex: 'uint',
+	leafNodeIndex: 'uint',
 	area: 'float',
 }, 'EmissiveTriangle' );
 
