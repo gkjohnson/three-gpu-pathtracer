@@ -675,7 +675,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 	}
 
 	// calls back with each triangle of an object in world space and the triangle's index
-	// TODO: use "getObjectInfoAt" once it's released in three-mesh-bvh
+	// TODO: use a public function instead of "_getObjectInfoAt" once three-mesh-bvh has one
 	forEachTriangle( objectIndex, callback ) {
 
 		const { storage, attributeLayout } = this;
