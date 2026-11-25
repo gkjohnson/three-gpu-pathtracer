@@ -14,10 +14,10 @@ const _box = /* @__PURE__ */ new Box3();
 const _emissive = /* @__PURE__ */ new Vector3();
 const _luminanceCoefficients = /* @__PURE__ */ new Vector3();
 
-// returns the material's emitted luminance, ignoring its emissive map
+// returns the material's emitted luminance, ignoring its emissive map. Fog boundaries don't emit
 function getEmissiveLuminance( material ) {
 
-	if ( ! material || ! material.emissive ) {
+	if ( ! material || ! material.emissive || material.isFogVolumeMaterial ) {
 
 		return 0;
 
