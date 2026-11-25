@@ -150,7 +150,8 @@ export class GLTFShadingModel extends ShadingModel {
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
-					// multiscatter compensation
+					// multiscatter compensation, looked up at the RMS alpha as in the specular lobe below
+					let compensationRoughness = sqrt( sqrt( 0.5 * dot( alpha, alpha ) ) );
 					var glassBoost = 0.0;
 					if ( matchedIor ) {
 
@@ -159,12 +160,12 @@ export class GLTFShadingModel extends ShadingModel {
 					} else if ( surf.thinWall ) {
 
 						// thin wall halves are reflection-shaped so each is compensated with the conductor albedo at its own roughness.
-						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleConductorFn }( NdotV, compensationRoughness ), 1e-5 );
 
 					} else {
 
 						// volumetric bsdf is scaled by its total reflected + refracted energy
-						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleTransmissiveFn }( NdotV, surf.roughness, surf.ior, surf.frontFace ), 1e-5 );
+						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleTransmissiveFn }( NdotV, compensationRoughness, surf.ior, surf.frontFace ), 1e-5 );
 
 					}
 
@@ -225,8 +226,10 @@ export class GLTFShadingModel extends ShadingModel {
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
-					// Sample the single scatter energy for specular at the given roughness
-					let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+					// Sample the single scatter energy for specular. Anisotropic lobes are looked up at the root mean square
+					// of their projected alpha over the view azimuth, which is the base roughness when isotropic
+					let compensationRoughness = sqrt( sqrt( 0.5 * dot( alpha, alpha ) ) );
+					let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, compensationRoughness ), 1e-5 );
 					let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
 
 					// metallic with the multiscatter comp
@@ -269,7 +272,7 @@ export class GLTFShadingModel extends ShadingModel {
 					// The energy the specular interface takes from the layers below, at the lobe's specular color
 					// and intensity. The table holds the albedo at the ior's f0, and the Schlick albedo is linear
 					// in f0, so the tinted albedo slides from it toward the conductor albedo at f0 = 1
-					let iorEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior );
+					let iorEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, compensationRoughness, surf.ior );
 					let tintedEnergySS = iorEnergySS + ( dielectricF0 - surf.f0 ) * ( energySS - iorEnergySS ) / ( 1.0 - surf.f0 );
 					let fresnelEnergySS = surf.specularIntensity * tintedEnergySS * dielectricBoost;
 
