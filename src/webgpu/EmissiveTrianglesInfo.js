@@ -34,9 +34,21 @@ export class EmissiveTrianglesInfo {
 
 	constructor() {
 
+		// the number of emissive triangles
 		this.countNode = uniform( 0, 'uint' );
+
+		// The light tree's nodes, two texels each:
+		// - bounds min, power
+		// - bounds max, second child's node index or -( list index + 1 ) for a leaf
 		this.treeNode = texture( new LinearDataTexture( new Float32Array( 0 ), 4, RGBAFormat, FloatType ) ).setName( 'emissiveTree' );
+
+		// The list of emissive triangles, one texel each, grouped by object:
+		// - object index, triangle index in the bvh, leaf's node index, area
 		this.trianglesNode = texture( new LinearDataTexture( new Uint32Array( 0 ), 4, RGBAIntegerFormat, UnsignedIntType ) ).setName( 'emissiveTriangles' );
+
+		// Where each object's triangles are in the list, one texel per bvh object record:
+		// - list index of its first triangle plus one, or zero if it doesn't emit
+		// - triangle index in the bvh of its first triangle
 		this.objectsNode = texture( new LinearDataTexture( new Uint32Array( 0 ), 2, RGIntegerFormat, UnsignedIntType ) ).setName( 'emissiveObjects' );
 
 		this._initFns();
