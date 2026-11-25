@@ -282,6 +282,17 @@ export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// the texel of item "index" in a "LinearDataTexture" with the given width
+export const getLinearTexelFn = wgslFn( /* wgsl */ `
+
+	fn getLinearTexel( index: u32, width: u32 ) -> vec2u {
+
+		return vec2u( index % width, index / width );
+
+	}
+
+` );
+
 // Wraps a bilinear tap that is off the edge of a tile back to the texel the wrap mode calls for
 export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
 

@@ -80,8 +80,7 @@ export class SubsurfaceKernel extends ComputeKernel {
 						rayIntersectionsStorage[ resultIndex ].dist = hitResult.dist;
 						rayIntersectionsStorage[ resultIndex ].normal = hitResult.normal.xyz;
 						rayIntersectionsStorage[ resultIndex ].side = hitResult.side;
-						rayIntersectionsStorage[ resultIndex ].indices = hitResult.indices.xyz;
-						rayIntersectionsStorage[ resultIndex ].triangleIndex = hitResult.indices.w;
+						rayIntersectionsStorage[ resultIndex ].indices = hitResult.indices;
 						rayDataStorage[ index ].rayIntersectionIndex = i32( resultIndex );
 
 						isFinished = true;

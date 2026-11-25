@@ -194,7 +194,7 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.barycoord = hitResult.barycoord;
 						rayDataStorage[ index ].hit.normal = hitResult.normal;
 						rayDataStorage[ index ].hit.side = hitResult.side;
-						rayDataStorage[ index ].hit.indices = hitResult.indices;
+						rayDataStorage[ index ].hit.indices = hitResult.indices.xyz;
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
 						rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
 
@@ -211,9 +211,9 @@ export class LogicKernel extends ComputeKernel {
 
 						// the surface's emission, weighted against the light sampling at the previous vertex picking its triangle
 						var emissionWeight = 1.0;
-						if ( isMISWeighted && didHitSurface && ! isFogScatter ) {
+						if ( isMISWeighted && didHitSurface ) {
 
-							emissionWeight = ${ getEmissiveHitWeightFn }( input.origin, position, hitResult.normal, u32( hitResult.objectIndex ), hitResult.triangleIndex, input.scatterPdf );
+							emissionWeight = ${ getEmissiveHitWeightFn }( input.origin, position, hitResult.normal, u32( hitResult.objectIndex ), hitResult.indices.w, input.scatterPdf );
 
 						}
 

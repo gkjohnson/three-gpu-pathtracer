@@ -285,6 +285,26 @@ export const lightRecordStruct = new StructTypeNode( {
 	lightType: 'int',
 }, 'LightRecord' );
 
+// A node of the light tree over the emissive triangles. Leaves hold one triangle, "listIndex" in the triangle list, and
+// have no children
+export const lightTreeNodeStruct = new StructTypeNode( {
+	boundsMin: 'vec3f',
+	power: 'float',
+	boundsMax: 'vec3f',
+	isLeaf: 'bool',
+	firstChild: 'uint',
+	secondChild: 'uint',
+	listIndex: 'uint',
+}, 'LightTreeNode' );
+
+// An emissive triangle in the triangle list, and its leaf in the light tree
+export const emissiveTriangleStruct = new StructTypeNode( {
+	objectIndex: 'uint',
+	triangleIndex: 'uint',
+	leafNode: 'uint',
+	area: 'float',
+}, 'EmissiveTriangle' );
+
 export const lobeWeightsStruct = new StructTypeNode( {
 	diffuse: 'float',
 	specular: 'float',

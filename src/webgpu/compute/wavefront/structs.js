@@ -126,8 +126,8 @@ export const intersectionResultStruct = new StructTypeNode( {
 	normal: 'vec3f',
 	side: 'float',
 
-	indices: 'vec3u',
-	triangleIndex: 'uint',
+	// the vertex indices and the triangle's index in its object, as in the raycast's result
+	indices: 'vec4u',
 
 }, 'TraceResult' );
 

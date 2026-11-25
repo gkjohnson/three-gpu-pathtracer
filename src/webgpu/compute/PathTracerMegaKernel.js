@@ -336,7 +336,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					// the surface's emission, weighted against the light sampling at the previous vertex picking its triangle
 					var emissionWeight = 1.0;
-					if ( isMISWeighted && didHitSurface && ! isFogScatter ) {
+					if ( isMISWeighted && didHitSurface ) {
 
 						emissionWeight = ${ getEmissiveHitWeightFn }( ray.origin, position, hitResult.normal, hitResult.objectIndex, hitResult.indices.w, scatterPdf );
 

@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix3, Matrix4, Raycaster, Vector3, MeshBasicMaterial, DoubleSide } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix3, Matrix4, Raycaster, Triangle, Vector3, MeshBasicMaterial, DoubleSide } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
@@ -8,6 +8,8 @@ import { getFogShadowDistanceFn } from './medium.wgsl.js';
 const _colorVec = new Vector4();
 const _instanceMatrix = /* @__PURE__ */ new Matrix4();
 const _boxToMesh = /* @__PURE__ */ new Matrix4();
+const _recordMatrix = /* @__PURE__ */ new Matrix4();
+const _triangle = /* @__PURE__ */ new Triangle();
 const _orientedBox = /* @__PURE__ */ new OrientedBox();
 const _normalMatrix = /* @__PURE__ */ new Matrix3();
 const _rayOrigin = /* @__PURE__ */ new Vector3();
@@ -21,8 +23,8 @@ const _raycastTarget = {
 };
 
 // three-mesh-bvh's object record with the material fields appended, and the words they're written at
-export const RECORD_VISIBLE_WORD = 32;
-export const RECORD_MATERIAL_INDEX_WORD = 35;
+const RECORD_VISIBLE_WORD = 32;
+const RECORD_MATERIAL_INDEX_WORD = 35;
 const RECORD_VISIBLE_TO_SHADOW_RAYS_WORD = 36;
 const RECORD_COLOR_WORD = 40;
 const objectRecordStruct = new StructTypeNode( {
@@ -653,6 +655,48 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		} );
 		objectsStorage.value.needsUpdate = true;
+
+	}
+
+	// returns the material the object's record renders with, or null when the object is hidden
+	getRecordMaterial( objectIndex ) {
+
+		const records = this.storage.objects.proxyNode.value.array;
+		const recordOffset = objectIndex * objectRecordStruct.getLength();
+		if ( records[ recordOffset + RECORD_VISIBLE_WORD ] === 0 ) {
+
+			return null;
+
+		}
+
+		return this.shadingModel.materials[ records[ recordOffset + RECORD_MATERIAL_INDEX_WORD ] ];
+
+	}
+
+	// calls back with each of an object's triangles in world space, and its index
+	forEachTriangle( info, callback ) {
+
+		const { storage, attributeLayout } = this;
+		const { objectIndex, indexOffset, attributesOffset, primitiveOffset, primitiveCount } = info;
+		const indices = storage.geometry.proxyNode.value.array;
+		const attributes = new Float32Array( indices.buffer, indices.byteOffset, indices.length );
+		const records = storage.objects.proxyNode.value.array;
+		_recordMatrix.fromArray( new Float32Array( records.buffer, records.byteOffset, records.length ), objectIndex * objectRecordStruct.getLength() );
+
+		// the packed vertex stride and where the position is in it
+		const { stride, members } = attributeLayout;
+		const positionsOffset = attributesOffset + members.find( ( { name } ) => name === 'position' ).offset;
+
+		const { a, b, c } = _triangle;
+		for ( let i = primitiveOffset; i < primitiveOffset + primitiveCount; i ++ ) {
+
+			const i3 = indexOffset + i * 3;
+			a.fromArray( attributes, positionsOffset + indices[ i3 ] * stride ).applyMatrix4( _recordMatrix );
+			b.fromArray( attributes, positionsOffset + indices[ i3 + 1 ] * stride ).applyMatrix4( _recordMatrix );
+			c.fromArray( attributes, positionsOffset + indices[ i3 + 2 ] * stride ).applyMatrix4( _recordMatrix );
+			callback( _triangle, i );
+
+		}
 
 	}
 
