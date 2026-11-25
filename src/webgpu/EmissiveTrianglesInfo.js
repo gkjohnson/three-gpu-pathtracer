@@ -1,5 +1,5 @@
 import { texture, uniform } from 'three/tsl';
-import { Box3, RGBAFormat, RGIntegerFormat, RGBAIntegerFormat, FloatType, UnsignedIntType } from 'three/webgpu';
+import { Box3, ColorManagement, Vector3, RGBAFormat, RGIntegerFormat, RGBAIntegerFormat, FloatType, UnsignedIntType } from 'three/webgpu';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { LightTreeBVH } from './LightTreeBVH.js';
 import { LinearDataTexture } from './LinearDataTexture.js';
@@ -11,6 +11,8 @@ import { getLinearTexelFn } from './nodes/utils.wgsl.js';
 const DISTANCE_EPSILON = 1e-20;
 
 const _box = /* @__PURE__ */ new Box3();
+const _emissive = /* @__PURE__ */ new Vector3();
+const _luminanceCoefficients = /* @__PURE__ */ new Vector3();
 
 // returns the material's emitted luminance, ignoring its emissive map
 function getEmissiveLuminance( material ) {
@@ -22,19 +24,12 @@ function getEmissiveLuminance( material ) {
 	}
 
 	const { emissive, emissiveIntensity = 1 } = material;
-	return ( 0.2126 * emissive.r + 0.7152 * emissive.g + 0.0722 * emissive.b ) * emissiveIntensity;
+	ColorManagement.getLuminanceCoefficients( _luminanceCoefficients );
+	return _emissive.setFromColor( emissive ).dot( _luminanceCoefficients ) * emissiveIntensity;
 
 }
 
-// Samples the scene's emissive triangles as a light. A light tree picks a triangle for a position, choosing a child of each
-// node by its power and distance, as in pbrt-v4's LightBounds. The emissive map doesn't affect which triangle is picked.
-//
-// The data is stored in three textures:
-// - emissiveTree: the light tree's nodes, see LightTreeBVH
-// - emissiveTriangles: the list of every emissive triangle, see emissiveTriangleStruct
-// - emissiveObjects: for each object, the list index of its first triangle plus one, or zero if it doesn't emit, and the
-//   triangle index of that triangle
-// TODO: replace emissiveObjects with one offset in a spare word of the object records
+// Samples emissive triangles as lights using a light tree, as in pbrt-v4
 export class EmissiveTrianglesInfo {
 
 	constructor() {
@@ -49,8 +44,7 @@ export class EmissiveTrianglesInfo {
 	}
 
 	// Rebuilds the textures. Call when the scene, its materials or its transforms change
-	// TODO: only rebuild the tree on a material change if an object starts or stops emitting. Otherwise rewrite the power
-	// of the nodes, or nothing if the emission is unchanged
+	// TODO: only rebuild the tree on a material change when an object starts or stops emitting
 	update( bvhData ) {
 
 		// the bvh data has not been built yet
@@ -60,7 +54,8 @@ export class EmissiveTrianglesInfo {
 
 		}
 
-		// find the emissive objects
+		// write the first list index plus one and first triangle index of each emissive object
+		// TODO: store these as one offset in the object records
 		const objectInfos = bvhData.getAllObjectInfo();
 		const objectsBuffer = new Uint32Array( objectInfos.length * 2 );
 		const emissiveObjects = [];
@@ -201,9 +196,8 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
-		// Estimates how much a node lights a position, as its power over the squared distance to its center. The distance is
-		// clamped to the node's radius so nodes don't dominate positions inside them. Simplified from pbrt-v4's
-		// LightBounds::Importance, which also accounts for the directions the node emits in
+		// Estimates how much a node lights a position, simplified from pbrt-v4's LightBounds::Importance. The distance is
+		// clamped to the node's radius so it doesn't dominate positions inside it
 		const getImportanceFn = wgslTagFn/* wgsl */`
 			fn getLightTreeNodeImportance( node: ${ lightTreeNodeStruct }, position: vec3f ) -> f32 {
 
