@@ -3,7 +3,7 @@ import { DataTexture, NearestFilter } from 'three/webgpu';
 // the largest texture width guaranteed by WebGPU
 const LINEAR_TEXTURE_WIDTH = 8192;
 
-// A data texture storing a 1D array that's wrapped into rows. See "getLinearTexel" for the texel of an item
+// A data texture storing a 1D array that's wrapped into rows. Read with "linearTextureLoad"
 export class LinearDataTexture extends DataTexture {
 
 	constructor( array, itemSize, format, type ) {

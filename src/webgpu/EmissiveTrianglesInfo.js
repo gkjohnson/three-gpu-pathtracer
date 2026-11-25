@@ -5,7 +5,7 @@ import { LightTreeBVH } from './LightTreeBVH.js';
 import { LinearDataTexture } from './LinearDataTexture.js';
 import { lightRecordStruct, lightTreeNodeStruct, emissiveTriangleStruct } from './nodes/structs.wgsl.js';
 import { EMISSIVE_TRIANGLE_LIGHT_TYPE, writeLightPointFn } from './nodes/lights.wgsl.js';
-import { getLinearTexelFn } from './nodes/utils.wgsl.js';
+import { linearTextureLoadFn, linearTextureLoadUintFn } from './nodes/utils.wgsl.js';
 
 // avoids dividing by zero at the center of a light tree node with no size
 const MIN_DISTANCE_SQ = 1e-20;
@@ -42,12 +42,13 @@ export class EmissiveTrianglesInfo {
 		// - bounds max, second child node index or -( emissive triangle index + 1 ) for a leaf
 		this.lightTreeTextureNode = texture( new LinearDataTexture( new Float32Array( 0 ), 4, RGBAFormat, FloatType ) ).setName( 'lightTree' );
 
-		// The emissive triangles, grouped by object, one texel each:
-		// - bvh object index, bvh triangle index, light tree leaf node index, area
+		// The emissive triangles, grouped by object, one texel each. The object and triangle indices are the ones
+		// BVHComputeData uses: an index into its object records and a triangle in that object's geometry
+		// - object index, triangle index, light tree leaf node index, area
 		this.emissiveTrianglesTextureNode = texture( new LinearDataTexture( new Uint32Array( 0 ), 4, RGBAIntegerFormat, UnsignedIntType ) ).setName( 'emissiveTriangles' );
 
-		// The first emissive triangle of each bvh object, one texel each:
-		// - emissive triangle index + 1 (0 if the object doesn't emit), bvh triangle index
+		// The first emissive triangle of each BVHComputeData object, one texel each:
+		// - emissive triangle index + 1 (0 if the object doesn't emit), triangle index
 		this.firstTrianglesTextureNode = texture( new LinearDataTexture( new Uint32Array( 0 ), 2, RGIntegerFormat, UnsignedIntType ) ).setName( 'firstEmissiveTriangles' );
 
 		this._initFns();
@@ -73,13 +74,13 @@ export class EmissiveTrianglesInfo {
 		let emissiveTriangleCount = 0;
 		objectInfos.forEach( info => {
 
-			const { objectIndex: bvhObjectIndex, primitiveOffset, primitiveCount } = info;
+			const { objectIndex, primitiveOffset, primitiveCount } = info;
 			const luminance = getEmissiveLuminance( bvhData.getMaterial( info ) );
-			if ( luminance > 0 && bvhData.isRecordVisible( bvhObjectIndex ) ) {
+			if ( luminance > 0 && bvhData.isRecordVisible( objectIndex ) ) {
 
-				firstTriangles[ bvhObjectIndex * 2 ] = emissiveTriangleCount + 1;
-				firstTriangles[ bvhObjectIndex * 2 + 1 ] = primitiveOffset;
-				emissiveObjects.push( { bvhObjectIndex, luminance } );
+				firstTriangles[ objectIndex * 2 ] = emissiveTriangleCount + 1;
+				firstTriangles[ objectIndex * 2 + 1 ] = primitiveOffset;
+				emissiveObjects.push( { objectIndex, luminance } );
 				emissiveTriangleCount += primitiveCount;
 
 			}
@@ -93,13 +94,13 @@ export class EmissiveTrianglesInfo {
 		const triangleBounds = new Float32Array( emissiveTriangleCount * 6 );
 		const trianglePowers = new Float32Array( emissiveTriangleCount );
 		let emissiveTriangleIndex = 0;
-		emissiveObjects.forEach( ( { bvhObjectIndex, luminance } ) => {
+		emissiveObjects.forEach( ( { objectIndex, luminance } ) => {
 
-			bvhData.forEachTriangle( bvhObjectIndex, ( triangle, bvhTriangleIndex ) => {
+			bvhData.forEachTriangle( objectIndex, ( triangle, triangleIndex ) => {
 
 				const area = triangle.getArea();
-				trianglesUint32[ emissiveTriangleIndex * 4 ] = bvhObjectIndex;
-				trianglesUint32[ emissiveTriangleIndex * 4 + 1 ] = bvhTriangleIndex;
+				trianglesUint32[ emissiveTriangleIndex * 4 ] = objectIndex;
+				trianglesUint32[ emissiveTriangleIndex * 4 + 1 ] = triangleIndex;
 				trianglesFloat32[ emissiveTriangleIndex * 4 + 3 ] = area;
 				trianglePowers[ emissiveTriangleIndex ] = area * luminance;
 
@@ -151,17 +152,16 @@ export class EmissiveTrianglesInfo {
 		const readLightTreeNodeFn = wgslTagFn/* wgsl */`
 			fn readLightTreeNode( nodeIndex: u32 ) -> ${ lightTreeNodeStruct } {
 
-				let width = textureDimensions( ${ lightTreeTextureNode } ).x;
-				let boundsMinPower = textureLoad( ${ lightTreeTextureNode }, ${ getLinearTexelFn }( nodeIndex * 2u, width ), 0 );
-				let boundsMaxChildOrTriangle = textureLoad( ${ lightTreeTextureNode }, ${ getLinearTexelFn }( nodeIndex * 2u + 1u, width ), 0 );
+				let firstTexel = ${ linearTextureLoadFn }( ${ lightTreeTextureNode }, nodeIndex * 2u );
+				let secondTexel = ${ linearTextureLoadFn }( ${ lightTreeTextureNode }, nodeIndex * 2u + 1u );
 
 				// negative for a leaf
-				let childOrTriangle = boundsMaxChildOrTriangle.w;
+				let childOrTriangle = secondTexel.w;
 
 				var node: ${ lightTreeNodeStruct };
-				node.boundsMin = boundsMinPower.xyz;
-				node.boundsMax = boundsMaxChildOrTriangle.xyz;
-				node.power = boundsMinPower.w;
+				node.boundsMin = firstTexel.xyz;
+				node.power = firstTexel.w;
+				node.boundsMax = secondTexel.xyz;
 				node.isLeaf = childOrTriangle < 0.0;
 				if ( node.isLeaf ) {
 
@@ -182,12 +182,11 @@ export class EmissiveTrianglesInfo {
 		const readEmissiveTriangleFn = wgslTagFn/* wgsl */`
 			fn readEmissiveTriangle( emissiveTriangleIndex: u32 ) -> ${ emissiveTriangleStruct } {
 
-				let width = textureDimensions( ${ emissiveTrianglesTextureNode } ).x;
-				let texel = textureLoad( ${ emissiveTrianglesTextureNode }, ${ getLinearTexelFn }( emissiveTriangleIndex, width ), 0 );
+				let texel = ${ linearTextureLoadUintFn }( ${ emissiveTrianglesTextureNode }, emissiveTriangleIndex );
 
 				var triangle: ${ emissiveTriangleStruct };
-				triangle.bvhObjectIndex = texel.x;
-				triangle.bvhTriangleIndex = texel.y;
+				triangle.objectIndex = texel.x;
+				triangle.triangleIndex = texel.y;
 				triangle.leafNodeIndex = texel.z;
 				triangle.area = bitcast<f32>( texel.w );
 				return triangle;
@@ -195,21 +194,20 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
-		// returns the emissive triangle index of a bvh triangle, or -1 if its object doesn't emit
+		// returns the emissive triangle index of an object's triangle, or -1 if its object doesn't emit
 		const getEmissiveTriangleIndexFn = wgslTagFn/* wgsl */`
-			fn getEmissiveTriangleIndex( bvhObjectIndex: u32, bvhTriangleIndex: u32 ) -> i32 {
+			fn getEmissiveTriangleIndex( objectIndex: u32, triangleIndex: u32 ) -> i32 {
 
-				let width = textureDimensions( ${ firstTrianglesTextureNode } ).x;
-				let texel = vec2i( textureLoad( ${ firstTrianglesTextureNode }, ${ getLinearTexelFn }( bvhObjectIndex, width ), 0 ).xy );
+				let texel = vec2i( ${ linearTextureLoadUintFn }( ${ firstTrianglesTextureNode }, objectIndex ).xy );
 				let firstEmissiveTriangleIndex = texel.x - 1;
-				let firstBvhTriangleIndex = texel.y;
+				let firstTriangleIndex = texel.y;
 				if ( firstEmissiveTriangleIndex < 0 ) {
 
 					return - 1;
 
 				}
 
-				return firstEmissiveTriangleIndex + i32( bvhTriangleIndex ) - firstBvhTriangleIndex;
+				return firstEmissiveTriangleIndex + i32( triangleIndex ) - firstTriangleIndex;
 
 			}
 		`;
@@ -301,8 +299,8 @@ export class EmissiveTrianglesInfo {
 
 				// get the triangle of the leaf
 				let triangle = ${ readEmissiveTriangleFn }( node.emissiveTriangleIndex );
-				let objectInfo = ${ objectsStorage }[ triangle.bvhObjectIndex ];
-				let indices = ${ getTriangleIndices }( triangle.bvhTriangleIndex, objectInfo.indexOffset );
+				let objectInfo = ${ objectsStorage }[ triangle.objectIndex ];
+				let indices = ${ getTriangleIndices }( triangle.triangleIndex, objectInfo.indexOffset );
 				let a = ${ getVertexPosition }( indices.x, objectInfo.attributesOffset );
 				let b = ${ getVertexPosition }( indices.y, objectInfo.attributesOffset );
 				let c = ${ getVertexPosition }( indices.z, objectInfo.attributesOffset );
@@ -339,9 +337,9 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
-		// Returns the pdf of "sampleEmissiveTriangle" sampling a point on a bvh triangle, or zero if its object doesn't emit
+		// Returns the pdf of "sampleEmissiveTriangle" sampling a point on an object's triangle, or zero if the object doesn't emit
 		this.getPdf = wgslTagFn/* wgsl */`
-			fn getEmissiveTrianglePdf( position: vec3f, lightPoint: vec3f, triangleNormal: vec3f, bvhObjectIndex: u32, bvhTriangleIndex: u32 ) -> f32 {
+			fn getEmissiveTrianglePdf( position: vec3f, lightPoint: vec3f, triangleNormal: vec3f, objectIndex: u32, triangleIndex: u32 ) -> f32 {
 
 				if ( ${ triangleCountNode } == 0u ) {
 
@@ -349,7 +347,7 @@ export class EmissiveTrianglesInfo {
 
 				}
 
-				let emissiveTriangleIndex = ${ getEmissiveTriangleIndexFn }( bvhObjectIndex, bvhTriangleIndex );
+				let emissiveTriangleIndex = ${ getEmissiveTriangleIndexFn }( objectIndex, triangleIndex );
 				if ( emissiveTriangleIndex < 0 ) {
 
 					return 0.0;

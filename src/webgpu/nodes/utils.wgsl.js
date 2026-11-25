@@ -282,12 +282,24 @@ export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// returns the texel of an item in a LinearDataTexture
-export const getLinearTexelFn = wgslFn( /* wgsl */ `
+// loads the texel at an index of a LinearDataTexture
+export const linearTextureLoadFn = wgslFn( /* wgsl */ `
 
-	fn getLinearTexel( index: u32, width: u32 ) -> vec2u {
+	fn linearTextureLoad( tex: texture_2d<f32>, index: u32 ) -> vec4f {
 
-		return vec2u( index % width, index / width );
+		let width = textureDimensions( tex ).x;
+		return textureLoad( tex, vec2u( index % width, index / width ), 0 );
+
+	}
+
+` );
+
+export const linearTextureLoadUintFn = wgslFn( /* wgsl */ `
+
+	fn linearTextureLoadUint( tex: texture_2d<u32>, index: u32 ) -> vec4u {
+
+		let width = textureDimensions( tex ).x;
+		return textureLoad( tex, vec2u( index % width, index / width ), 0 );
 
 	}
 

@@ -8,7 +8,7 @@ const BVH_LEAF_FLAG = 0xffff;
 
 // The packed light tree node layout, as two vec4s:
 // - bounds min, power
-// - bounds max, second child's node index or -( triangle index + 1 ) for a leaf
+// - bounds max, second child's node index or -( emissive triangle index + 1 ) for a leaf
 // The first child is always the next node. Floats hold indices exactly up to 2^24
 const NODE_FLOATS = 8;
 const POWER_OFFSET = 3;
@@ -26,7 +26,7 @@ export class LightTreeBVH extends BVH {
 		this.triangleBounds = triangleBounds;
 		this.trianglePowers = trianglePowers;
 
-		// the triangle indices, which the build sorts into leaf order
+		// the emissive triangle indices, which the build sorts into leaf order
 		this.primitiveBuffer = new Uint32Array( triangleBounds.length / 6 ).map( ( value, i ) => i );
 		this.primitiveBufferStride = 1;
 		this.init( {
@@ -47,11 +47,11 @@ export class LightTreeBVH extends BVH {
 
 	}
 
-	writePrimitiveBounds( triangleIndex, target, offset ) {
+	writePrimitiveBounds( emissiveTriangleIndex, target, offset ) {
 
 		for ( let i = 0; i < 6; i ++ ) {
 
-			target[ offset + i ] = this.triangleBounds[ triangleIndex * 6 + i ];
+			target[ offset + i ] = this.triangleBounds[ emissiveTriangleIndex * 6 + i ];
 
 		}
 
@@ -86,10 +86,10 @@ export class LightTreeBVH extends BVH {
 			if ( isLeaf ) {
 
 				const primitiveOffset = bvhUint32[ bvhNodeOffset + BVH_OFFSET_WORD ];
-				const triangleIndex = primitiveBuffer[ primitiveOffset ];
-				nodesBuffer[ nodeOffset + POWER_OFFSET ] = trianglePowers[ triangleIndex ];
-				nodesBuffer[ nodeOffset + CHILD_OR_TRIANGLE_OFFSET ] = - ( triangleIndex + 1 );
-				leafNodeIndices[ triangleIndex ] = nodeIndex;
+				const emissiveTriangleIndex = primitiveBuffer[ primitiveOffset ];
+				nodesBuffer[ nodeOffset + POWER_OFFSET ] = trianglePowers[ emissiveTriangleIndex ];
+				nodesBuffer[ nodeOffset + CHILD_OR_TRIANGLE_OFFSET ] = - ( emissiveTriangleIndex + 1 );
+				leafNodeIndices[ emissiveTriangleIndex ] = nodeIndex;
 
 			} else {
 

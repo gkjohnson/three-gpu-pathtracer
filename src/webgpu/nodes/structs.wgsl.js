@@ -298,8 +298,9 @@ export const lightTreeNodeStruct = new StructTypeNode( {
 
 // An emissive triangle and its leaf in the light tree
 export const emissiveTriangleStruct = new StructTypeNode( {
-	bvhObjectIndex: 'uint',
-	bvhTriangleIndex: 'uint',
+	// the BVHComputeData object record and the triangle in that object's geometry
+	objectIndex: 'uint',
+	triangleIndex: 'uint',
 	leafNodeIndex: 'uint',
 	area: 'float',
 }, 'EmissiveTriangle' );
