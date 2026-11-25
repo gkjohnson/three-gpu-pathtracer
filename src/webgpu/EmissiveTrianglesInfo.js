@@ -7,12 +7,12 @@ import { lightRecordStruct, lightTreeNodeStruct, emissiveTriangleStruct } from '
 import { EMISSIVE_TRIANGLE_LIGHT_TYPE, writeLightPointFn } from './nodes/lights.wgsl.js';
 import { getLinearTexelFn } from './nodes/utils.wgsl.js';
 
-// the smallest squared distance a node's power is divided by
+// avoids dividing by zero when a position is at the center of a node without size
 const DISTANCE_EPSILON = 1e-20;
 
 const _box = /* @__PURE__ */ new Box3();
 
-// the luminance a material emits, without its emissive map
+// returns the material's emitted luminance, ignoring its emissive map
 function getEmissiveLuminance( material ) {
 
 	if ( ! material || ! material.emissive ) {
@@ -26,15 +26,15 @@ function getEmissiveLuminance( material ) {
 
 }
 
-// The scene's emissive triangles, sampled as a light. They're kept in one list, in order of their objects, with a light
-// tree over them. A triangle is picked for a position by walking the tree from its root, choosing each child by its
-// power over its squared distance, see LightBounds in pbrt-v4. Emissive maps color the light but don't change which
-// triangle is picked. Three textures hold the data:
-// - "emissiveTree": the tree's nodes, two texels each, see LightTreeBVH
-// - "emissiveTriangles": the list, each triangle's object index, triangle index in its object, leaf node and area
-// - "emissiveObjects": where each object's triangles start in the list plus one, or zero if it doesn't emit, and the
-//   triangle index they start at
-// TODO: "emissiveObjects" could be one offset between the two in a spare word of the object records instead
+// Samples the scene's emissive triangles as a light. A light tree picks a triangle for a position, choosing a child of each
+// node by its power and distance, as in pbrt-v4's LightBounds. The emissive map doesn't affect which triangle is picked.
+//
+// The data is stored in three textures:
+// - emissiveTree: the light tree's nodes, see LightTreeBVH
+// - emissiveTriangles: the list of every emissive triangle, see emissiveTriangleStruct
+// - emissiveObjects: for each object, the list index of its first triangle plus one, or zero if it doesn't emit, and the
+//   triangle index of that triangle
+// TODO: replace emissiveObjects with one offset in a spare word of the object records
 export class EmissiveTrianglesInfo {
 
 	constructor() {
@@ -48,22 +48,21 @@ export class EmissiveTrianglesInfo {
 
 	}
 
-	// Rebuilds the triangles and their tree from the bvh data. Call when the scene, its materials or its
-	// transforms change
-	// TODO: material changes only need a new tree when an object starts or stops emitting. Otherwise rewrite just the
-	// powers, or nothing if the emission is unchanged
+	// Rebuilds the textures. Call when the scene, its materials or its transforms change
+	// TODO: only rebuild the tree on a material change if an object starts or stops emitting. Otherwise rewrite the power
+	// of the nodes, or nothing if the emission is unchanged
 	update( bvhData ) {
 
-		// no scene data has been written yet
+		// the bvh data has not been built yet
 		if ( bvhData.bvh === null ) {
 
 			return;
 
 		}
 
-		// find the objects that emit and where their triangles start in the list
+		// find the emissive objects
 		const objectInfos = bvhData.getAllObjectInfo();
-		const objects = new Uint32Array( objectInfos.length * 2 );
+		const objectsBuffer = new Uint32Array( objectInfos.length * 2 );
 		const emissiveObjects = [];
 		let count = 0;
 		objectInfos.forEach( info => {
@@ -72,8 +71,8 @@ export class EmissiveTrianglesInfo {
 			const luminance = getEmissiveLuminance( bvhData.getRecordMaterial( objectIndex ) );
 			if ( luminance > 0 ) {
 
-				objects[ objectIndex * 2 ] = count + 1;
-				objects[ objectIndex * 2 + 1 ] = primitiveOffset;
+				objectsBuffer[ objectIndex * 2 ] = count + 1;
+				objectsBuffer[ objectIndex * 2 + 1 ] = primitiveOffset;
 				emissiveObjects.push( { info, luminance } );
 				count += primitiveCount;
 
@@ -81,46 +80,47 @@ export class EmissiveTrianglesInfo {
 
 		} );
 
-		// write the list. Triangles without area are kept, with no power
-		const triangles = new Uint32Array( count * 4 );
-		const triangleFloats = new Float32Array( triangles.buffer );
+		// write the list of triangles
+		const trianglesBuffer = new Uint32Array( count * 4 );
+		const trianglesFloat32 = new Float32Array( trianglesBuffer.buffer );
 		const bounds = new Float32Array( count * 6 );
 		const powers = new Float32Array( count );
-		let index = 0;
+		let listIndex = 0;
 		emissiveObjects.forEach( ( { info, luminance } ) => {
 
 			bvhData.forEachTriangle( info, ( triangle, triangleIndex ) => {
 
 				const area = triangle.getArea();
-				triangles[ index * 4 ] = info.objectIndex;
-				triangles[ index * 4 + 1 ] = triangleIndex;
-				triangleFloats[ index * 4 + 3 ] = area;
-				powers[ index ] = area * luminance;
+				trianglesBuffer[ listIndex * 4 ] = info.objectIndex;
+				trianglesBuffer[ listIndex * 4 + 1 ] = triangleIndex;
+				trianglesFloat32[ listIndex * 4 + 3 ] = area;
+				powers[ listIndex ] = area * luminance;
 
 				_box.makeEmpty().expandByPoint( triangle.a ).expandByPoint( triangle.b ).expandByPoint( triangle.c );
-				_box.min.toArray( bounds, index * 6 );
-				_box.max.toArray( bounds, index * 6 + 3 );
-				index ++;
+				_box.min.toArray( bounds, listIndex * 6 );
+				_box.max.toArray( bounds, listIndex * 6 + 3 );
+				listIndex ++;
 
 			} );
 
 		} );
 
-		// build the tree and write each triangle's leaf
-		let nodes = new Float32Array( 0 );
+		// build the tree and write the leaf of each triangle
+		let treeBuffer = new Float32Array( 0 );
 		if ( count > 0 ) {
 
-			const tree = new LightTreeBVH( bounds ).getNodes( powers );
-			tree.triangleLeaves.forEach( ( leaf, i ) => triangles[ i * 4 + 2 ] = leaf );
-			nodes = tree.nodes;
+			const { nodesBuffer, triangleLeaves } = new LightTreeBVH( bounds ).packNodesBuffer( powers );
+			triangleLeaves.forEach( ( leafNode, i ) => trianglesBuffer[ i * 4 + 2 ] = leafNode );
+			treeBuffer = nodesBuffer;
 
 		}
 
+		// replace the textures
 		this.dispose();
 		this.countNode.value = count;
-		this.treeNode.value = new LinearDataTexture( nodes, 4, RGBAFormat, FloatType );
-		this.trianglesNode.value = new LinearDataTexture( triangles, 4, RGBAIntegerFormat, UnsignedIntType );
-		this.objectsNode.value = new LinearDataTexture( objects, 2, RGIntegerFormat, UnsignedIntType );
+		this.treeNode.value = new LinearDataTexture( treeBuffer, 4, RGBAFormat, FloatType );
+		this.trianglesNode.value = new LinearDataTexture( trianglesBuffer, 4, RGBAIntegerFormat, UnsignedIntType );
+		this.objectsNode.value = new LinearDataTexture( objectsBuffer, 2, RGIntegerFormat, UnsignedIntType );
 
 	}
 
@@ -145,19 +145,28 @@ export class EmissiveTrianglesInfo {
 			fn readLightTreeNode( index: u32 ) -> ${ lightTreeNodeStruct } {
 
 				let width = textureDimensions( ${ treeNode } ).x;
-				let minPower = textureLoad( ${ treeNode }, ${ getLinearTexelFn }( index * 2u, width ), 0 );
-				let maxLink = textureLoad( ${ treeNode }, ${ getLinearTexelFn }( index * 2u + 1u, width ), 0 );
+				let boundsMinPower = textureLoad( ${ treeNode }, ${ getLinearTexelFn }( index * 2u, width ), 0 );
+				let boundsMaxLink = textureLoad( ${ treeNode }, ${ getLinearTexelFn }( index * 2u + 1u, width ), 0 );
+
+				// the second child, or -( listIndex + 1 ) for a leaf
+				let link = boundsMaxLink.w;
 
 				var node: ${ lightTreeNodeStruct };
-				node.boundsMin = minPower.xyz;
-				node.boundsMax = maxLink.xyz;
-				node.power = minPower.w;
+				node.boundsMin = boundsMinPower.xyz;
+				node.boundsMax = boundsMaxLink.xyz;
+				node.power = boundsMinPower.w;
+				node.isLeaf = link < 0.0;
+				if ( node.isLeaf ) {
 
-				// the first child follows its node. A leaf's link is its place in the list, negative and minus one
-				node.isLeaf = maxLink.w < 0.0;
-				node.firstChild = index + 1u;
-				node.secondChild = u32( max( maxLink.w, 0.0 ) );
-				node.listIndex = u32( max( - maxLink.w - 1.0, 0.0 ) );
+					node.listIndex = u32( - link - 1.0 );
+
+				} else {
+
+					node.firstChild = index + 1u;
+					node.secondChild = u32( link );
+
+				}
+
 				return node;
 
 			}
@@ -173,22 +182,28 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
-		// the place of an object's triangle in the list, or -1 if the object doesn't emit
+		// returns the list index of an object's triangle, or -1 if the object doesn't emit
 		const getListIndexFn = wgslTagFn/* wgsl */`
 			fn getEmissiveListIndex( objectIndex: u32, triangleIndex: u32 ) -> i32 {
 
 				let width = textureDimensions( ${ objectsNode } ).x;
-				let objectStart = vec2i( textureLoad( ${ objectsNode }, ${ getLinearTexelFn }( objectIndex, width ), 0 ).xy );
-				let listStart = objectStart.x - 1;
-				let triangleStart = objectStart.y;
-				return select( listStart + i32( triangleIndex ) - triangleStart, - 1, listStart < 0 );
+				let data = vec2i( textureLoad( ${ objectsNode }, ${ getLinearTexelFn }( objectIndex, width ), 0 ).xy );
+				let firstListIndex = data.x - 1;
+				let firstTriangleIndex = data.y;
+				if ( firstListIndex < 0 ) {
+
+					return - 1;
+
+				}
+
+				return firstListIndex + i32( triangleIndex ) - firstTriangleIndex;
 
 			}
 		`;
 
-		// How much light a node could send to "position": its power over the squared distance to its center, held at
-		// least its radius squared so positions near or inside it don't dominate. A simpler LightBounds::Importance()
-		// from pbrt-v4, without its emission cones
+		// Estimates how much a node lights a position, as its power over the squared distance to its center. The distance is
+		// clamped to the node's radius so nodes don't dominate positions inside them. Simplified from pbrt-v4's
+		// LightBounds::Importance, which also accounts for the directions the node emits in
 		const getImportanceFn = wgslTagFn/* wgsl */`
 			fn getLightTreeNodeImportance( node: ${ lightTreeNodeStruct }, position: vec3f ) -> f32 {
 
@@ -201,7 +216,7 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
-		// the chance of the walk picking the first of two children, or -1 when neither can light the position
+		// returns the chance of picking the first child, or -1 if neither child lights the position
 		const getFirstChildChanceFn = wgslTagFn/* wgsl */`
 			fn getFirstChildChance( firstChild: ${ lightTreeNodeStruct }, secondChild: ${ lightTreeNodeStruct }, position: vec3f ) -> f32 {
 
@@ -219,7 +234,7 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
-		// the estimated light at "position" from all the triangles, for weighing them against the lights
+		// estimates how much all the triangles light a position, for choosing between them and the other lights
 		this.getWeight = wgslTagFn/* wgsl */`
 			fn getEmissiveWeight( position: vec3f ) -> f32 {
 
@@ -234,14 +249,14 @@ export class EmissiveTrianglesInfo {
 			}
 		`;
 
-		// Picks an emissive triangle with "ruv.x" and a point on it with "ruv.yz", and returns the light from that point
-		// toward "position". The pdf is zero when the side facing "position" doesn't emit
+		// Samples the light from a point on an emissive triangle, picking the triangle with "ruv.x" and the point with
+		// "ruv.yz". The pdf is zero if the side of the triangle facing the position doesn't emit
 		this.sample = wgslTagFn/* wgsl */`
 			fn sampleEmissiveTriangle( position: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
 
 				var lightRec: ${ lightRecordStruct };
 
-				// walk down the tree to a leaf, rescaling the random number at each step to use it again
+				// pick a leaf by walking down the tree, rescaling the random number to reuse it at each node
 				var node = ${ readNodeFn }( 0u );
 				var pickPdf = 1.0;
 				var r = ruv.x;
@@ -272,7 +287,7 @@ export class EmissiveTrianglesInfo {
 
 				}
 
-				// the triangle
+				// get the leaf's triangle
 				let triangle = ${ readTriangleFn }( node.listIndex );
 				let objectInfo = ${ objectsStorage }[ triangle.objectIndex ];
 				let indices = ${ getTriangleIndices }( triangle.triangleIndex, objectInfo.indexOffset );
@@ -281,7 +296,7 @@ export class EmissiveTrianglesInfo {
 				let c = ${ getVertexPosition }( indices.z, objectInfo.attributesOffset );
 				let normal = normalize( ( transpose( objectInfo.inverseMatrixWorld ) * vec4f( cross( b - a, c - a ), 0.0 ) ).xyz );
 
-				// a point on it, uniform over its area
+				// pick a point uniformly over the triangle's area
 				let su = sqrt( ruv.y );
 				let barycoord = vec3f( 1.0 - su, ruv.z * su, su - ruv.z * su );
 				let localPoint = barycoord.x * a + barycoord.y * b + barycoord.z * c;
@@ -292,7 +307,7 @@ export class EmissiveTrianglesInfo {
 				let cosLight = dot( normal, toPosition ) * inverseSqrt( distSq );
 				let side = select( - 1.0, 1.0, cosLight > 0.0 );
 
-				// the light from the side facing the position, less the share of rays that pass through it
+				// get the light emitted toward the position, scaled by the surface's opacity
 				let opacity = ${ getHitOpacity }( objectInfo.materialIndex, objectInfo.color.a, indices, objectInfo.attributesOffset, barycoord, side );
 				let emission = opacity * ${ getHitEmission }( objectInfo.materialIndex, indices, objectInfo.attributesOffset, barycoord, side );
 				if ( triangle.area <= 0.0 || distSq <= 0.0 || cosLight == 0.0 || all( emission == vec3f( 0.0 ) ) ) {
@@ -301,18 +316,18 @@ export class EmissiveTrianglesInfo {
 
 				}
 
-				// the chance of picking the triangle and then the point, over solid angle
 				${ writeLightPointFn }( &lightRec, position, point, normal );
 				lightRec.emission = emission;
-				lightRec.pdf = pickPdf / triangle.area * distSq / abs( cosLight );
 				lightRec.lightType = ${ EMISSIVE_TRIANGLE_LIGHT_TYPE };
+
+				// convert the pdf from the triangle's area to solid angle
+				lightRec.pdf = pickPdf / triangle.area * distSq / abs( cosLight );
 				return lightRec;
 
 			}
 		`;
 
-		// The pdf of "sampleEmissiveTriangle" picking "point" on an object's triangle facing "normal" for "position", to
-		// MIS weight emission that bsdf rays hit. Zero when the object doesn't emit
+		// Returns the pdf of "sampleEmissiveTriangle" sampling the given point on a triangle, or zero if its object doesn't emit
 		this.getPdf = wgslTagFn/* wgsl */`
 			fn getEmissiveTrianglePdf( position: vec3f, point: vec3f, normal: vec3f, objectIndex: u32, triangleIndex: u32 ) -> f32 {
 
@@ -339,8 +354,7 @@ export class EmissiveTrianglesInfo {
 
 				}
 
-				// walk down to the triangle's leaf, multiplying the chance of each child on the way. A first child's
-				// nodes all come before the second child
+				// walk down the tree to the triangle's leaf. Nodes before the second child are under the first child
 				var node = ${ readNodeFn }( 0u );
 				var pickPdf = 1.0;
 				while ( ! node.isLeaf ) {
@@ -368,6 +382,7 @@ export class EmissiveTrianglesInfo {
 
 				}
 
+				// convert the pdf from the triangle's area to solid angle
 				return pickPdf / triangle.area * distSq / cosLight;
 
 			}

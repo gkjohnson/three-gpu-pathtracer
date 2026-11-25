@@ -709,8 +709,8 @@ export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
 `;
 
-// The light a point on a triangle emits from the side "side", for a shading model's "getHitEmission": the emissive color
-// and intensity times the emissive map, and none from a side the material doesn't render
+// The light emitted by a point on one side of a triangle, for a shading model's "getHitEmission". Sides the material doesn't
+// render don't emit
 export const getHitEmissionFunc = wgslTagFn/* wgsl */ `
 
 	fn getHitEmission( materialIndex: u32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> vec3f {

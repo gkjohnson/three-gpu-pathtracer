@@ -282,7 +282,7 @@ export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// the texel of item "index" in a "LinearDataTexture" with the given width
+// returns the texel of an item in a LinearDataTexture
 export const getLinearTexelFn = wgslFn( /* wgsl */ `
 
 	fn getLinearTexel( index: u32, width: u32 ) -> vec2u {

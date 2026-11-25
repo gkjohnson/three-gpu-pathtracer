@@ -76,7 +76,7 @@ const rayDataMembers = {
 	// the scatter distance sampled for the queued segment in fog, which it's traced up to, or zero outside of fog
 	scatterDist: 'float',
 
-	// the MIS weight of the staged surface's emission against the light sampling at the vertex the segment left
+	// the MIS weight of the staged hit's emission against sampling it as a light from the previous vertex
 	emissionWeight: 'float',
 
 };

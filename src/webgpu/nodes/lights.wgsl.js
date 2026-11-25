@@ -14,8 +14,8 @@ export const ENVIRONMENT_LIGHT_TYPE = 5;
 export const EMISSIVE_TRIANGLE_LIGHT_TYPE = 6;
 export const LIGHT_FAR_DISTANCE = 1e30;
 
-// Writes the direction and distance from "rayOrigin" to a point sampled on a light, offset off the light's surface so
-// shadow rays end just short of it
+// Writes the direction and distance to a point sampled on a light. The point is offset from the light's surface so shadow
+// rays don't hit it
 export const writeLightPointFn = wgslFn( /* wgsl */ `
 
 	fn writeLightPoint( lightRec: ptr<function, LightRecord>, rayOrigin: vec3f, lightPoint: vec3f, lightNormal: vec3f ) -> void {
@@ -49,7 +49,7 @@ export const getShadowRayFn = wgslFn( /* wgsl */ `
 		// lights at infinity have no point to end at
 		if ( lightDist < ${ LIGHT_FAR_DISTANCE } ) {
 
-			// also shortened by a share of its length, which far from the light the float error outgrows the offset by
+			// shorten the ray slightly since over long distances the float error is larger than the light point's offset
 			let toLight = hitPoint + lightDirection * lightDist - rayStart;
 			let dist = length( toLight );
 			outRay.maxDist = dist * ( 1.0 - 1.0 / 65536.0 );

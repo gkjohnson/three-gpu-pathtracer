@@ -334,7 +334,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					}
 
-					// the surface's emission, weighted against the light sampling at the previous vertex picking its triangle
+					// the MIS weight of the hit's emission against sampling it as a light from the previous vertex
 					var emissionWeight = 1.0;
 					if ( isMISWeighted && didHitSurface ) {
 

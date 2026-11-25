@@ -1334,7 +1334,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// Rebuilds the light tree from the scene's current materials and transforms
+	// Rebuilds the light tree for the current materials and transforms
 	_updateEmissiveTriangles() {
 
 		this._lightsInfo.emissiveTriangles.update( this._bvhData );

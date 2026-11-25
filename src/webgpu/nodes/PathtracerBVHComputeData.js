@@ -658,7 +658,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
-	// returns the material the object's record renders with, or null when the object is hidden
+	// returns the material of an object record, or null if the object is hidden
 	getRecordMaterial( objectIndex ) {
 
 		const records = this.storage.objects.proxyNode.value.array;
@@ -673,7 +673,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
-	// calls back with each of an object's triangles in world space, and its index
+	// calls back with each triangle of an object in world space and the triangle's index
 	forEachTriangle( info, callback ) {
 
 		const { storage, attributeLayout } = this;
@@ -683,7 +683,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const records = storage.objects.proxyNode.value.array;
 		_recordMatrix.fromArray( new Float32Array( records.buffer, records.byteOffset, records.length ), objectIndex * objectRecordStruct.getLength() );
 
-		// the packed vertex stride and where the position is in it
+		// the position of the first vertex in the packed attributes
 		const { stride, members } = attributeLayout;
 		const positionsOffset = attributesOffset + members.find( ( { name } ) => name === 'position' ).offset;
 

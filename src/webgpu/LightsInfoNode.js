@@ -203,10 +203,9 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// Chooses a light, or the environment when the returned index equals the light count, or the emissive
-		// triangles when it's one more, in proportion to the estimated weights. The pdf is zero when nothing can
-		// light the position. "r" is rescaled into a new random number when the emissive triangles are chosen, to
-		// choose one of them with.
+		// Chooses a light in proportion to the estimated weights. Returns the light's index, the light count for the
+		// environment, or the light count plus one for the emissive triangles. The pdf is zero when nothing can light the
+		// position. "r" is rescaled so it can be reused to pick an emissive triangle.
 		this.selectLight = wgslTagFn/* wgsl */`
 			fn selectLight( position: vec3f, r: ptr<function, f32>, selectionPdf: ptr<function, f32> ) -> u32 {
 
@@ -220,7 +219,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
-				// the emissive triangles, chosen by the values of "r" from zero to their pdf
+				// choose the emissive triangles
 				let targetWeight = *r * totalWeight;
 				let emissiveWeight = ${ emissiveTriangles.getWeight }( position );
 				if ( targetWeight < emissiveWeight ) {
@@ -506,8 +505,8 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// The MIS weight of the emission a ray from "origin" finds at "position" on an object's triangle facing
-		// "normal", against the light sampling at the origin picking that point. One for surfaces it can't pick
+		// Returns the MIS weight of emission hit by a bsdf ray against sampling the same point as a light, or one if the
+		// point can't be sampled
 		this.getEmissiveHitWeight = wgslTagFn/* wgsl */`
 			fn getEmissiveHitWeight(
 				origin: vec3f, position: vec3f, normal: vec3f, objectIndex: u32, triangleIndex: u32, scatterPdf: f32,
