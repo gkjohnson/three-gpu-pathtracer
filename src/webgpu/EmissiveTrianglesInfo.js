@@ -63,12 +63,12 @@ export class EmissiveTrianglesInfo {
 		objectInfos.forEach( info => {
 
 			const { objectIndex, primitiveOffset, primitiveCount } = info;
-			const luminance = getEmissiveLuminance( bvhData.getRecordMaterial( objectIndex ) );
-			if ( luminance > 0 ) {
+			const luminance = getEmissiveLuminance( bvhData.getMaterial( info ) );
+			if ( luminance > 0 && bvhData.isRecordVisible( objectIndex ) ) {
 
 				objectsBuffer[ objectIndex * 2 ] = count + 1;
 				objectsBuffer[ objectIndex * 2 + 1 ] = primitiveOffset;
-				emissiveObjects.push( { info, luminance } );
+				emissiveObjects.push( { objectIndex, luminance } );
 				count += primitiveCount;
 
 			}
@@ -76,17 +76,18 @@ export class EmissiveTrianglesInfo {
 		} );
 
 		// write the list of triangles
+		// TODO: point the tree's leaves at the bvh's geometry data instead so it isn't duplicated here
 		const trianglesBuffer = new Uint32Array( count * 4 );
 		const trianglesFloat32 = new Float32Array( trianglesBuffer.buffer );
 		const bounds = new Float32Array( count * 6 );
 		const powers = new Float32Array( count );
 		let listIndex = 0;
-		emissiveObjects.forEach( ( { info, luminance } ) => {
+		emissiveObjects.forEach( ( { objectIndex, luminance } ) => {
 
-			bvhData.forEachTriangle( info, ( triangle, triangleIndex ) => {
+			bvhData.forEachTriangle( objectIndex, ( triangle, triangleIndex ) => {
 
 				const area = triangle.getArea();
-				trianglesBuffer[ listIndex * 4 ] = info.objectIndex;
+				trianglesBuffer[ listIndex * 4 ] = objectIndex;
 				trianglesBuffer[ listIndex * 4 + 1 ] = triangleIndex;
 				trianglesFloat32[ listIndex * 4 + 3 ] = area;
 				powers[ listIndex ] = area * luminance;
@@ -104,7 +105,7 @@ export class EmissiveTrianglesInfo {
 		let treeBuffer = new Float32Array( 0 );
 		if ( count > 0 ) {
 
-			const { nodesBuffer, triangleLeaves } = new LightTreeBVH( bounds ).packNodesBuffer( powers );
+			const { nodesBuffer, triangleLeaves } = new LightTreeBVH( bounds, powers ).packNodesBuffer();
 			triangleLeaves.forEach( ( leafNode, i ) => trianglesBuffer[ i * 4 + 2 ] = leafNode );
 			treeBuffer = nodesBuffer;
 

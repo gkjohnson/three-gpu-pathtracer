@@ -19,11 +19,12 @@ const LINK_OFFSET = 7;
 // TODO: use BVHComputeData instead once it supports per-node data (three-mesh-bvh#988)
 export class LightTreeBVH extends BVH {
 
-	constructor( triangleBounds ) {
+	constructor( triangleBounds, trianglePowers ) {
 
 		super();
 
 		this.triangleBounds = triangleBounds;
+		this.trianglePowers = trianglePowers;
 
 		// the triangle indices, which the build sorts into leaf order
 		this.primitiveBuffer = new Uint32Array( triangleBounds.length / 6 ).map( ( value, i ) => i );
@@ -57,8 +58,9 @@ export class LightTreeBVH extends BVH {
 	}
 
 	// Packs the nodes with the total power of their triangles. Returns the packed nodes and each triangle's leaf node index
-	packNodesBuffer( trianglePowers ) {
+	packNodesBuffer() {
 
+		const { trianglePowers, primitiveBuffer } = this;
 		const root = this._roots[ 0 ];
 		const bvhFloat32 = new Float32Array( root );
 		const bvhUint32 = new Uint32Array( root );
@@ -84,7 +86,7 @@ export class LightTreeBVH extends BVH {
 			if ( isLeaf ) {
 
 				const primitiveOffset = bvhUint32[ source + BVH_OFFSET_WORD ];
-				const triangle = this.primitiveBuffer[ primitiveOffset ];
+				const triangle = primitiveBuffer[ primitiveOffset ];
 				nodesBuffer[ target + POWER_OFFSET ] = trianglePowers[ triangle ];
 				nodesBuffer[ target + LINK_OFFSET ] = - ( triangle + 1 );
 				triangleLeaves[ triangle ] = node;

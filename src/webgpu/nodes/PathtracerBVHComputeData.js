@@ -658,26 +658,28 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
-	// returns the material of an object record, or null if the object is hidden
-	getRecordMaterial( objectIndex ) {
+	// returns the material associated with the bvh group
+	getMaterial( { object, group } ) {
+
+		const { material, geometry } = object;
+		return Array.isArray( material ) ? material[ geometry.groups[ group ].materialIndex ] : material;
+
+	}
+
+	// returns whether the object record is visible
+	isRecordVisible( objectIndex ) {
 
 		const records = this.storage.objects.proxyNode.value.array;
-		const recordOffset = objectIndex * objectRecordStruct.getLength();
-		if ( records[ recordOffset + RECORD_VISIBLE_WORD ] === 0 ) {
-
-			return null;
-
-		}
-
-		return this.shadingModel.materials[ records[ recordOffset + RECORD_MATERIAL_INDEX_WORD ] ];
+		return records[ objectIndex * objectRecordStruct.getLength() + RECORD_VISIBLE_WORD ] !== 0;
 
 	}
 
 	// calls back with each triangle of an object in world space and the triangle's index
-	forEachTriangle( info, callback ) {
+	// TODO: use "getObjectInfoAt" once it's released in three-mesh-bvh
+	forEachTriangle( objectIndex, callback ) {
 
 		const { storage, attributeLayout } = this;
-		const { objectIndex, indexOffset, attributesOffset, primitiveOffset, primitiveCount } = info;
+		const { indexOffset, attributesOffset, primitiveOffset, primitiveCount } = this._getObjectInfoAt( objectIndex );
 		const indices = storage.geometry.proxyNode.value.array;
 		const attributes = new Float32Array( indices.buffer, indices.byteOffset, indices.length );
 		const records = storage.objects.proxyNode.value.array;
@@ -704,21 +706,12 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// write material data to the object record
 		const { shadingModel } = this;
-		const { object, instanceId, group } = info;
-
-		// get the material associated with the bvh group
-		let material = object.material;
-		if ( Array.isArray( material ) ) {
-
-			const { materialIndex } = object.geometry.groups[ group ];
-			material = material[ materialIndex ];
-
-		}
+		const { object, instanceId } = info;
 
 		const recordOffset = writeOffset * objectRecordStruct.getLength();
 		const recordBufferU32 = new Uint32Array( targetBuffer );
 
-		const index = shadingModel.getMaterialIndex( material );
+		const index = shadingModel.getMaterialIndex( this.getMaterial( info ) );
 		if ( index === - 1 ) {
 
 			// hide the object when there is no material
