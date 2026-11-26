@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer, WebGLPathTracer: Materials without a "color" field, such as NodeMaterial and ShaderMaterial, throwing an error.
 - WebGPUPathTracer: "sheenRoughnessMap" being read from the red channel instead of alpha.
 - WebGPUPathTracer: Dark background and clear colors rendering darker than set, quantized to 8 bits.
+- WebGPUPathTracer: Fireflies around small bright areas of the environment map, which is now importance sampled with the bilinear filtering it's read with.
 - WebGPUPathTracer: Pixels staying flagged as active after a smaller frame budget drops their path.
 - WebGPUPathTracer: The triangles of a BatchedMesh's geometries being mixed together.
 - WebGPUPathTracer: "stableNoise" not always rendering the same noise.

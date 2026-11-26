@@ -1,7 +1,7 @@
 import { Matrix3, DataTexture, LinearFilter } from 'three/webgpu';
 import { texture, sampler, uniform, PI } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { EnvironmentCdfTexture } from './EnvironmentCdfTexture.js';
+import { EnvironmentCdfTexture, getEnvPatchFns } from './EnvironmentCdfTexture.js';
 import { readCdfFn, searchCdfFn } from './nodes/cdf.wgsl.js';
 import { environmentSampleStruct } from './nodes/structs.wgsl.js';
 import { equirectDirectionToUvFn, equirectUvToDirectionFn } from './nodes/sampling.wgsl.js';
@@ -58,28 +58,41 @@ export class EquirectHdrInfoNode {
 			intensityNode,
 		} = this;
 
-		// the sum of the map's pixel weights, the CDFs' last entry
+		const { getEdgeFn, getCornersFn } = getEnvPatchFns( mapNode, this.cdfTexture.wrapNode );
+
+		// the sum of the map's patch weights, the CDFs' last entry
 		this.getTotalSum = wgslTagFn/* wgsl */`
 			fn getEnvTotalSum() -> f32 {
 
 				let resolution = textureDimensions( ${ mapNode } );
-				return ${ readCdfFn }( ${ cdfTextureNode }, resolution.y + 1u + resolution.y * ( resolution.x + 1u ) );
+				return ${ readCdfFn }( ${ cdfTextureNode }, resolution.y + 2u + ( resolution.y + 1u ) * ( resolution.x + 2u ) );
 
 			}
 		`;
 
-		// the solid angle pdf of a direction at "v" in the given pixel, which is sampled uniformly over its area
-		const getTexelPdfFn = wgslTagFn/* wgsl */`
-			fn getEnvTexelPdf( texel: vec2u, v: f32 ) -> f32 {
+		// places a [0, 1) sample in proportion to the linear function from "a" to "b", from pbrt-v4's "SampleLinear"
+		const sampleLinearFn = wgslTagFn/* wgsl */`
+			fn sampleEnvLinear( u: f32, a: f32, b: f32 ) -> f32 {
 
-				let resolution = textureDimensions( ${ mapNode } );
-				let rowOffset = resolution.y + 1u + texel.y * ( resolution.x + 1u );
-				let rowPdf = ${ readCdfFn }( ${ cdfTextureNode }, texel.y + 1u ) - ${ readCdfFn }( ${ cdfTextureNode }, texel.y );
-				let pixelPdf = ${ readCdfFn }( ${ cdfTextureNode }, rowOffset + texel.x + 1u ) - ${ readCdfFn }( ${ cdfTextureNode }, rowOffset + texel.x );
+				let denominator = a + sqrt( mix( a * a, b * b, u ) );
+				return select( u, min( u * ( a + b ) / denominator, 0.99999994 ), denominator > 0.0 );
 
-				// the equirect projection stretches each pixel by 1 / sin( theta ) over the sphere
-				let sinTheta = sin( ${ PI } * v );
-				return select( 0.0, rowPdf * pixelPdf * f32( resolution.x * resolution.y ) / ( 2.0 * ${ PI } * ${ PI } * sinTheta ), sinTheta > 0.0 );
+			}
+		`;
+
+		// the solid angle pdf of a direction at "uv", at "local" within the patch with the given corner weights
+		const getPatchPdfFn = wgslTagFn/* wgsl */`
+			fn getEnvPatchPdf( corners: vec4f, local: vec2f, uv: vec2f ) -> f32 {
+
+				// the bilinear weight over the total is the pdf over the map in texels
+				let weight = mix( mix( corners.x, corners.y, local.x ), mix( corners.z, corners.w, local.x ), local.y );
+				let total = ${ this.getTotalSum }();
+				let resolution = vec2f( textureDimensions( ${ mapNode } ) );
+
+				// the equirect projection stretches the map by 1 / sin( theta ) over the sphere
+				let sinTheta = sin( ${ PI } * uv.y );
+				let isValid = sinTheta > 0.0 && total > 0.0;
+				return select( 0.0, weight * resolution.x * resolution.y / ( total * 2.0 * ${ PI } * ${ PI } * sinTheta ), isValid );
 
 			}
 		`;
@@ -101,22 +114,31 @@ export class EquirectHdrInfoNode {
 
 				var result: ${ environmentSampleStruct };
 
-				// search the CDFs: marginal picks the row (v), conditional picks the column (u), and the
-				// fractions place the sample within the pixel
+				// search the CDFs: marginal picks the patch row (v), conditional picks the patch in it (u), and
+				// the fractions place the sample within the patch in proportion to its bilinear weight
 				let resolution = textureDimensions( ${ mapNode } );
 				var rowFraction = 0.0;
 				var columnFraction = 0.0;
-				let row = ${ searchCdfFn }( ${ cdfTextureNode }, r.x, 0u, resolution.y, &rowFraction );
-				let column = ${ searchCdfFn }( ${ cdfTextureNode }, r.y, resolution.y + 1u + row * ( resolution.x + 1u ), resolution.x, &columnFraction );
-				let texel = vec2u( column, row );
-				let uv = ( vec2f( texel ) + vec2f( columnFraction, rowFraction ) ) / vec2f( resolution );
+				let row = ${ searchCdfFn }( ${ cdfTextureNode }, r.x, 0u, resolution.y + 1u, &rowFraction );
+				let column = ${ searchCdfFn }( ${ cdfTextureNode }, r.y, resolution.y + 2u + row * ( resolution.x + 2u ), resolution.x + 1u, &columnFraction );
+				let cell = vec2u( column, row );
+
+				// the row within the patch from the bilinear marginal, then the column from the conditional at it
+				let corners = ${ getCornersFn }( cell );
+				var local: vec2f;
+				local.y = ${ sampleLinearFn }( rowFraction, corners.x + corners.y, corners.z + corners.w );
+				local.x = ${ sampleLinearFn }( columnFraction, mix( corners.x, corners.z, local.y ), mix( corners.y, corners.w, local.y ) );
+
+				let start = ${ getEdgeFn }( cell );
+				let end = ${ getEdgeFn }( cell + vec2u( 1u ) );
+				let uv = mix( start, end, local ) / vec2f( resolution );
 
 				let direction = ${ equirectUvToDirectionFn }( uv );
 				let color = textureSampleLevel( ${ mapNode }, ${ mapSampler }, uv, 0 ).rgb;
 
 				result.direction = transpose( ${ rotationNode } ) * direction;
 				result.color = color * ${ intensityNode };
-				result.pdf = ${ getTexelPdfFn }( texel, uv.y );
+				result.pdf = ${ getPatchPdfFn }( corners, local, uv );
 
 				return result;
 
@@ -142,12 +164,17 @@ export class EquirectHdrInfoNode {
 
 				}
 
+				// the patch holding the direction, and where in it the direction falls
 				let rotatedDir = ${ rotationNode } * direction;
 				let mapUv = ${ equirectDirectionToUvFn }( rotatedDir );
 				let resolution = textureDimensions( ${ mapNode } );
-				let texel = min( vec2u( mapUv * vec2f( resolution ) ), resolution - 1u );
+				let position = mapUv * vec2f( resolution );
+				let cell = min( vec2u( position + 0.5 ), resolution );
+				let start = ${ getEdgeFn }( cell );
+				let end = ${ getEdgeFn }( cell + vec2u( 1u ) );
+				let local = saturate( ( position - start ) / ( end - start ) );
 
-				return ${ getTexelPdfFn }( texel, mapUv.y );
+				return ${ getPatchPdfFn }( ${ getCornersFn }( cell ), local, mapUv );
 
 			}
 		`;
