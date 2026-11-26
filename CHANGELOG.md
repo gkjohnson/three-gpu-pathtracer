@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: The megakernel indexes each pixel's random sequence by its own sample count, as the wavefront does.
 - WebGPUPathTracer: The megakernel measures its sample counts on the GPU, as the wavefront does.
 - WebGPUPathTracer: Random samples only compute the Sobol dimensions they use, so the megakernel renders up to 5% faster.
+- WebGPUPathTracer: The fog code is only compiled into the kernels when a material uses fog, so scenes without fog render faster.
 
 ### Removed
 - WebGPUPathTracer: "setSceneAsync". Use "setScene", which uses the workers when they're set.
