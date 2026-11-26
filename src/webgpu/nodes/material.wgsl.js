@@ -1,3 +1,4 @@
+import { ColorManagement, LinearSRGBColorSpace } from 'three/webgpu';
 import { wgslFn, mat3 } from 'three/tsl';
 import {
 	inverseMat3x3Func,
@@ -767,41 +768,57 @@ export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
 `;
 
+// Wyman, Sloan and Shirley's multi-lobe fit of the CIE 1931 color matching functions, each lobe
+// [ amplitude, center in nm, inverse width below the center, inverse width above it ]:
+// https://jcgt.org/published/0002/02/01/
+const CIE_X_LOBES = [ [ 0.362, 442.0, 0.0624, 0.0374 ], [ 1.056, 599.8, 0.0264, 0.0323 ], [ - 0.065, 501.1, 0.0490, 0.0382 ] ];
+const CIE_Y_LOBES = [ [ 0.821, 568.8, 0.0213, 0.0247 ], [ 0.286, 530.9, 0.0613, 0.0322 ] ];
+const CIE_Z_LOBES = [ [ 1.217, 437.0, 0.0845, 0.0278 ], [ 0.681, 459.0, 0.0385, 0.0725 ] ];
+
+const XYZ_TO_LINEAR_REC709 = mat3( ColorManagement.spaces[ LinearSRGBColorSpace ].fromXYZ );
+
+// 1 / the average of each linear Rec. 709 channel of the fit over the sampled wavelengths, so each channel's weight
+// averages to one
+const DISPERSION_RGB_NORMALIZATION = [ 2.2719377, 3.4647771, 3.6605261 ];
+
+const cieLobeFunc = wgslFn( /* wgsl */ `
+
+	fn cieLobe( lambda: f32, center: f32, widthBelow: f32, widthAbove: f32 ) -> f32 {
+
+		let t = ( lambda - center ) * select( widthAbove, widthBelow, lambda < center );
+		return exp( - 0.5 * t * t );
+
+	}
+
+` );
+
+// the sum of a color matching function's lobes at "lambda"
+const sumCieLobes = lobes => lobes
+	.map( ( [ amplitude, center, widthBelow, widthAbove ] ) => `${ amplitude } * cieLobe( lambda, ${ center }, ${ widthBelow }, ${ widthAbove } )` )
+	.join( ' + ' );
+
 // A path keeps one sampled hero wavelength after its first dispersive interaction.
 // The CIE 1931 fit is converted to linear Rec. 709, clamped to the RGB gamut, and normalized so
 // every channel has an expected weight of one over the wavelength range, then divided by the sampling pdf.
 // This preserves the expected value of the renderer's existing RGB throughput while providing
 // continuous hues. The renderer still uses RGB material and light data rather than spectral data.
-// CIE fit: https://jcgt.org/published/0002/02/01/
 // Hero wavelength sampling:
 // https://pbr-book.org/4ed/Textures_and_Materials/Material_Interface_and_Implementations.html#sec:dielectric-material
 // https://doi.org/10.1111/cgf.12419
 export const dispersionColorWeightFunc = wgslTagFn/* wgsl */ `
 
+	${ [ cieLobeFunc ] }
 	fn dispersionColorWeight( wavelength: f32 ) -> vec3f {
 
 		let lambda = clamp( wavelength, ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0 );
+		let xyz = vec3f(
+			${ sumCieLobes( CIE_X_LOBES ) },
+			${ sumCieLobes( CIE_Y_LOBES ) },
+			${ sumCieLobes( CIE_Z_LOBES ) },
+		);
 
-		let x1 = ( lambda - 442.0 ) * select( 0.0374, 0.0624, lambda < 442.0 );
-		let x2 = ( lambda - 599.8 ) * select( 0.0323, 0.0264, lambda < 599.8 );
-		let x3 = ( lambda - 501.1 ) * select( 0.0382, 0.0490, lambda < 501.1 );
-		let x = 0.362 * exp( - 0.5 * x1 * x1 ) + 1.056 * exp( - 0.5 * x2 * x2 ) - 0.065 * exp( - 0.5 * x3 * x3 );
-
-		let y1 = ( lambda - 568.8 ) * select( 0.0247, 0.0213, lambda < 568.8 );
-		let y2 = ( lambda - 530.9 ) * select( 0.0322, 0.0613, lambda < 530.9 );
-		let y = 0.821 * exp( - 0.5 * y1 * y1 ) + 0.286 * exp( - 0.5 * y2 * y2 );
-
-		let z1 = ( lambda - 437.0 ) * select( 0.0278, 0.0845, lambda < 437.0 );
-		let z2 = ( lambda - 459.0 ) * select( 0.0725, 0.0385, lambda < 459.0 );
-		let z = 1.217 * exp( - 0.5 * z1 * z1 ) + 0.681 * exp( - 0.5 * z2 * z2 );
-
-		let linearRgb = max( vec3f(
-			3.2404542 * x - 1.5371385 * y - 0.4985314 * z,
-			- 0.9692660 * x + 1.8760108 * y + 0.0415560 * z,
-			0.0556434 * x - 0.2040259 * y + 1.0572252 * z,
-		), vec3f( 0.0 ) );
-
-		return linearRgb * vec3f( 2.2722934, 3.4646886, 3.6596387 ) / ${ dispersionWavelengthPdfFunc }( lambda );
+		let linearRgb = max( ${ XYZ_TO_LINEAR_REC709 } * xyz, vec3f( 0.0 ) );
+		return linearRgb * vec3f( ${ DISPERSION_RGB_NORMALIZATION.join( ', ' ) } ) / ${ dispersionWavelengthPdfFunc }( lambda );
 
 	}
 
@@ -833,12 +850,6 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
 `, [ schlickFresnelVecFunc, iorToF0Func, totalInternalReflectionFunc ] );
 
-const XYZ_TO_REC709 = mat3(
-	3.2404542, - 0.9692660, 0.0556434,
-	- 1.5371385, 1.8760108, - 0.2040259,
-	- 0.4985314, 0.0415560, 1.0572252,
-);
-
 const evalSensitivityFunc = wgslTagFn/* wgsl */`
 
 	fn evalSensitivity( OPD: f32, shift: vec3f ) -> vec3f {
@@ -852,7 +863,7 @@ const evalSensitivityFunc = wgslTagFn/* wgsl */`
 		xyz.x += 9.7470e-14 * sqrt(2.0 * ${ Math.PI } * 4.5282e+09) * cos(2.2399e+06 * phase + shift.x) * exp(-4.5282e+09 * phase * phase);
 		xyz /= 1.0685e-7;
 
-		let rgb = ${ XYZ_TO_REC709 } * xyz;
+		let rgb = ${ XYZ_TO_LINEAR_REC709 } * xyz;
 		return rgb;
 
 	}
