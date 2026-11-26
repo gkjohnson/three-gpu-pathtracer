@@ -1,12 +1,11 @@
 import { uint, float, wgsl, wgslFn } from 'three/tsl';
-import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, wgslTagCode } from 'three-mesh-bvh/webgpu';
 
 // References
 // - https://jcgt.org/published/0009/04/01/
 // - Code from https://www.shadertoy.com/view/WtGyDm
 // Ported from WebGL version at sobol.glsl.js
 
-const SOBOL_MAX_POINTS = uint( 256 * 256 );
 const SOBOL_FACTOR = float( 1.0 / 16777216.0 );
 
 const sobolConstants = wgsl( /* wgsl */ `
@@ -148,29 +147,56 @@ const sobolScrambleNodesGenerator = ( dim = 1 ) => {
 // 1-dimensional vector = f32
 const sobolNodes = Array.from( { length: 5 }, ( _, i ) => sobolScrambleNodesGenerator( i ) );
 
-const generateSobolPointFunc = wgslTagFn/* wgsl */`
-  	${ [ sobolConstants ] }
-	fn generateSobolPoint( id: u32 ) -> vec4f {
+// Generates the first "dim" sobol dimensions of the point, so a sample only builds the dimensions it uses.
+const sobolPointGenerator = dim => {
 
-		var index = id;
-		if ( index >= ${ SOBOL_MAX_POINTS } ) {
+	const ftype = dim > 1 ? `vec${ dim }f` : 'f32';
+	const dimension = directions => wgslTagCode/* wgsl */`f32( ${ sobolNodes[ 1 ].reverseBits }( ${ getMaskedSobolFunc }( index, ${ directions } ) ) & 0x00ffffffu )`;
 
-			index = index % ${ SOBOL_MAX_POINTS };
-			// return vec4( 0.0 );
+	let point;
+	if ( dim === 1 ) {
 
-		}
+		point = dimension( 'SOBOL_DIRECTIONS_1' );
 
-		// NOTE: this sobol "direction" is also available but we can't write out 5 components
-		// uint x = index & 0x00ffffffu;
-		let x = ${ sobolNodes[ 1 ].reverseBits }( ${ getMaskedSobolFunc }( index, SOBOL_DIRECTIONS_1 ) ) & 0x00ffffffu;
-		let y = ${ sobolNodes[ 1 ].reverseBits }( ${ getMaskedSobolFunc }( index, SOBOL_DIRECTIONS_2 ) ) & 0x00ffffffu;
-		let z = ${ sobolNodes[ 1 ].reverseBits }( ${ getMaskedSobolFunc }( index, SOBOL_DIRECTIONS_3 ) ) & 0x00ffffffu;
-		let w = ${ sobolNodes[ 1 ].reverseBits }( ${ getMaskedSobolFunc }( index, SOBOL_DIRECTIONS_4 ) ) & 0x00ffffffu;
+	} else if ( dim === 2 ) {
 
-		return vec4( f32( x ), f32( y ), f32( z ), f32( w ) ) * ${ SOBOL_FACTOR };
+		point = wgslTagCode/* wgsl */`vec2f(
+			${ dimension( 'SOBOL_DIRECTIONS_1' ) },
+			${ dimension( 'SOBOL_DIRECTIONS_2' ) },
+		)`;
+
+	} else if ( dim === 3 ) {
+
+		point = wgslTagCode/* wgsl */`vec3f(
+			${ dimension( 'SOBOL_DIRECTIONS_1' ) },
+			${ dimension( 'SOBOL_DIRECTIONS_2' ) },
+			${ dimension( 'SOBOL_DIRECTIONS_3' ) },
+		)`;
+
+	} else {
+
+		point = wgslTagCode/* wgsl */`vec4f(
+			${ dimension( 'SOBOL_DIRECTIONS_1' ) },
+			${ dimension( 'SOBOL_DIRECTIONS_2' ) },
+			${ dimension( 'SOBOL_DIRECTIONS_3' ) },
+			${ dimension( 'SOBOL_DIRECTIONS_4' ) },
+		)`;
 
 	}
-`;
+
+	return wgslTagFn/* wgsl */`
+		${ [ sobolConstants ] }
+		fn generateSobolPoint${ dim }( index: u32 ) -> ${ ftype } {
+
+			return ${ point } * ${ SOBOL_FACTOR };
+
+		}
+	`;
+
+};
+
+// 0th entry is intentionally empty, like "sobolNodes"
+const generateSobolPointFuncs = Array.from( { length: 5 }, ( _, i ) => i > 0 ? sobolPointGenerator( i ) : null );
 
 const sobolHashFunc = wgslFn( /* wgsl */ `
 	fn sobolHash( in: u32 ) -> u32 {
@@ -206,7 +232,7 @@ const sobolGetSeedFunc = wgslTagFn/* wgsl */`
 	}
 `;
 
-const sobolGenerator = ( dim = 1, sobolPointFunc = generateSobolPointFunc ) => {
+const sobolGenerator = ( dim = 1 ) => {
 
 	if ( dim <= 0 ) {
 
@@ -217,21 +243,17 @@ const sobolGenerator = ( dim = 1, sobolPointFunc = generateSobolPointFunc ) => {
 	const utype = dim > 1 ? `vec${ dim }u` : 'u32';
 	const ftype = dim > 1 ? `vec${ dim }f` : 'f32';
 
-	let components = '.r';
 	let combineValues = '1u';
 	if ( dim === 2 ) {
 
-		components = '.rg';
 		combineValues = 'vec2( 1u, 2u )';
 
 	} else if ( dim === 3 ) {
 
-		components = '.rgb';
 		combineValues = 'vec3( 1u, 2u, 3u )';
 
 	} else if ( dim === 4 ) {
 
-		components = '';
 		combineValues = 'vec4( 1u, 2u, 3u, 4u )';
 
 	}
@@ -244,7 +266,7 @@ const sobolGenerator = ( dim = 1, sobolPointFunc = generateSobolPointFunc ) => {
 
 			let shuffle_seed = ${ sobolNodes[ 1 ].hashCombine }( seed, 0u );
 			let shuffled_index = ${ sobolNodes[ 1 ].scramble }( ${ sobolNodes[ 1 ].reverseBits }( index ), shuffle_seed );
-			let sobol_pt = ${ sobolPointFunc }( shuffled_index )${ components };
+			let sobol_pt = ${ generateSobolPointFuncs[ dim ] }( shuffled_index );
 			var result = ${ utype }( sobol_pt * 16777216.0 );
 
 			let seed2 = ${ sobolNodes[ dim ].hashCombine }( seed, ${ combineValues } );
