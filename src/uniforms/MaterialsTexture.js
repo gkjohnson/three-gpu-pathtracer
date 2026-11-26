@@ -19,6 +19,12 @@ export class MaterialFeatures {
 
 	}
 
+	getUsedFeatures() {
+
+		return Object.keys( this._features );
+
+	}
+
 	setUsed( feature, used = true ) {
 
 		if ( used === false ) {

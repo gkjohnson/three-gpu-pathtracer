@@ -249,11 +249,11 @@ export class ShadingModel {
 	updateFeatures() {
 
 		const { features } = this;
-		const before = Object.keys( features._features ).sort().join();
+		const before = features.getUsedFeatures().sort().join();
 		features.reset();
 		this.materials.forEach( material => this.detectFeatures( material, features ) );
 
-		return Object.keys( features._features ).sort().join() !== before;
+		return features.getUsedFeatures().sort().join() !== before;
 
 	}
 
