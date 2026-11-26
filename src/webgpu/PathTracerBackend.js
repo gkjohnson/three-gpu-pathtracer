@@ -50,8 +50,13 @@ export class PathTracerBackend {
 		// whether the kernels are compiling, during which nothing renders
 		this.compiling = false;
 
-		// the gpu time of the last timed update and the budget it ran with. "count" increments per measurement
-		this.timing = { count: 0, frameTime: 0, frameBudget: 0 };
+		// the gpu time of the last timed update, the budget it ran with and the work it did in the budget's units.
+		// "count" increments per measurement
+		this.timing = { count: 0, frameTime: 0, frameBudget: 0, frameWork: 0 };
+
+		// the work dispatched in the current update, for backends whose work differs from the budget. Zero
+		// means the update did as much as the budget
+		this._updateWork = 0;
 
 		this._renderTask = null;
 		this._compileState = new WeakMap();
@@ -250,12 +255,13 @@ export class PathTracerBackend {
 		// time this update unless the last measurement is still reading back
 		const timed = renderer.backend.trackTimestamp && ! this._timingFrame;
 		this._timestampUIDs = timed ? [] : null;
+		this._updateWork = 0;
 		this._renderTask.next();
 
 		// an update that dispatched nothing, such as one waiting on kernels to compile, isn't kept
 		if ( timed && this._timestampUIDs.length > 0 ) {
 
-			this._measureFrameTime( this._timestampUIDs );
+			this._measureFrameTime( this._timestampUIDs, this._updateWork || this.frameBudget );
 
 		}
 
@@ -273,7 +279,7 @@ export class PathTracerBackend {
 	}
 
 	// Reads back the gpu time of an update's dispatches into "timing"
-	async _measureFrameTime( uids ) {
+	async _measureFrameTime( uids, work ) {
 
 		// what the update ran with, read before the readback since it may change meanwhile
 		const { renderer, timing, frameBudget } = this;
@@ -292,6 +298,7 @@ export class PathTracerBackend {
 
 		timing.frameTime = uids.reduce( ( sum, uid ) => sum + backend.getTimestamp( uid ), 0 );
 		timing.frameBudget = frameBudget;
+		timing.frameWork = work;
 		timing.count ++;
 
 	}

@@ -176,6 +176,11 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 					kernel.offset.set( x, y ).multiply( tileSize );
 					this.dispatch( kernel, dispatchSize );
 
+					// the pixels the tile covers, since the tiles and samples per update round the budget
+					const tileWidth = Math.min( tileSize.x, _size.x - kernel.offset.x );
+					const tileHeight = Math.min( tileSize.y, _size.y - kernel.offset.y );
+					this._updateWork += Math.max( tileWidth, 0 ) * Math.max( tileHeight, 0 );
+
 					updateDispatches ++;
 					if ( updateDispatches >= updateSamples ) {
 
