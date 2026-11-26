@@ -13,6 +13,7 @@ import { dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { getShadowRayFn } from '../../nodes/lights.wgsl.js';
+import { ifFeature } from '../../nodes/features.js';
 
 // Pure material evaluation: live slots evaluate the vertex staged by LogicKernel, a surface or a scatter event in
 // fog, sample the next direction, and enqueue the next bounce ray plus the NEE shadow ray toward the light
@@ -83,7 +84,10 @@ export class MaterialKernel extends ComputeKernel {
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( ${ params.globalSeed }, indexUV, input.sampleIndex, rngIndex );
-				let scatterDist = ${ sampleFogDistanceFn }( medium, throughput, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+				var scatterDist = 0.0;
+				${ ifFeature( 'FOG' )/* wgsl */`
+					scatterDist = ${ sampleFogDistanceFn }( medium, throughput, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+				` }
 
 				var queuedRay: ${ traceQueuedRayStruct };
 				queuedRay.origin = origin;
@@ -154,19 +158,22 @@ export class MaterialKernel extends ComputeKernel {
 					var fogBounces = input.fogBounces;
 					var isTerminated = false;
 
-					if ( input.fogScatter != 0u ) {
+					// without fog the surface branch below is a plain block
+					${ ifFeature( 'FOG' )/* wgsl */`
+						if ( input.fogScatter != 0u ) {
 
-						// A scatter event in fog, staged at "origin" by LogicKernel. The phase function is its own pdf, so a
-						// sample's weight is one. Out of fog bounces the path ends here, keeping the light sampled at it
-						lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, input.lightDirection ), medium.anisotropy );
-						lightEvalColor = vec3f( lightEvalPdf );
-						scatterRec.direction = ${ sampleHenyeyGreensteinFn }( input.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
-						scatterRec.pdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, scatterRec.direction ), medium.anisotropy );
-						scatterRec.color = vec3f( scatterRec.pdf );
-						isTerminated = fogBounces >= maxFogBounces;
-						fogBounces ++;
+							// A scatter event in fog, staged at "origin" by LogicKernel. The phase function is its own pdf, so a
+							// sample's weight is one. Out of fog bounces the path ends here, keeping the light sampled at it
+							lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, input.lightDirection ), medium.anisotropy );
+							lightEvalColor = vec3f( lightEvalPdf );
+							scatterRec.direction = ${ sampleHenyeyGreensteinFn }( input.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+							scatterRec.pdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, scatterRec.direction ), medium.anisotropy );
+							scatterRec.color = vec3f( scatterRec.pdf );
+							isTerminated = fogBounces >= maxFogBounces;
+							fogBounces ++;
 
-					} else {
+						} else
+					` } {
 
 						let objectInfo = ${ objectsStorage }[ u32( input.hit.objectIndex ) ];
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
@@ -202,8 +209,7 @@ export class MaterialKernel extends ComputeKernel {
 						// Stochastically pass through partially transparent surfaces by re-enqueueing
 						// the ray at the hit point, advancing the alpha depth but not the bounce count. A
 						// fog volume's boundary is always passed, entering or leaving its volume
-						let isFogBoundary = materialMedium.fogVolume;
-						let passesThrough = isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
+						let passesThrough = ${ ifFeature( 'FOG' )/* wgsl */`materialMedium.fogVolume ||` } ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
 						if ( passesThrough ) {
 
 							// out of transparent bounces, so stop rather than shading a surface that
@@ -218,24 +224,26 @@ export class MaterialKernel extends ComputeKernel {
 
 							}
 
-							if ( isFogBoundary ) {
+							${ ifFeature( 'FOG' )/* wgsl */`
+								if ( materialMedium.fogVolume ) {
 
-								var stack = medium.stack;
-								if ( input.hit.side > 0.0 ) {
+									var stack = medium.stack;
+									if ( input.hit.side > 0.0 ) {
 
-									${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
+										${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
 
-								} else {
+									} else {
 
-									${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
+										${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
+
+									}
+
+									// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
+									medium = ${ getCombinedMediumFn }( stack );
+									${ params.rayDataStorage }[ index ].medium = medium;
 
 								}
-
-								// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
-								medium = ${ getCombinedMediumFn }( stack );
-								${ params.rayDataStorage }[ index ].medium = medium;
-
-							}
+							` }
 
 							let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.hit.normal );
 							if ( medium.subsurface != 0u ) {
