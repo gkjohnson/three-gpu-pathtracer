@@ -628,8 +628,45 @@ export const thinWallTransmissionRoughnessFunc = wgslFn( /* wgsl */ `
 // Continuous Cauchy IOR approximation derived from the Fraunhofer C, d, and F spectral lines:
 // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_dispersion
 // https://github.com/bsdorra/slang-pbr/blob/c12046ec3b9628bcfc384ed2c275c92d007e5d7e/src/models/enterprise/components/transmission.slang#L20-L27
-export const DISPERSION_MIN_WAVELENGTH = 360;
-export const DISPERSION_MAX_WAVELENGTH = 830;
+export const DISPERSION_MIN_WAVELENGTH = 380;
+export const DISPERSION_MAX_WAVELENGTH = 780;
+
+// Wavelengths in nm are importance sampled in proportion to their luminance under D65 light, so few samples land
+// in the dim violet and red ends. The distribution is Cycles' logistic fit over 380 to 780 nm:
+// https://projects.blender.org/blender/blender/src/branch/main/intern/cycles/kernel/util/colorspace.h
+const WAVELENGTH_FIT = /* wgsl */`
+	const WAVELENGTH_FIT_A = 21.71348444564851;
+	const WAVELENGTH_FIT_X0 = 0.5554867905834258;
+	const WAVELENGTH_FIT_Y0 = 0.021659159132699574;
+	const WAVELENGTH_FIT_N = 0.9707633294863183;
+`;
+
+export const sampleDispersionWavelengthFunc = wgslFn( /* wgsl */ `
+
+	fn sampleDispersionWavelength( rand: f32 ) -> f32 {
+
+		${ WAVELENGTH_FIT }
+		let r = WAVELENGTH_FIT_N * rand + WAVELENGTH_FIT_Y0;
+		let micrometers = - log( 1.0 / r - 1.0 ) / WAVELENGTH_FIT_A + WAVELENGTH_FIT_X0;
+		return clamp( 1000.0 * micrometers, ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0 );
+
+	}
+
+` );
+
+// The probability density of the sampled wavelength, relative to sampling the range uniformly
+const dispersionWavelengthPdfFunc = wgslFn( /* wgsl */ `
+
+	fn dispersionWavelengthPdf( wavelength: f32 ) -> f32 {
+
+		${ WAVELENGTH_FIT }
+		let cdf = 1.0 / ( 1.0 + exp( - WAVELENGTH_FIT_A * ( wavelength / 1000.0 - WAVELENGTH_FIT_X0 ) ) );
+		let range = ( ${ DISPERSION_MAX_WAVELENGTH }.0 - ${ DISPERSION_MIN_WAVELENGTH }.0 ) / 1000.0;
+		return WAVELENGTH_FIT_A * cdf * ( 1.0 - cdf ) * range / WAVELENGTH_FIT_N;
+
+	}
+
+` );
 
 export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
@@ -730,16 +767,16 @@ export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
 `;
 
-// A path keeps one uniformly sampled hero wavelength after its first dispersive interaction.
+// A path keeps one sampled hero wavelength after its first dispersive interaction.
 // The CIE 1931 fit is converted to linear Rec. 709, clamped to the RGB gamut, and normalized so
-// every channel has an expected weight of one over the uniformly sampled wavelength interval.
+// every channel has an expected weight of one over the wavelength range, then divided by the sampling pdf.
 // This preserves the expected value of the renderer's existing RGB throughput while providing
 // continuous hues. The renderer still uses RGB material and light data rather than spectral data.
 // CIE fit: https://jcgt.org/published/0002/02/01/
 // Hero wavelength sampling:
 // https://pbr-book.org/4ed/Textures_and_Materials/Material_Interface_and_Implementations.html#sec:dielectric-material
 // https://doi.org/10.1111/cgf.12419
-export const dispersionColorWeightFunc = wgslFn( /* wgsl */ `
+export const dispersionColorWeightFunc = wgslTagFn/* wgsl */ `
 
 	fn dispersionColorWeight( wavelength: f32 ) -> vec3f {
 
@@ -764,11 +801,11 @@ export const dispersionColorWeightFunc = wgslFn( /* wgsl */ `
 			0.0556434 * x - 0.2040259 * y + 1.0572252 * z,
 		), vec3f( 0.0 ) );
 
-		return linearRgb * vec3f( 2.6699448, 4.0708066, 4.2980494 );
+		return linearRgb * vec3f( 2.2722934, 3.4646886, 3.6596387 ) / ${ dispersionWavelengthPdfFunc }( lambda );
 
 	}
 
-` );
+`;
 
 // Dielectric layer fresnel operator that supports custom f0 color, specular weight.
 // Based on the specular color specification:
