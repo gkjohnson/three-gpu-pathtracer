@@ -58,14 +58,14 @@ export class EquirectHdrInfoNode {
 			intensityNode,
 		} = this;
 
-		const { getEdgeFn, getCornersFn } = getEnvPatchFns( mapNode, this.cdfTexture.wrapNode );
+		const { getRowEdgeFn, getCornersFn } = getEnvPatchFns( mapNode );
 
 		// the sum of the map's patch weights, the CDFs' last entry
 		this.getTotalSum = wgslTagFn/* wgsl */`
 			fn getEnvTotalSum() -> f32 {
 
 				let resolution = textureDimensions( ${ mapNode } );
-				return ${ readCdfFn }( ${ cdfTextureNode }, resolution.y + 2u + ( resolution.y + 1u ) * ( resolution.x + 2u ) );
+				return ${ readCdfFn }( ${ cdfTextureNode }, resolution.y + 2u + ( resolution.y + 1u ) * ( resolution.x + 1u ) );
 
 			}
 		`;
@@ -120,7 +120,7 @@ export class EquirectHdrInfoNode {
 				var rowFraction = 0.0;
 				var columnFraction = 0.0;
 				let row = ${ searchCdfFn }( ${ cdfTextureNode }, r.x, 0u, resolution.y + 1u, &rowFraction );
-				let column = ${ searchCdfFn }( ${ cdfTextureNode }, r.y, resolution.y + 2u + row * ( resolution.x + 2u ), resolution.x + 1u, &columnFraction );
+				let column = ${ searchCdfFn }( ${ cdfTextureNode }, r.y, resolution.y + 2u + row * ( resolution.x + 1u ), resolution.x, &columnFraction );
 				let cell = vec2u( column, row );
 
 				// the row within the patch from the bilinear marginal, then the column from the conditional at it
@@ -129,9 +129,12 @@ export class EquirectHdrInfoNode {
 				local.y = ${ sampleLinearFn }( rowFraction, corners.x + corners.y, corners.z + corners.w );
 				local.x = ${ sampleLinearFn }( columnFraction, mix( corners.x, corners.z, local.y ), mix( corners.y, corners.w, local.y ) );
 
-				let start = ${ getEdgeFn }( cell );
-				let end = ${ getEdgeFn }( cell + vec2u( 1u ) );
-				let uv = mix( start, end, local ) / vec2f( resolution );
+				// patches start at texel centers, wrapping around the seam
+				let position = vec2f(
+					f32( column ) + 0.5 + local.x,
+					mix( ${ getRowEdgeFn }( row ), ${ getRowEdgeFn }( row + 1u ), local.y ),
+				);
+				let uv = vec2f( fract( position.x / f32( resolution.x ) ), position.y / f32( resolution.y ) );
 
 				let direction = ${ equirectUvToDirectionFn }( uv );
 				let color = textureSampleLevel( ${ mapNode }, ${ mapSampler }, uv, 0 ).rgb;
@@ -158,23 +161,20 @@ export class EquirectHdrInfoNode {
 		this.getDirPdf = wgslTagFn/* wgsl */`
 			fn getEnvDirPdf( direction: vec3f ) -> f32 {
 
-				if ( ${ this.getTotalSum }() == 0.0 ) {
-
-					return 0.0;
-
-				}
-
-				// the patch holding the direction, and where in it the direction falls
+				// the patch holding the direction, and where in it the direction falls. Patches start at texel centers,
+				// wrapping around the seam
 				let rotatedDir = ${ rotationNode } * direction;
 				let mapUv = ${ equirectDirectionToUvFn }( rotatedDir );
 				let resolution = textureDimensions( ${ mapNode } );
-				let position = mapUv * vec2f( resolution );
-				let cell = min( vec2u( position + 0.5 ), resolution );
-				let start = ${ getEdgeFn }( cell );
-				let end = ${ getEdgeFn }( cell + vec2u( 1u ) );
-				let local = saturate( ( position - start ) / ( end - start ) );
+				let x = mapUv.x * f32( resolution.x ) - 0.5;
+				let y = mapUv.y * f32( resolution.y );
+				let column = u32( floor( x ) + f32( resolution.x ) ) % resolution.x;
+				let row = min( u32( y + 0.5 ), resolution.y );
+				let start = ${ getRowEdgeFn }( row );
+				let end = ${ getRowEdgeFn }( row + 1u );
+				let local = vec2f( x - floor( x ), saturate( ( y - start ) / ( end - start ) ) );
 
-				return ${ getPatchPdfFn }( ${ getCornersFn }( cell ), local, mapUv );
+				return ${ getPatchPdfFn }( ${ getCornersFn }( vec2u( column, row ) ), local, mapUv );
 
 			}
 		`;
