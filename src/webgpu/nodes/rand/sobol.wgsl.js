@@ -6,7 +6,6 @@ import { wgslTagFn, wgslTagCode } from 'three-mesh-bvh/webgpu';
 // - Code from https://www.shadertoy.com/view/WtGyDm
 // Ported from WebGL version at sobol.glsl.js
 
-const SOBOL_MAX_POINTS = uint( 256 * 256 );
 const SOBOL_FACTOR = float( 1.0 / 16777216.0 );
 
 const sobolConstants = wgsl( /* wgsl */ `
@@ -188,9 +187,8 @@ const sobolPointGenerator = dim => {
 
 	return wgslTagFn/* wgsl */`
 		${ [ sobolConstants ] }
-		fn generateSobolPoint${ dim }( id: u32 ) -> ${ ftype } {
+		fn generateSobolPoint${ dim }( index: u32 ) -> ${ ftype } {
 
-			let index = id % ${ SOBOL_MAX_POINTS };
 			return ${ point } * ${ SOBOL_FACTOR };
 
 		}
