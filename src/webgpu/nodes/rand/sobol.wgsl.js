@@ -148,7 +148,6 @@ const sobolScrambleNodesGenerator = ( dim = 1 ) => {
 const sobolNodes = Array.from( { length: 5 }, ( _, i ) => sobolScrambleNodesGenerator( i ) );
 
 // Generates the first "dim" sobol dimensions of the point, so a sample only builds the dimensions it uses.
-// NOTE: the "index & 0x00ffffffu" sobol dimension is also available but isn't used
 const sobolPointGenerator = dim => {
 
 	const ftype = dim > 1 ? `vec${ dim }f` : 'f32';
