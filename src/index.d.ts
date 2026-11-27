@@ -1,27 +1,16 @@
 import {
 	DataTexture,
 	RectAreaLight,
-	ShaderMaterial,
 	SpotLight,
 	Camera,
 	PerspectiveCamera,
 	MeshStandardMaterial,
-	Light,
-	Material,
-	Object3D,
-	Texture,
 	Vector2,
-	WebGLRenderer,
-	WebGLRenderTarget,
 	BufferGeometry,
 	Color,
-	ShaderMaterialParameters,
 	MeshStandardMaterialParameters,
 	Spherical,
-	Scene,
-	PMREMGenerator
 } from 'three';
-import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { MeshBVH, BVHOptions } from 'three-mesh-bvh';
 
 // three.js type augmentation
@@ -34,13 +23,13 @@ declare module 'three/src/materials/MeshStandardMaterial' {
 		 * Whether to render the object as completely transparent against the rest of the environment
 		 * so other objects can be composited later.
 		 *
-		 * Used by `WebGLPathTracer` from `three-gpu-pathtracer`.
+		 * Used by `WebGPUPathTracer` from `three-gpu-pathtracer/webgpu`.
 		 */
 		matte: boolean;
 		/**
 		 * Whether the object should cast a shadow.
 		 *
-		 * Used by `WebGLPathTracer` from `three-gpu-pathtracer`.
+		 * Used by `WebGPUPathTracer` from `three-gpu-pathtracer/webgpu`.
 		 */
 		castShadow: boolean;
 
@@ -50,113 +39,9 @@ declare module 'three/src/materials/MeshStandardMaterial' {
 
 // core
 
-export interface PathTracingSceneGeneratorResult {
-
-	bvhChanged: boolean;
-	bvh: MeshBVH;
-	lights: Array<Light>;
-	iesTextures: Array<DataTexture>;
-	geometry: BufferGeometry;
-	needsMaterialIndexUpdate: boolean;
-	materials: Array<Material>;
-	textures: Array<Texture>;
-	objects: Array<Object3D>;
-
-}
-
 export interface BVHWorker {
 
 	generate( geometry : BufferGeometry, options?: BVHOptions ) : Promise<MeshBVH>
-
-}
-
-/**
- * @deprecated `PathTracingSceneGenerator` has been deprecated and will be removed in a future release.
- * Use `WebGLPathTracer` instead, as it handles scene generation internally.
- */
-export class PathTracingSceneGenerator {
-
-	constructor( objects?: Object3D | Array<Object3D> );
-
-	readonly initialized: boolean;
-
-	bvhOptions: BVHOptions;
-	attributes: Array<string>;
-	generateBVH: boolean;
-
-	bvh: MeshBVH | null;
-	geometry: BufferGeometry;
-
-	setObjects( objects: Object3D | Array<Object3D> ): void;
-	setBVHWorker( bvhWorker: BVHWorker ): void;
-
-	generateAsync( onProgress?: ( progress: number ) => void ): Promise<PathTracingSceneGeneratorResult>;
-	generate( onProgress?: ( progress: number ) => void ): PathTracingSceneGeneratorResult;
-
-}
-
-/**
- * @deprecated `DynamicPathTracingSceneGenerator` has been deprecated and will be removed in a future release.
- * Use `WebGLPathTracer` instead, as it handles scene generation internally.
- */
-export class DynamicPathTracingSceneGenerator extends PathTracingSceneGenerator {}
-
-/**
- * @deprecated `PathTracingSceneWorker` has been deprecated and will be removed in a future release.
- * Use `WebGLPathTracer` instead, as it handles scene generation internally.
- */
-export class PathTracingSceneWorker extends PathTracingSceneGenerator {}
-
-export class WebGLPathTracer {
-
-	constructor( renderer: WebGLRenderer );
-
-	readonly samples: number;
-	readonly target: WebGLRenderTarget;
-	readonly tiles: Vector2;
-	readonly camera: Camera | null;
-	readonly scene: Scene | null;
-
-	multipleImportanceSampling: boolean;
-	bounces: number;
-	transmissiveBounces: number;
-	filterGlossyFactor: number;
-	renderDelay: number;
-	minSamples: number;
-	fadeDuration: number;
-	enablePathTracing: boolean;
-	pausePathTracing: boolean;
-	dynamicLowRes: boolean;
-	lowResScale: number;
-	renderScale: number;
-	synchronizeRenderSize: boolean;
-	rasterizeScene: boolean;
-	renderToCanvas: boolean;
-	textureSize: Vector2;
-
-	rasterizeSceneCallback: ( scene: Scene, camera: Camera ) => void;
-	renderToCanvasCallback: ( target: WebGLRenderTarget, renderer: WebGLRenderer, quad: FullScreenQuad ) => void;
-
-	setBVHWorker( bvhWorker: BVHWorker ): void;
-	setScene(
-		scene: Scene,
-		camera: Camera,
-		options?: { onProgress?: ( progress: number ) => void }
-	): void;
-	setSceneAsync(
-		scene: Scene,
-		camera: Camera,
-		options?: { onProgress?: ( progress: number ) => void }
-	): Promise<void>;
-	setCamera( camera: Camera ): void;
-
-	updateCamera(): void;
-	updateMaterials(): void;
-	updateLights(): void;
-	updateEnvironment(): void;
-	renderSample(): void;
-	reset(): void;
-	dispose(): void;
 
 }
 
@@ -214,49 +99,7 @@ export class GradientEquirectTexture extends ProceduralEquirectTexture {
 
 }
 
-// utils
-
-export class BlurredEnvMapGenerator {
-
-	constructor( renderer: WebGLRenderer );
-
-	renderer: WebGLRenderer;
-	pmremGenerator: PMREMGenerator;
-	copyQuad: FullScreenQuad;
-	renderTarget: WebGLRenderTarget;
-
-	generate( texture: Texture, blur: number ): DataTexture;
-	dispose(): void;
-
-}
-
 // materials
-
-declare class MaterialBase extends ShaderMaterial {
-
-	setDefine( name: string, value: any ): boolean;
-
-}
-
-export interface DenoiseMaterialParameters extends ShaderMaterialParameters {
-
-	sigma?: number;
-	kSigma?: number;
-	threshold?: number;
-	map?: Texture;
-
-}
-
-export class DenoiseMaterial extends MaterialBase {
-
-	constructor( parameters?: DenoiseMaterialParameters );
-
-	sigma: number;
-	kSigma: number;
-	threshold: number;
-	map: Texture | null;
-
-}
 
 export interface FogVolumeMaterialParameters extends MeshStandardMaterialParameters {
 

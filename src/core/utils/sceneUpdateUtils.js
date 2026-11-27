@@ -14,61 +14,6 @@ export function getTextureHash( t ) {
 
 }
 
-// reduce the set of textures to just those with a unique source while retaining
-// the order of the textures.
-function reduceTexturesToUniqueSources( textures ) {
-
-	const sourceSet = new Set();
-	const result = [];
-	for ( let i = 0, l = textures.length; i < l; i ++ ) {
-
-		const tex = textures[ i ];
-		const hash = getTextureHash( tex );
-		if ( ! sourceSet.has( hash ) ) {
-
-			sourceSet.add( hash );
-			result.push( tex );
-
-		}
-
-	}
-
-	return result;
-
-}
-
-export function getIesTextures( lights ) {
-
-	const textures = lights.map( l => l.iesMap || null ).filter( t => t );
-	const textureSet = new Set( textures );
-	return Array.from( textureSet ).sort( uuidSort );
-
-}
-
-export function getTextures( materials ) {
-
-	const textureSet = new Set();
-	for ( let i = 0, l = materials.length; i < l; i ++ ) {
-
-		const material = materials[ i ];
-		for ( const key in material ) {
-
-			const value = material[ key ];
-			if ( value && value.isTexture ) {
-
-				textureSet.add( value );
-
-			}
-
-		}
-
-	}
-
-	const textureArray = Array.from( textureSet );
-	return reduceTexturesToUniqueSources( textureArray ).sort( uuidSort );
-
-}
-
 export function getLights( scene ) {
 
 	const lights = [];

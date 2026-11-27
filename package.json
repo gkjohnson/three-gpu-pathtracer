@@ -71,8 +71,7 @@
   },
   "peerDependencies": {
     "three": ">=0.187.0",
-    "three-mesh-bvh": ">=0.10.0",
-    "xatlas-web": "^0.1.0"
+    "three-mesh-bvh": ">=0.10.0"
   },
   "scripts": {
     "start": "vite --config ./vite.config.js",

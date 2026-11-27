@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.
 - WebGPUPathTracer: "asyncCompile". The kernels always compile asynchronously, so nothing new renders while "compiling" is true.
 - WebGPUPathTracer: "target". Use "renderTo" to draw the render into a render target.
+- WebGLPathTracer, along with "PathTracingRenderer", "QuiltPathTracingRenderer", "PathTracingSceneGenerator", "PhysicalPathTracingMaterial", "BlurredEnvMapGenerator", "DenoiseMaterial" and "AmbientOcclusionMaterial" from "three-gpu-pathtracer". Use "WebGPUPathTracer" and "BlurredEnvMapGenerator" from "three-gpu-pathtracer/webgpu".
+- The "xatlas-web" peer dependency.
 
 ### Fixed
 - WebGPUPathTracer: Setting an ArrayCamera throwing an error.
