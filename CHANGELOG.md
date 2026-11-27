@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: "renderTo", which draws the render into a render target or the canvas, either as presented with the "beauty" output or as the "accumulated" samples alone.
 - WebGPUPathTracer: Support for render target textures as the scene's environment, copied on "updateEnvironment".
 - WebGPUPathTracer: "finished" in the sample counts, the share of pixels done sampling, which "complete" waits on.
+- React Three Fiber components from "three-gpu-pathtracer/r3f": "WebGPUPathTracer", which renders the fiber scene and takes the path tracer's settings and events as props, "Denoiser" and "Upscaler", which attach a denoiser or upscaler instance the app owns, and the "usePathTracer" hook.
 
 ### Changed
 - WebGPUPathTracer: "setScene" returns a promise that resolves once the scene renders, since three-mesh-bvh writes the scene data asynchronously. Rendering pauses on the last frame until then. It builds the mesh BVHs in the workers set with "setBVHWorker", replacing "setSceneAsync".
