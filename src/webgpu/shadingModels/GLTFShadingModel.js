@@ -137,13 +137,15 @@ export class GLTFShadingModel extends ShadingModel {
 					}
 				` }
 
-				// sheen
-				if ( NdotL > 0.0 && surf.sheen > 0.0 ) {
+				${ ifFeature( 'SHEEN' )/* wgsl */`
+					// sheen
+					if ( NdotL > 0.0 && surf.sheen > 0.0 ) {
 
-					result += attenuation * surf.sheen * ${ sheenColorFunc }( ctx.V, ctx.L, ctx.H, surf );
-					attenuation *= mix( 1.0, ${ sheenAlbedoScalingFunc }( ctx.V, ctx.L, surf ), surf.sheen );
+						result += attenuation * surf.sheen * ${ sheenColorFunc }( ctx.V, ctx.L, ctx.H, surf );
+						attenuation *= mix( 1.0, ${ sheenAlbedoScalingFunc }( ctx.V, ctx.L, surf ), surf.sheen );
 
-				}
+					}
+				` }
 
 				// transmission
 				// handles specular reflection and transmission
@@ -713,6 +715,12 @@ export class GLTFShadingModel extends ShadingModel {
 		if ( this.getField( material, 'clearcoat', 0.0 ) > 0.0 ) {
 
 			features.setUsed( 'CLEARCOAT' );
+
+		}
+
+		if ( this.getField( material, 'sheen', 0.0 ) > 0.0 ) {
+
+			features.setUsed( 'SHEEN' );
 
 		}
 
