@@ -390,7 +390,8 @@ export class ShadingModel {
 	/**
 	 *
 	 * Must write the given materials to an array in the material struct layout, returning
-	 * { materialData }. The "*Map" fields index the textures added with "getTextureDescriptor"
+	 * { materialData, graphsChanged }. The "*Map" fields index the textures added with "getTextureDescriptor", and
+	 * "graphsChanged" is whether the functions running the materials' TSL graphs changed, so the kernels need rebuilding
 	 *
 	 */
 	writeMaterialsBuffer( materials ) {
@@ -414,6 +415,7 @@ export class ShadingModel {
 
 	}
 
+	// collects and writes the materials under "root". Returns whether the functions running their TSL graphs changed
 	updateMaterials( root ) {
 
 		const { materials, materialsMap, textures, texturesMap, structs } = this;
@@ -462,7 +464,7 @@ export class ShadingModel {
 
 		}
 
-		const { materialData } = this.writeMaterialsBuffer( materials );
+		const { materialData, graphsChanged = false } = this.writeMaterialsBuffer( materials );
 		const materialStruct = structs.material.proxyNode;
 		const materialsStorage = this.storage.materials.proxyNode;
 		const count = materialData.length / materialStruct.getLength();
@@ -475,6 +477,8 @@ export class ShadingModel {
 
 		materialsStorage.value.array.set( materialData );
 		materialsStorage.value.needsUpdate = true;
+
+		return graphsChanged;
 
 		function add( mat ) {
 

@@ -1289,15 +1289,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 	updateMaterials() {
 
 		const { _bvhData, _renderer, _shadingModel, scene } = this;
-		_shadingModel.updateMaterials( scene );
+		const graphsChanged = _shadingModel.updateMaterials( scene );
 		_bvhData.updateMaterialIndices();
 		this._updateEmissiveTriangles();
 
-		// the kernels size the texture info and compile in the used features when they're built, so a new texture
-		// count or feature set needs a rebuild
+		// the kernels size the texture info, compile in the used features and build in the TSL graphs, so a new
+		// texture count, feature set or graph needs a rebuild
 		const featuresChanged = _shadingModel.updateFeatures();
 		const texturesChanged = _shadingModel.updateTextures( _renderer );
-		if ( featuresChanged || texturesChanged ) {
+		if ( featuresChanged || texturesChanged || graphsChanged ) {
 
 			this._pathTracer.rebuild();
 

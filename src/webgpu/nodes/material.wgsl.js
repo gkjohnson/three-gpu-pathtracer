@@ -23,6 +23,7 @@ import {
 } from './ggx.wgsl.js';
 import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { materialGraphInputStruct, materialGraphResultStruct } from '../materialGraphs/materialGraph.wgsl.js';
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
 // the normal towards the geometry normal such that the perfect reflection ray is just above the
@@ -144,6 +145,7 @@ export const getSurfaceRecordFunc = ( {
 	getTextureSize,
 	getUvFromChannel,
 	getColor,
+	runMaterialGraph,
 } ) => wgslTagFn/* wgsl */`
 	${ [ constants ] }
 	fn getSurfaceRecord(
@@ -413,6 +415,34 @@ export const getSurfaceRecordFunc = ( {
 				) * mapStr * mapDir / mapLen;
 
 			}
+
+		}
+
+		// a node material's TSL graphs replace the inputs they have outputs for
+		if ( material.graph != -1 ) {
+
+			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
+			var input: ${ materialGraphInputStruct };
+			input.uv = ${ getUvFromChannel }( vertexData, 0 );
+			input.uv1 = ${ getUvFromChannel }( vertexData, 1 << 23 );
+			input.positionWorld = vertexData.position.xyz;
+			input.positionLocal = ( objectInfo.inverseMatrixWorld * vec4f( input.positionWorld, 1.0 ) ).xyz;
+			input.normalWorld = baseNormal;
+			input.normalLocal = normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( baseNormal, 0.0 ) ).xyz );
+			input.color = ${ getColor }( vertexData );
+
+			var graph: ${ materialGraphResultStruct };
+			graph.color = albedo.rgb;
+			graph.opacity = albedo.a;
+			graph.roughness = roughness;
+			graph.metalness = metalness;
+			graph.emission = emission;
+			${ runMaterialGraph }( material.graph, input, &graph );
+
+			albedo = vec4f( graph.color, graph.opacity );
+			roughness = graph.roughness;
+			metalness = graph.metalness;
+			emission = graph.emission;
 
 		}
 
