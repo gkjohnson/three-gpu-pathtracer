@@ -162,7 +162,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.traceShadowRayKernel.context.shadingModel = shadingModel;
 		this.subsurfaceKernel.context.shadingModel = shadingModel;
 		this.cameraMediumKernel.context.shadingModel = shadingModel;
-		this.logicKernel.context.shadingModel = shadingModel;
+
+		// camera ray functions, like the AO map camera's, can read the surface too
+		this.cameraRayKernel.context.shadingModel = shadingModel;
 		this.rebuild();
 
 	}
