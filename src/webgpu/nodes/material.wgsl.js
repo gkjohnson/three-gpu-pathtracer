@@ -747,6 +747,35 @@ export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
 `;
 
+// The light emitted by a point on one side of a triangle, for a shading model's "getHitEmission". Sides the material doesn't
+// render don't emit
+export const getHitEmissionFunc = wgslTagFn/* wgsl */ `
+
+	fn getHitEmission( materialIndex: u32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> vec3f {
+
+		let material = &${ materialsStorage }[ materialIndex ];
+		if ( material.side != 0.0 && side != material.side ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		var emission = material.emissiveIntensity * material.emissive;
+		if ( material.emissiveMap != - 1 ) {
+
+			let vertex = ${ sampleTrianglePoint }( barycoord, indices, attributesOffset );
+			let uv = ${ getUvFromChannel }( vertex, material.emissiveMap );
+			let uvPrime = ${ materialsStorage }[ materialIndex ].emissiveMapTransform * vec3f( uv, 1.0 );
+			emission *= ${ sampleTexel }( uvPrime.xy, material.emissiveMap, 0.0 ).rgb;
+
+		}
+
+		return emission;
+
+	}
+
+`;
+
 // Refracts a dispersive surface at the wavelength, returning whether the surface is dispersive: transmissive with a
 // volume, an ior above one and some dispersion. Takes the surface by name since the shading model defines its struct
 export const applyDispersionFunc = wgslTagFn/* wgsl */ `

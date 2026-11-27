@@ -286,6 +286,26 @@ export const lightRecordStruct = new StructTypeNode( {
 	lightType: 'int',
 }, 'LightRecord' );
 
+// A light tree node. Leaves have an emissive triangle instead of children
+export const lightTreeNodeStruct = new StructTypeNode( {
+	boundsMin: 'vec3f',
+	power: 'float',
+	boundsMax: 'vec3f',
+	isLeaf: 'bool',
+	firstChildIndex: 'uint',
+	secondChildIndex: 'uint',
+	emissiveTriangleIndex: 'uint',
+}, 'LightTreeNode' );
+
+// An emissive triangle and its leaf in the light tree
+export const emissiveTriangleStruct = new StructTypeNode( {
+	// the BVHComputeData object record and the triangle in that object's geometry
+	objectIndex: 'uint',
+	triangleIndex: 'uint',
+	leafNodeIndex: 'uint',
+	area: 'float',
+}, 'EmissiveTriangle' );
+
 export const lobeWeightsStruct = new StructTypeNode( {
 	diffuse: 'float',
 	specular: 'float',

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Support for bump maps, with "bumpScale" as a height in object units.
 - WebGPUPathTracer: "interpolateDisplay", set to false to show the render without interpolation when it's drawn at a different size than the canvas.
 - WebGPUPathTracer: "renderTime" and "elapsedTime" in the sample counts, the milliseconds spent rendering and the milliseconds since rendering started.
+- WebGPUPathTracer: Emissive surfaces are sampled as lights, picked with a light tree by their power and distance, so scenes lit by emissive geometry converge much faster.
 - WebGPUPathTracer: "renderTo", which draws the render into a render target or the canvas, either as presented with the "beauty" output or as the "accumulated" samples alone.
 - WebGPUPathTracer: Support for render target textures as the scene's environment, copied on "updateEnvironment".
 - WebGPUPathTracer: "finished" in the sample counts, the share of pixels done sampling, which "complete" waits on.

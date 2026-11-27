@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix3, Matrix4, Raycaster, Vector3, MeshBasicMaterial, DoubleSide } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, StructTypeNode, Vector4, SkinnedMesh, Matrix3, Matrix4, Raycaster, Triangle, Vector3, MeshBasicMaterial, DoubleSide } from 'three/webgpu';
 import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruct, rayStruct, wgslTagFn, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
@@ -9,6 +9,8 @@ import { ifFeature } from './features.js';
 const _colorVec = new Vector4();
 const _instanceMatrix = /* @__PURE__ */ new Matrix4();
 const _boxToMesh = /* @__PURE__ */ new Matrix4();
+const _recordMatrix = /* @__PURE__ */ new Matrix4();
+const _triangle = /* @__PURE__ */ new Triangle();
 const _orientedBox = /* @__PURE__ */ new OrientedBox();
 const _normalMatrix = /* @__PURE__ */ new Matrix3();
 const _rayOrigin = /* @__PURE__ */ new Vector3();
@@ -667,25 +669,64 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
+	// returns the material associated with the bvh group
+	getMaterial( { object, group } ) {
+
+		const { material, geometry } = object;
+		return Array.isArray( material ) ? material[ geometry.groups[ group ].materialIndex ] : material;
+
+	}
+
+	// adds whether the object record is visible to the object info
+	// TODO: remove once three-mesh-bvh reports "visible" in the object info (three-mesh-bvh#1029)
+	_getObjectInfoAt( objectIndex ) {
+
+		const records = this.storage.objects.proxyNode.value.array;
+		return {
+			...super._getObjectInfoAt( objectIndex ),
+			visible: records[ objectIndex * objectRecordStruct.getLength() + RECORD_VISIBLE_WORD ] !== 0,
+		};
+
+	}
+
+	// calls back with each triangle of an object in world space and the triangle's index
+	// TODO: use a public function instead of "_getObjectInfoAt" once three-mesh-bvh has one
+	forEachTriangle( objectIndex, callback ) {
+
+		const { storage, attributeLayout } = this;
+		const { indexOffset, attributesOffset, primitiveOffset, primitiveCount } = this._getObjectInfoAt( objectIndex );
+		const indices = storage.geometry.proxyNode.value.array;
+		const attributes = new Float32Array( indices.buffer, indices.byteOffset, indices.length );
+		const records = storage.objects.proxyNode.value.array;
+		_recordMatrix.fromArray( new Float32Array( records.buffer, records.byteOffset, records.length ), objectIndex * objectRecordStruct.getLength() );
+
+		// the position of the first vertex in the packed attributes
+		const { stride, members } = attributeLayout;
+		const positionsOffset = attributesOffset + members.find( ( { name } ) => name === 'position' ).offset;
+
+		const { a, b, c } = _triangle;
+		for ( let i = primitiveOffset; i < primitiveOffset + primitiveCount; i ++ ) {
+
+			const i3 = indexOffset + i * 3;
+			a.fromArray( attributes, positionsOffset + indices[ i3 ] * stride ).applyMatrix4( _recordMatrix );
+			b.fromArray( attributes, positionsOffset + indices[ i3 + 1 ] * stride ).applyMatrix4( _recordMatrix );
+			c.fromArray( attributes, positionsOffset + indices[ i3 + 2 ] * stride ).applyMatrix4( _recordMatrix );
+			callback( _triangle, i );
+
+		}
+
+	}
+
 	writeMaterialData( info, writeOffset, targetBuffer ) {
 
 		// write material data to the object record
 		const { shadingModel } = this;
-		const { object, instanceId, group } = info;
-
-		// get the material associated with the bvh group
-		let material = object.material;
-		if ( Array.isArray( material ) ) {
-
-			const { materialIndex } = object.geometry.groups[ group ];
-			material = material[ materialIndex ];
-
-		}
+		const { object, instanceId } = info;
 
 		const recordOffset = writeOffset * objectRecordStruct.getLength();
 		const recordBufferU32 = new Uint32Array( targetBuffer );
 
-		const index = shadingModel.getMaterialIndex( material );
+		const index = shadingModel.getMaterialIndex( this.getMaterial( info ) );
 		if ( index === - 1 ) {
 
 			// hide the object when there is no material

@@ -1,5 +1,5 @@
 import { wgslFn } from 'three/tsl';
-import { rayStruct } from 'three-mesh-bvh/webgpu';
+import { rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { constants, lightStruct, lightRecordStruct } from './structs.wgsl.js';
 import { offsetRayOriginFunc } from './utils.wgsl.js';
 
@@ -11,12 +11,32 @@ export const SPOT_LIGHT_TYPE = 2;
 export const DIR_LIGHT_TYPE = 3;
 export const POINT_LIGHT_TYPE = 4;
 export const ENVIRONMENT_LIGHT_TYPE = 5;
+export const EMISSIVE_TRIANGLE_LIGHT_TYPE = 6;
 export const LIGHT_FAR_DISTANCE = 1e30;
+
+// The share of the distance to a sampled light point that shadow rays are shortened by, since over long distances
+// the float error is larger than the light point's offset from the light's surface
+const SHADOW_RAY_SHORTENING = 1 / 65536;
+
+// the smallest distance to a light point the direction is divided by, for a point at the ray origin
+const MIN_LIGHT_POINT_DISTANCE = 1e-5;
+
+// Writes the direction and distance to a point sampled on a light. The point is offset from the light's surface so shadow
+// rays don't hit it
+export const writeLightPointFn = wgslTagFn/* wgsl */`
+	fn writeLightPoint( lightRec: ptr<function, ${ lightRecordStruct }>, rayOrigin: vec3f, lightPoint: vec3f, lightNormal: vec3f ) -> void {
+
+		let toLight = ${ offsetRayOriginFunc }( lightPoint, rayOrigin - lightPoint, lightNormal ) - rayOrigin;
+		lightRec.dist = length( toLight );
+		lightRec.direction = toLight / max( lightRec.dist, ${ MIN_LIGHT_POINT_DISTANCE } );
+
+	}
+`;
 
 // Writes "outRay", the shadow ray toward a light sampled from "hitPoint", the light "lightDist" away in
 // "lightDirection". The ray starts at the hit point offset off its surface along "hitNormal", or at the hit point
-// itself when the normal is zero, as for a scatter event in fog. It ends at the sampled light point offset back
-// toward the hit point, just short of the light's surface
+// itself when the normal is zero, as for a scatter event in fog, and ends at the sampled light point. The light's
+// normal isn't available here, so the point is offset off the light's surface when it's sampled, in "writeLightPoint"
 export const getShadowRayFn = wgslFn( /* wgsl */ `
 
 	fn getShadowRay( hitPoint: vec3f, hitNormal: vec3f, lightDirection: vec3f, lightDist: f32, outRay: ptr<function, Ray> ) -> void {
@@ -35,10 +55,10 @@ export const getShadowRayFn = wgslFn( /* wgsl */ `
 		// lights at infinity have no point to end at
 		if ( lightDist < ${ LIGHT_FAR_DISTANCE } ) {
 
-			let lightPoint = hitPoint + lightDirection * lightDist;
-			let rayEnd = offsetRayOrigin( lightPoint, - lightDirection, - lightDirection );
-			outRay.maxDist = length( rayEnd - rayStart );
-			outRay.direction = ( rayEnd - rayStart ) / outRay.maxDist;
+			let toLight = hitPoint + lightDirection * lightDist - rayStart;
+			let dist = length( toLight );
+			outRay.maxDist = dist * ( 1.0 - ${ SHADOW_RAY_SHORTENING } );
+			outRay.direction = toLight / dist;
 
 		}
 
@@ -51,7 +71,10 @@ export const isMISWeightLightFn = wgslFn( /* wgsl */ `
 
 	fn isMISWeightLight( lightType: i32 ) -> bool {
 
-		return lightType == ${ ENVIRONMENT_LIGHT_TYPE } || lightType == ${ CIRC_AREA_LIGHT_TYPE } || lightType == ${ RECT_AREA_LIGHT_TYPE };
+		return lightType == ${ ENVIRONMENT_LIGHT_TYPE } ||
+			lightType == ${ CIRC_AREA_LIGHT_TYPE } ||
+			lightType == ${ RECT_AREA_LIGHT_TYPE } ||
+			lightType == ${ EMISSIVE_TRIANGLE_LIGHT_TYPE };
 
 	}
 
@@ -174,8 +197,7 @@ export const randomAreaLightSampleFn = wgslFn( /* wgsl */ `
 		var lightRec: LightRecord;
 		lightRec.lightType = light.lightType;
 		lightRec.emission = light.color * light.intensity;
-		lightRec.dist = dist;
-		lightRec.direction = direction;
+		writeLightPoint( &lightRec, rayOrigin, randomPos, lightNormal );
 
 		// points behind or edge-on to the light receive no contribution
 		let cosTheta = dot( direction, lightNormal );
@@ -193,7 +215,7 @@ export const randomAreaLightSampleFn = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ lightStruct, lightRecordStruct, constants ] );
+`, [ lightStruct, lightRecordStruct, constants, writeLightPointFn ] );
 
 // Samples the disc of a spot light with distance falloff. Angular ( cone or IES ) attenuation is applied by the caller.
 export const randomSpotLightSampleFn = wgslFn( /* wgsl */ `
@@ -214,17 +236,12 @@ export const randomSpotLightSampleFn = wgslFn( /* wgsl */ `
 		let startDistance = light.radius / max( angleTan, EPSILON );
 
 		let randomPos = light.position - normal * startDistance + u * x + v * y;
-		let toLight = randomPos - rayOrigin;
-		let lightDistSq = dot( toLight, toLight );
-		let dist = sqrt( lightDistSq );
-
-		let direction = toLight / max( dist, EPSILON );
+		let dist = length( randomPos - rayOrigin );
 		let distanceAttenuation = getDistanceAttenuation( dist, light.distance, light.decay );
 
 		var lightRec: LightRecord;
 		lightRec.lightType = light.lightType;
-		lightRec.dist = dist;
-		lightRec.direction = direction;
+		writeLightPoint( &lightRec, rayOrigin, randomPos, normal );
 		lightRec.emission = light.color * light.intensity * distanceAttenuation;
 		lightRec.pdf = 1.0;
 
@@ -232,7 +249,7 @@ export const randomSpotLightSampleFn = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ lightStruct, lightRecordStruct, constants, getDistanceAttenuationFn ] );
+`, [ lightStruct, lightRecordStruct, constants, getDistanceAttenuationFn, writeLightPointFn ] );
 
 // The cosine to the spot axis and the distance from a position to the nearest point on the spot
 // light's disc, where the disc lights the position the most

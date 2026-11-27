@@ -18,7 +18,6 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { getScaledSettings } from './src/getScaledSettings.js';
 import { LoaderElement } from './src/LoaderElement.js';
-import { convertEmissivePlanesToLights } from './modelList.js';
 
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/bitterli-rendering-resources/white-room.glb';
 const CREDITS = 'Model by "Jay-Artist", from <a href="https://benedikt-bitterli.me/resources/">Benedikt Bitterli\'s rendering resources</a>';
@@ -92,7 +91,6 @@ async function init() {
 	dracoLoader.dispose();
 
 	// set scene
-	convertEmissivePlanesToLights( gltf.scene );
 	gltf.scene.traverse( c => {
 
 		if ( c.material ) {

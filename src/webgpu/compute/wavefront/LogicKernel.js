@@ -9,7 +9,7 @@ import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.
 import { clampPathContributionFunc, isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
 import {
-	rngInit, rand2, rand3,
+	rngInit, rand2, rand4,
 	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
@@ -67,6 +67,7 @@ export class LogicKernel extends ComputeKernel {
 		const getDirectLightFn = proxyFn( 'lightsInfo.value.getDirectLight', params );
 		const getLightHitsFn = proxyFn( 'lightsInfo.value.getLightHits', params );
 		const getEnvironmentPdfFn = proxyFn( 'lightsInfo.value.getEnvironmentPdf', params );
+		const getEmissiveHitWeightFn = proxyFn( 'lightsInfo.value.getEmissiveHitWeight', params );
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 
 		const fn = wgslTagFn/* wgsl */`
@@ -197,7 +198,7 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.barycoord = hitResult.barycoord;
 						rayDataStorage[ index ].hit.normal = hitResult.normal;
 						rayDataStorage[ index ].hit.side = hitResult.side;
-						rayDataStorage[ index ].hit.indices = hitResult.indices;
+						rayDataStorage[ index ].hit.indices = hitResult.indices.xyz;
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
 						${ ifFeature( 'FOG' )/* wgsl */`
 							rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
@@ -216,13 +217,23 @@ export class LogicKernel extends ComputeKernel {
 							}
 						` }
 
+						// the MIS weight of the hit's emission against sampling it as a light from the previous vertex
+						var emissionWeight = 1.0;
+						if ( isMISWeighted && didHitSurface ) {
+
+							emissionWeight = ${ getEmissiveHitWeightFn }( input.origin, position, hitResult.normal, u32( hitResult.objectIndex ), hitResult.indices.w, input.scatterPdf );
+
+						}
+
+						rayDataStorage[ index ].emissionWeight = emissionWeight;
+
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution. MaterialKernel evaluates the bsdf, or the phase function at a scatter
 						// event in fog, and enqueues the shadow ray
 						var lightPdf = 0.0;
 						if ( misEnabled != 0u ) {
 
-							let lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							let lightRec = ${ sampleLightFn }( position, ${ rand4 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 							if ( lightRec.pdf > 0.0 ) {
 
 								lightPdf = lightRec.pdf;

@@ -76,6 +76,9 @@ const rayDataMembers = {
 	// the scatter distance sampled for the queued segment in fog, which it's traced up to, or zero outside of fog
 	scatterDist: 'float',
 
+	// the MIS weight of the staged hit's emission against sampling it as a light from the previous vertex
+	emissionWeight: 'float',
+
 };
 
 // The path's last surface hit, nested first, and its medium, nested at the end to share the ray data buffer
@@ -123,7 +126,8 @@ export const intersectionResultStruct = new StructTypeNode( {
 	normal: 'vec3f',
 	side: 'float',
 
-	indices: 'vec3u',
+	// the vertex indices and the triangle's index in its object, as in the raycast's result
+	indices: 'vec4u',
 
 }, 'TraceResult' );
 

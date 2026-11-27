@@ -4,7 +4,7 @@ import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './
 import { loadOutputFn, storeOutputFn } from '../nodes/output.wgsl.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand4, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
 import {
 	mediumStackStruct, addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn,
@@ -88,6 +88,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 		const getDirectLightFn = proxyFn( 'lightsInfo.value.getDirectLight', params );
 		const getLightHitsFn = proxyFn( 'lightsInfo.value.getLightHits', params );
 		const getEnvironmentPdfFn = proxyFn( 'lightsInfo.value.getEnvironmentPdf', params );
+		const getEmissiveHitWeightFn = proxyFn( 'lightsInfo.value.getEmissiveHitWeight', params );
 		const sampleLightFn = proxyFn( 'lightsInfo.value.sampleLight', params );
 
 		// Returns the light a light sample adds at a path vertex, given the vertex evaluated toward the light: the
@@ -341,12 +342,20 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 					` }
 
+					// the MIS weight of the hit's emission against sampling it as a light from the previous vertex
+					var emissionWeight = 1.0;
+					if ( isMISWeighted && didHitSurface ) {
+
+						emissionWeight = ${ getEmissiveHitWeightFn }( ray.origin, position, hitResult.normal, hitResult.objectIndex, hitResult.indices.w, scatterPdf );
+
+					}
+
 					var lightRec = ${ lightRecordStruct }();
 					if ( didHit ) {
 
 						if ( misEnabled != 0u ) {
 
-							lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							lightRec = ${ sampleLightFn }( position, ${ rand4 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 
 						}
 
@@ -551,7 +560,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 						}
 
 						// emission, gathered below
-						emission = surface.emission;
+						emission = surface.emission * emissionWeight;
 
 						// evaluate the bsdf toward the light. The pdf is 0 without NEE
 						if ( lightRec.pdf > 0.0 ) {

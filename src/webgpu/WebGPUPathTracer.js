@@ -1156,6 +1156,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this.scene = scene;
 		this._bvhData = bvhData;
 		this._pathTracer.setBVHData( bvhData );
+		this._updateEmissiveTriangles();
 		this.setCamera( camera );
 		this.updateEnvironment();
 		this.updateLights();
@@ -1191,6 +1192,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 			shadingModel.updateFeatures();
 			shadingModel.updateTextures( _renderer );
 			_bvhData.setShadingModel( shadingModel );
+			this._updateEmissiveTriangles();
 
 		}
 
@@ -1289,6 +1291,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		const { _bvhData, _renderer, _shadingModel, scene } = this;
 		_shadingModel.updateMaterials( scene );
 		_bvhData.updateMaterialIndices();
+		this._updateEmissiveTriangles();
 
 		// the kernels size the texture info and compile in the used features when they're built, so a new texture
 		// count or feature set needs a rebuild
@@ -1314,6 +1317,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this.scene.updateMatrixWorld( true );
 		this._bvhData.updateTransforms();
+		this._updateEmissiveTriangles();
 		this._updateCameraInVolume();
 		this.reset();
 
@@ -1333,6 +1337,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._updateCameraInVolume();
 		this.reset();
+
+	}
+
+	// Rebuilds the light tree for the current materials and transforms
+	_updateEmissiveTriangles() {
+
+		this._lightsInfo.emissiveTriangles.update( this._bvhData );
 
 	}
 

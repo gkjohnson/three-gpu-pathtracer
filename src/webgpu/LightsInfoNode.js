@@ -3,6 +3,7 @@ import { StorageBufferAttribute, HalfFloatType } from 'three/webgpu';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { AtlasTexture } from './AtlasTexture.js';
 import { EquirectHdrInfoNode } from './EquirectHdrInfoNode.js';
+import { EmissiveTrianglesInfo } from './EmissiveTrianglesInfo.js';
 import { LightsInfoUniformStruct } from '../uniforms/LightsInfoUniformStruct.js';
 import { lightStruct, lightRecordStruct } from './nodes/structs.wgsl.js';
 import { sampleTexelFunc, clampPathContributionFunc } from './nodes/utils.wgsl.js';
@@ -19,6 +20,7 @@ import {
 	intersectsCircleFn,
 	randomAreaLightSampleFn,
 	randomSpotLightSampleFn,
+	writeLightPointFn,
 	getSpotAttenuationFn,
 	getDistanceAttenuationFn,
 	getSpotLightNearestFn,
@@ -34,6 +36,9 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		// the environment, sampled as one more light
 		// TODO: own the environment's escape radiance here too
 		this.envInfo = new EquirectHdrInfoNode();
+
+		// the scene's emissive triangles, sampled as one more light
+		this.emissiveTriangles = new EmissiveTrianglesInfo();
 
 		// lights packed into a storage buffer of Light structs
 		this.countNode = uniform( this.count, 'uint' );
@@ -98,7 +103,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 	_initFns() {
 
-		const { bufferNode, countNode, iesProfilesNode, iesInfoNode, envInfo } = this;
+		const { bufferNode, countNode, iesProfilesNode, iesInfoNode, envInfo, emissiveTriangles } = this;
 
 		// profiles are sampled out of an atlas so filtering must resolve tile-relative wrapping
 		const sampleIesTexelFn = sampleTexelFunc( iesInfoNode, iesProfilesNode, 'sampleIesTexel' );
@@ -165,11 +170,11 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// the total estimated weight of the lights and the environment at the position
+		// the total estimated weight of the lights, the environment and the emissive triangles at the position
 		this.getLightsWeight = wgslTagFn/* wgsl */`
 			fn getLightsWeight( position: vec3f ) -> f32 {
 
-				var total = ${ envInfo.getWeight }();
+				var total = ${ envInfo.getWeight }() + ${ emissiveTriangles.getWeight }( position );
 				for ( var i = 0u; i < ${ countNode }; i ++ ) {
 
 					total += ${ this.getLightWeight }( i, position );
@@ -198,8 +203,9 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// Chooses a light, or the environment when the returned index equals the light count, in
-		// proportion to the estimated weights. The pdf is zero when nothing can light the position.
+		// Chooses a light in proportion to the estimated weights. Returns the light's index, the light count for the
+		// environment, or the light count plus one for the emissive triangles. The pdf is zero when nothing can light the
+		// position.
 		this.selectLight = wgslTagFn/* wgsl */`
 			fn selectLight( position: vec3f, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
 
@@ -213,8 +219,17 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				}
 
+				// choose the emissive triangles
 				let targetWeight = r * totalWeight;
-				var accumulated = 0.0;
+				let emissiveWeight = ${ emissiveTriangles.getWeight }( position );
+				if ( targetWeight < emissiveWeight ) {
+
+					*selectionPdf = emissiveWeight / totalWeight;
+					return count + 1u;
+
+				}
+
+				var accumulated = emissiveWeight;
 				var lastWeighted = 0u;
 				var index = count;
 				for ( var i = 0u; i < count; i ++ ) {
@@ -304,8 +319,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 					}
 
-					result.direction = normalize( lightRay );
-					result.dist = lightDist;
+					${ writeLightPointFn }( &result, rayOrigin, light.u, lightRay );
 					result.pdf = 1.0;
 					result.emission = light.color * light.intensity * distanceFalloff;
 					result.lightType = light.lightType;
@@ -330,24 +344,31 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
-		// Picks one light or the environment by its estimated contribution at the position, and samples a direction
-		// to it. The record's pdf includes the selection's, and is zero when nothing is picked
+		// Picks one light, the environment or the emissive triangles by their estimated contribution at the position,
+		// and samples a direction to it. "random.x" picks the light, "random.y" the emissive triangle and "random.zw"
+		// the point on it. The record's pdf includes the selection's, and is zero when nothing is picked
 		this.sampleLight = wgslTagFn/* wgsl */`
-			fn sampleLight( position: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
+			fn sampleLight( position: vec3f, random: vec4f ) -> ${ lightRecordStruct } {
 
 				var lightRec: ${ lightRecordStruct };
 				var selectionPdf = 0.0;
-				let lightIndex = ${ this.selectLight }( position, ruv.x, &selectionPdf );
+				let lightIndex = ${ this.selectLight }( position, random.x, &selectionPdf );
 				if ( selectionPdf <= 0.0 ) {
 
 					return lightRec;
 
 				}
 
-				if ( lightIndex == ${ countNode } ) {
+				let environmentIndex = ${ countNode };
+				let emissiveTrianglesIndex = ${ countNode } + 1u;
+				if ( lightIndex == emissiveTrianglesIndex ) {
+
+					lightRec = ${ emissiveTriangles.sample }( position, random.yzw );
+
+				} else if ( lightIndex == environmentIndex ) {
 
 					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-					let envSample = ${ envInfo.sampleDir }( ruv.yz );
+					let envSample = ${ envInfo.sampleDir }( random.zw );
 					lightRec.direction = envSample.direction;
 					lightRec.emission = envSample.color;
 					lightRec.pdf = envSample.pdf;
@@ -356,7 +377,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				} else {
 
-					lightRec = ${ this.randomLightSample }( lightIndex, position, ruv.yz );
+					lightRec = ${ this.randomLightSample }( lightIndex, position, random.zw );
 
 				}
 
@@ -483,6 +504,26 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 			}
 		`;
 
+		// Returns the MIS weight of emission hit by a bsdf ray against sampling the same point as a light, or one if the
+		// point can't be sampled
+		this.getEmissiveHitWeight = wgslTagFn/* wgsl */`
+			fn getEmissiveHitWeight(
+				origin: vec3f, position: vec3f, normal: vec3f, objectIndex: u32, triangleIndex: u32, scatterPdf: f32,
+			) -> f32 {
+
+				let trianglePdf = ${ emissiveTriangles.getPdf }( origin, position, normal, objectIndex, triangleIndex );
+				if ( trianglePdf <= 0.0 ) {
+
+					return 1.0;
+
+				}
+
+				let selectionPdf = ${ emissiveTriangles.getWeight }( origin ) / ${ this.getLightsWeight }( origin );
+				return ${ misHeuristicFn }( scatterPdf, trianglePdf * selectionPdf );
+
+			}
+		`;
+
 	}
 
 	dispose() {
@@ -491,6 +532,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		this.buffer.dispose();
 		this.iesAtlas.dispose();
 		this.envInfo.dispose();
+		this.emissiveTriangles.dispose();
 
 	}
 
