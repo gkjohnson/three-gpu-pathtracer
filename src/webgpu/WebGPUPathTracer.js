@@ -2099,13 +2099,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Frees every GPU resource held by the tracer, including any attached denoiser and upscaler.
+	 * Frees every GPU resource held by the tracer. An attached denoiser or upscaler isn't disposed.
 	 */
 	dispose() {
 
 		this._pathTracer.dispose();
-		this._denoiser?.dispose();
-		this._upscaler?.dispose();
 		this._bvhData.dispose();
 		this._lightsInfo.dispose();
 		this._shadingModel.dispose();
