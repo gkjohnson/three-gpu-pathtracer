@@ -51,10 +51,11 @@ const _drawingBufferSize = /* @__PURE__ */ new Vector2();
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
 
-// How the adaptive frame budget follows the measured frame time. The budget is only reconsidered once
-// measurements at it add up to the window's number of target frames of gpu time, so slow frames adapt as soon
-// as fast ones, and only changes when their average is off the target by the threshold ratio, since a
-// wavefront budget change reallocates the path buffers. It moves at most the step ratio per window.
+// How the adaptive frame budget follows the measured frame time. The budget is only reconsidered after the
+// window's number of measurements at it, or sooner once they add up to that many target frames of gpu time so
+// slow frames adapt as quickly as fast ones. It only changes when their average is off the target by the
+// threshold ratio, since a wavefront budget change reallocates the path buffers, and moves at most the step
+// ratio per window.
 // TODO: adapt more often, with a window of around 4, once the wavefront path buffers are grow-only so a budget
 // change only changes the active slot count rather than reallocating them
 const BUDGET_WINDOW = 16;
@@ -1586,7 +1587,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._frameTimeTotal += timing.frameTime;
 		this._frameWorkTotal += timing.frameWork;
 		this._frameTimeCount ++;
-		if ( this._frameTimeTotal < BUDGET_WINDOW * targetFrameTime ) {
+		if ( this._frameTimeCount < BUDGET_WINDOW && this._frameTimeTotal < BUDGET_WINDOW * targetFrameTime ) {
 
 			return;
 
