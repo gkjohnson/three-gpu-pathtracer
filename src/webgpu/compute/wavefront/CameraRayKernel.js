@@ -7,7 +7,7 @@ import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, pixelQueueInfoStruct, NO_PIXEL } from './structs.js';
 import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
-import { DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../../nodes/material.wgsl.js';
+import { sampleDispersionWavelengthFunc } from '../../nodes/material.wgsl.js';
 
 // queue entries a free slot tries before waiting for the next round
 const PIXEL_QUEUE_POP_ATTEMPTS = 4;
@@ -153,7 +153,7 @@ export class CameraRayKernel extends ComputeKernel {
 				rayDataStorage[ index ].rayStart = 0.0;
 				rayDataStorage[ index ].maxDist = ray.maxDist;
 				rayDataStorage[ index ].shadowRayIntersectionIndex = - 1;
-				rayDataStorage[ index ].dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
+				rayDataStorage[ index ].dispersionWavelength = - ${ sampleDispersionWavelengthFunc }( ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 				rayDataStorage[ index ].auxAlbedo = 0u;
 				rayDataStorage[ index ].auxNormal = 0u;
 				rayDataStorage[ index ].subsurfaceBounces = 0u;
