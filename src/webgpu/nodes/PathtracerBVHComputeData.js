@@ -40,6 +40,31 @@ const objectRecordStruct = new StructTypeNode( {
 	color: 'vec4f',
 }, 'PathTracerObjectRecord' );
 
+// whether the object, its parents and its batched instance are visible, as three-mesh-bvh writes the record
+// TODO: this copies three-mesh-bvh's private check. Restructure so the visibility is shared with three-mesh-bvh
+// rather than reimplemented here
+function isObjectVisible( object, instanceId ) {
+
+	if ( object.isBatchedMesh && ! object.getVisibleAt( instanceId ) ) {
+
+		return false;
+
+	}
+
+	for ( let curr = object; curr; curr = curr.parent ) {
+
+		if ( curr.visible === false ) {
+
+			return false;
+
+		}
+
+	}
+
+	return true;
+
+}
+
 // three-mesh-bvh's ray hit result. Shadow rays also record the share of bsdf rays the faces they skipped
 // would stop, the share of light the partially transparent surfaces they passed block, and the optical
 // depth of the fog volume boundaries they passed
@@ -609,8 +634,8 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		this.updateUvAttributesFromScene();
 
-		// the material indices are written with the object records, so the shading model's materials must
-		// be updated first
+		// the material indices are written with the object records from the shading model's current materials.
+		// Call "updateMaterialIndices" after updating its materials
 		const { bvh } = this;
 		await super.update();
 
@@ -685,13 +710,9 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 		const recordOffset = writeOffset * objectRecordStruct.getLength();
 		const recordBufferU32 = new Uint32Array( targetBuffer );
 
+		// hide the object when there is no material, and show it again once there is
 		const index = shadingModel.getMaterialIndex( material );
-		if ( index === - 1 ) {
-
-			// hide the object when there is no material
-			recordBufferU32[ recordOffset + RECORD_VISIBLE_WORD ] = 0;
-
-		}
+		recordBufferU32[ recordOffset + RECORD_VISIBLE_WORD ] = index !== - 1 && isObjectVisible( object, instanceId ) ? 1 : 0;
 
 		// save the material index
 		recordBufferU32[ recordOffset + RECORD_MATERIAL_INDEX_WORD ] = index;
