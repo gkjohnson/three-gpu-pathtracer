@@ -1,8 +1,9 @@
-import { StrictMode, Suspense, useEffect, useRef, useState } from 'react';
+import { StrictMode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Canvas } from '@react-three/fiber';
 import { Backdrop, Center, Environment, OrbitControls, Resize, useGLTF } from '@react-three/drei';
 import { WebGPURenderer } from 'three/webgpu';
+import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import { initUNetFromURL } from 'oidn-webgpu';
 import { Upscaler as UpscalerImpl } from '@pmndrs/upscaler';
@@ -20,6 +21,32 @@ const denoiser = new OIDNDenoiser( {
 	auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
 } );
 const upscaler = new FSRUpscaler( { Upscaler: UpscalerImpl } );
+
+// sets the worker class the path tracer from context builds the scene's BVHs with, so loading doesn't block
+// the page. React runs a child's layout effects before its parent's, so this is set before the first "setScene"
+function BVHWorker( { worker } ) {
+
+	const pathTracer = usePathTracer();
+	useLayoutEffect( () => {
+
+		if ( pathTracer === null ) {
+
+			return;
+
+		}
+
+		pathTracer.setBVHWorker( worker );
+		return () => {
+
+			pathTracer.setBVHWorker( null );
+
+		};
+
+	}, [ pathTracer, worker ] );
+
+	return null;
+
+}
 
 // Model by "Halil Kantarci" on Sketchfab, scaled to 2 units and stood on the floor
 function Headphones() {
@@ -61,7 +88,7 @@ function App() {
 		denoise: true,
 		upscale: true,
 		sharpness: 1,
-		color: '#d8d4cc',
+		color: '#3366aa',
 		...getScaledSettings(),
 	} );
 
@@ -70,13 +97,18 @@ function App() {
 		const gui = new GUI();
 		const state = { ...params };
 		const update = () => setParams( { ...state } );
-		gui.add( state, 'enabled' ).onChange( update );
-		gui.add( state, 'maxSamples', 1, 100, 1 ).onChange( update );
-		gui.add( state, 'renderScale', 0.1, 1, 0.01 ).onChange( update );
-		gui.add( state, 'denoise' ).onChange( update );
-		gui.add( state, 'upscale' ).onChange( update );
-		gui.add( state, 'sharpness', 0, 1, 0.01 ).onChange( update );
-		gui.addColor( state, 'color' ).onChange( update );
+		const pathTracingFolder = gui.addFolder( 'Path Tracer' );
+		pathTracingFolder.add( state, 'enabled' ).onChange( update );
+		pathTracingFolder.add( state, 'renderScale', 0.1, 1, 0.01 ).onChange( update );
+		pathTracingFolder.add( state, 'maxSamples', 1, 100, 1 ).onChange( update );
+
+		const postFolder = gui.addFolder( 'Denoise / Upscale' );
+		postFolder.add( state, 'denoise' ).onChange( update );
+		postFolder.add( state, 'upscale' ).onChange( update );
+		postFolder.add( state, 'sharpness', 0, 1, 0.01 ).onChange( update );
+
+		const backdropFolder = gui.addFolder( 'Backdrop' );
+		backdropFolder.addColor( state, 'color' ).onChange( update );
 		return () => gui.destroy();
 
 	}, [] ); // eslint-disable-line
@@ -99,6 +131,7 @@ function App() {
 					renderScale={ params.renderScale }
 					frameBudget={ params.frameBudget }
 				>
+					<BVHWorker worker={ GenerateMeshBVHWorker } />
 					{ params.denoise && <Denoiser denoiser={ denoiser } /> }
 					{ params.upscale && <Upscaler upscaler={ upscaler } sharpness={ params.sharpness } /> }
 					<Headphones />
