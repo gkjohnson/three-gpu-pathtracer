@@ -23,6 +23,7 @@ import {
 } from './ggx.wgsl.js';
 import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { ifFeature } from './features.js';
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
 // the normal towards the geometry normal such that the perfect reflection ray is just above the
@@ -353,28 +354,30 @@ export const getSurfaceRecordFunc = ( {
 
 		}
 
-		var iridescence = material.iridescence;
-		if ( material.iridescenceMap != -1 ) {
+		${ ifFeature( 'IRIDESCENCE' )/* wgsl */`
+			var iridescence = material.iridescence;
+			if ( material.iridescenceMap != -1 ) {
 
-			let uvPrime = material.iridescenceMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.iridescenceMap ), 1 );
-			let texColor = ${ sampleTexel }( uvPrime.xy,material.iridescenceMap, 0 );
-			iridescence *= texColor.r;
+				let uvPrime = material.iridescenceMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.iridescenceMap ), 1 );
+				let texColor = ${ sampleTexel }( uvPrime.xy,material.iridescenceMap, 0 );
+				iridescence *= texColor.r;
 
-		}
+			}
 
-		var iridescenceThickness = material.iridescenceThicknessMaximum;
-		if ( material.iridescenceThicknessMap != -1 ) {
+			var iridescenceThickness = material.iridescenceThicknessMaximum;
+			if ( material.iridescenceThicknessMap != -1 ) {
 
-			let uvPrime = material.iridescenceThicknessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.iridescenceThicknessMap ), 1 );
-			let texColor = ${ sampleTexel }( uvPrime.xy,material.iridescenceThicknessMap, 0 );
+				let uvPrime = material.iridescenceThicknessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.iridescenceThicknessMap ), 1 );
+				let texColor = ${ sampleTexel }( uvPrime.xy,material.iridescenceThicknessMap, 0 );
 
-			iridescenceThickness = mix(
-				material.iridescenceThicknessMinimum,
-				material.iridescenceThicknessMaximum,
-				texColor.g,
-			);
+				iridescenceThickness = mix(
+					material.iridescenceThicknessMinimum,
+					material.iridescenceThicknessMaximum,
+					texColor.g,
+				);
 
-		}
+			}
+		` }
 
 		var specularColor = material.specularColor;
 		if ( material.specularColorMap != -1 ) {
@@ -458,9 +461,12 @@ export const getSurfaceRecordFunc = ( {
 		surf.clearcoatNormal = clearcoatNormal;
 		surf.clearcoat = clearcoat;
 
-		surf.iridescence = iridescence;
-		surf.iridescenceIor = material.iridescenceIor;
-		surf.iridescenceThickness = iridescenceThickness;
+		// without iridescence these stay zero, so the film mix in the specular lobe drops out
+		${ ifFeature( 'IRIDESCENCE' )/* wgsl */`
+			surf.iridescence = iridescence;
+			surf.iridescenceIor = material.iridescenceIor;
+			surf.iridescenceThickness = iridescenceThickness;
+		` }
 
 		surf.specularColor = specularColor;
 		surf.specularIntensity = specularIntensity;
@@ -1001,24 +1007,26 @@ export const transmissionFresnelFunc = ( iridescentFresnel = iridescentFresnelFu
 		reflectance = clamp( reflectance, vec3f( 0.0 ), vec3f( 1.0 ) );
 		var transmittance = vec3f( 1.0 ) - reflectance;
 
-		if ( surf.iridescence > 0.0 ) {
+		${ ifFeature( 'IRIDESCENCE' )/* wgsl */`
+			if ( surf.iridescence > 0.0 ) {
 
-			// The media on either side of the film are air outside and the volume interior as
-			// the base. Swap them on interior hits so film-interface TIR remains possible.
-			let outsideIor = select( surf.ior, 1.0, airIncident );
-			let filmBaseIor = select( 1.0, surf.ior, airIncident );
-			let filmReflectance = clamp( ${ iridescentFresnel }(
-				cosine,
-				vec3f( ${ iorToF0Func }( filmBaseIor ) ),
-				surf.iridescenceIor,
-				outsideIor,
-				surf.iridescenceThickness,
-			), vec3f( 0.0 ), vec3f( 1.0 ) );
+				// The media on either side of the film are air outside and the volume interior as
+				// the base. Swap them on interior hits so film-interface TIR remains possible.
+				let outsideIor = select( surf.ior, 1.0, airIncident );
+				let filmBaseIor = select( 1.0, surf.ior, airIncident );
+				let filmReflectance = clamp( ${ iridescentFresnel }(
+					cosine,
+					vec3f( ${ iorToF0Func }( filmBaseIor ) ),
+					surf.iridescenceIor,
+					outsideIor,
+					surf.iridescenceThickness,
+				), vec3f( 0.0 ), vec3f( 1.0 ) );
 
-			reflectance = mix( reflectance, filmReflectance, surf.iridescence );
-			transmittance = mix( transmittance, vec3f( 1.0 ) - filmReflectance, surf.iridescence );
+				reflectance = mix( reflectance, filmReflectance, surf.iridescence );
+				transmittance = mix( transmittance, vec3f( 1.0 ) - filmReflectance, surf.iridescence );
 
-		}
+			}
+		` }
 
 		result.reflectance = reflectance;
 		result.transmittance = transmittance;
