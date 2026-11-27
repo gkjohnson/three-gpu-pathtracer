@@ -1,25 +1,16 @@
 import type {
 	ReactNode,
 	Context,
-	RefAttributes,
 	JSX,
 } from 'react';
+import type { FSRUpscaler } from '../../webgpu/index.js';
 
-export declare const UpscalerContext: Context<any>;
+export declare const UpscalerContext: Context<FSRUpscaler | null>;
 
-interface UpscalerProps<
-	Upscaler extends new ( ...args: any[] ) => void,
-	Params extends any[] = ConstructorParameters<Upscaler>,
-> {
-	upscaler: Upscaler;
-	args?: Params;
+interface UpscalerProps {
+	upscaler: FSRUpscaler;
 	children?: ReactNode;
-	[key: string]: Params | Upscaler | any;
+	[key: string]: any;
 }
 
-export declare const Upscaler: <
-	Upscaler extends new ( ...args: any[] ) => void,
-	Params extends any[] = ConstructorParameters<Upscaler>,
->(
-	props: UpscalerProps<Upscaler, Params> & RefAttributes<Upscaler>,
-) => JSX.Element;
+export declare const Upscaler: ( props: UpscalerProps ) => JSX.Element;

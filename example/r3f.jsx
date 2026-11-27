@@ -13,12 +13,13 @@ import { getScaledSettings } from './src/getScaledSettings.js';
 const ENV_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/master/hdri/studio_small_05_1k.hdr';
 const MODEL_URL = 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/devices/headphone-with-stand.glb';
 
-// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both
-const DENOISER_ARGS = {
+// the library ships neither "oidn-webgpu" nor the network weights, so the app provides both. The instances
+// are kept for the page's lifetime so toggling them doesn't reload the weights
+const denoiser = new OIDNDenoiser( {
 	initUNetFromURL,
 	auxWeightsUrl: new URL( './src/denoise/rt_hdr_alb_nrm.tza', import.meta.url ).toString(),
-};
-const UPSCALER_ARGS = { Upscaler: UpscalerImpl };
+} );
+const upscaler = new FSRUpscaler( { Upscaler: UpscalerImpl } );
 
 // Model by "Halil Kantarci" on Sketchfab, scaled to 2 units and stood on the floor
 function Headphones() {
@@ -98,8 +99,8 @@ function App() {
 					renderScale={ params.renderScale }
 					frameBudget={ params.frameBudget }
 				>
-					{ params.denoise && <Denoiser denoiser={ OIDNDenoiser } args={ DENOISER_ARGS } /> }
-					{ params.upscale && <Upscaler upscaler={ FSRUpscaler } args={ UPSCALER_ARGS } sharpness={ params.sharpness } /> }
+					{ params.denoise && <Denoiser denoiser={ denoiser } /> }
+					{ params.upscale && <Upscaler upscaler={ upscaler } sharpness={ params.sharpness } /> }
 					<Headphones />
 					<StudioBackdrop color={ params.color } />
 					<Environment files={ ENV_URL } background={ true } />

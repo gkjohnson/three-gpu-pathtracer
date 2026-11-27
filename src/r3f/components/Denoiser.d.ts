@@ -1,25 +1,16 @@
 import type {
 	ReactNode,
 	Context,
-	RefAttributes,
 	JSX,
 } from 'react';
+import type { OIDNDenoiser } from '../../webgpu/index.js';
 
-export declare const DenoiserContext: Context<any>;
+export declare const DenoiserContext: Context<OIDNDenoiser | null>;
 
-interface DenoiserProps<
-	Denoiser extends new ( ...args: any[] ) => void,
-	Params extends any[] = ConstructorParameters<Denoiser>,
-> {
-	denoiser: Denoiser;
-	args?: Params;
+interface DenoiserProps {
+	denoiser: OIDNDenoiser;
 	children?: ReactNode;
-	[key: string]: Params | Denoiser | any;
+	[key: string]: any;
 }
 
-export declare const Denoiser: <
-	Denoiser extends new ( ...args: any[] ) => void,
-	Params extends any[] = ConstructorParameters<Denoiser>,
->(
-	props: DenoiserProps<Denoiser, Params> & RefAttributes<Denoiser>,
-) => JSX.Element;
+export declare const Denoiser: ( props: DenoiserProps ) => JSX.Element;
