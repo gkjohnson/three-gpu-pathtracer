@@ -2,7 +2,7 @@ import { Matrix3, DataTexture, LinearFilter } from 'three/webgpu';
 import { texture, sampler, uniform, PI } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { EnvironmentCdfTexture } from './EnvironmentCdfTexture.js';
-import { readCdfFn, searchCdfFn, getEnvRowEdgeFn, getEnvPatchCornersFn } from './nodes/cdf.wgsl.js';
+import { readCdfFn, searchCdfFn, getEnvPatchRowStartFn, getEnvPatchCornersFn } from './nodes/cdf.wgsl.js';
 import { environmentSampleStruct } from './nodes/structs.wgsl.js';
 import { equirectDirectionToUvFn, equirectUvToDirectionFn } from './nodes/sampling.wgsl.js';
 
@@ -112,8 +112,8 @@ export class EquirectHdrInfoNode {
 
 				var result: ${ environmentSampleStruct };
 
-				// search the CDFs: marginal picks the patch row (v), conditional picks the patch in it (u), and
-				// the fractions place the sample within the patch in proportion to its bilinear weight
+				// pick a patch: the marginal CDF picks its row and that row's CDF picks its column. Where each random
+				// value falls between its two CDF entries is kept as a fraction, to place the sample within the patch
 				let resolution = textureDimensions( ${ mapNode } );
 				var rowFraction = 0.0;
 				var columnFraction = 0.0;
@@ -121,16 +121,18 @@ export class EquirectHdrInfoNode {
 				let column = ${ searchCdfFn }( ${ cdfTextureNode }, r.y, resolution.y + 2u + row * ( resolution.x + 1u ), resolution.x, &columnFraction );
 				let cell = vec2u( column, row );
 
-				// the row within the patch from the bilinear marginal, then the column from the conditional at it
+				// place the sample within the patch in proportion to its bilinear weight, from 0 to 1 on each axis: its
+				// height from the summed top and bottom corner weights, then its position across at that height
 				let corners = ${ getEnvPatchCornersFn }( ${ mapNode }, cell );
 				var local: vec2f;
 				local.y = ${ sampleLinearFn }( rowFraction, corners.x + corners.y, corners.z + corners.w );
 				local.x = ${ sampleLinearFn }( columnFraction, mix( corners.x, corners.z, local.y ), mix( corners.y, corners.w, local.y ) );
 
-				// patches start at texel centers, wrapping around the seam
+				// the sample's position in texels. Patch column "column" starts at texel center "column", so the last
+				// column wraps around the seam
 				let position = vec2f(
 					f32( column ) + 0.5 + local.x,
-					mix( ${ getEnvRowEdgeFn }( ${ mapNode }, row ), ${ getEnvRowEdgeFn }( ${ mapNode }, row + 1u ), local.y ),
+					mix( ${ getEnvPatchRowStartFn }( ${ mapNode }, row ), ${ getEnvPatchRowStartFn }( ${ mapNode }, row + 1u ), local.y ),
 				);
 				let uv = vec2f( fract( position.x / f32( resolution.x ) ), position.y / f32( resolution.y ) );
 
@@ -159,8 +161,8 @@ export class EquirectHdrInfoNode {
 		this.getDirPdf = wgslTagFn/* wgsl */`
 			fn getEnvDirPdf( direction: vec3f ) -> f32 {
 
-				// the patch holding the direction, and where in it the direction falls. Patches start at texel centers,
-				// wrapping around the seam
+				// the patch holding the direction, and where in it the direction falls from 0 to 1 on each axis. Patch
+				// column "x" starts at texel center "x", so directions left of texel center 0 fall in the last column
 				let rotatedDir = ${ rotationNode } * direction;
 				let mapUv = ${ equirectDirectionToUvFn }( rotatedDir );
 				let resolution = textureDimensions( ${ mapNode } );
@@ -168,8 +170,8 @@ export class EquirectHdrInfoNode {
 				let y = mapUv.y * f32( resolution.y );
 				let column = u32( floor( x ) + f32( resolution.x ) ) % resolution.x;
 				let row = min( u32( y + 0.5 ), resolution.y );
-				let start = ${ getEnvRowEdgeFn }( ${ mapNode }, row );
-				let end = ${ getEnvRowEdgeFn }( ${ mapNode }, row + 1u );
+				let start = ${ getEnvPatchRowStartFn }( ${ mapNode }, row );
+				let end = ${ getEnvPatchRowStartFn }( ${ mapNode }, row + 1u );
 				let local = vec2f( x - floor( x ), saturate( ( y - start ) / ( end - start ) ) );
 
 				return ${ getPatchPdfFn }( ${ getEnvPatchCornersFn }( ${ mapNode }, vec2u( column, row ) ), local, mapUv );

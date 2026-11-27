@@ -2,7 +2,7 @@ import { StorageTexture, RedFormat, FloatType, NearestFilter } from 'three/webgp
 import { texture, storageTexture, globalId } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { ComputeKernel } from './compute/ComputeKernel.js';
-import { getEnvRowEdgeFn, getEnvPatchCornersFn } from './nodes/cdf.wgsl.js';
+import { getEnvPatchRowStartFn, getEnvPatchCornersFn } from './nodes/cdf.wgsl.js';
 
 // the texture width WebGPU guarantees, so an 8k environment map's CDFs fit in a few rows
 const CDF_TEXTURE_WIDTH = 8192;
@@ -91,7 +91,7 @@ export class EnvironmentCdfTexture extends StorageTexture {
 		const getPatchWeightFn = wgslTagFn/* wgsl */`
 			fn getPatchWeight( cell: vec2u ) -> f32 {
 
-				let height = ${ getEnvRowEdgeFn }( ${ mapNode }, cell.y + 1u ) - ${ getEnvRowEdgeFn }( ${ mapNode }, cell.y );
+				let height = ${ getEnvPatchRowStartFn }( ${ mapNode }, cell.y + 1u ) - ${ getEnvPatchRowStartFn }( ${ mapNode }, cell.y );
 				return height * dot( ${ getEnvPatchCornersFn }( ${ mapNode }, cell ), vec4f( 0.25 ) );
 
 			}
