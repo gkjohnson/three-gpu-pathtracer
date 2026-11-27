@@ -3,7 +3,7 @@ import { texture, sampler, uniform, PI } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { EnvironmentCdfTexture } from './EnvironmentCdfTexture.js';
 import { readCdfFn, searchCdfFn, getEnvPatchRowStartFn, getEnvPatchCornersFn } from './nodes/cdf.wgsl.js';
-import { environmentSampleStruct } from './nodes/structs.wgsl.js';
+import { constants, environmentSampleStruct } from './nodes/structs.wgsl.js';
 import { equirectDirectionToUvFn, equirectUvToDirectionFn } from './nodes/sampling.wgsl.js';
 
 // An equirect environment map and its importance sampling CDFs, built on the GPU, with the functions that sample it
@@ -70,10 +70,11 @@ export class EquirectHdrInfoNode {
 
 		// places a [0, 1) sample in proportion to the linear function from "a" to "b", from pbrt-v4's "SampleLinear"
 		const sampleLinearFn = wgslTagFn/* wgsl */`
+			${ [ constants ] }
 			fn sampleEnvLinear( u: f32, a: f32, b: f32 ) -> f32 {
 
 				let denominator = a + sqrt( mix( a * a, b * b, u ) );
-				return select( u, min( u * ( a + b ) / denominator, 0.99999994 ), denominator > 0.0 );
+				return select( u, min( u * ( a + b ) / denominator, ONE_MINUS_EPSILON ), denominator > 0.0 );
 
 			}
 		`;
