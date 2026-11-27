@@ -41,6 +41,8 @@ const objectRecordStruct = new StructTypeNode( {
 }, 'PathTracerObjectRecord' );
 
 // whether the object, its parents and its batched instance are visible, as three-mesh-bvh writes the record
+// TODO: this copies three-mesh-bvh's private check. Restructure so the visibility is shared with three-mesh-bvh
+// rather than reimplemented here
 function isObjectVisible( object, instanceId ) {
 
 	if ( object.isBatchedMesh && ! object.getVisibleAt( instanceId ) ) {
