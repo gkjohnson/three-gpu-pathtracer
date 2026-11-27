@@ -1,5 +1,5 @@
 import { texture, uniform } from 'three/tsl';
-import { Box3, ColorManagement, Vector3, RGBAFormat, RGIntegerFormat, RGBAIntegerFormat, FloatType, UnsignedIntType } from 'three/webgpu';
+import { Box3, RGBAFormat, RGIntegerFormat, RGBAIntegerFormat, FloatType, UnsignedIntType } from 'three/webgpu';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { LightTreeBVH } from './LightTreeBVH.js';
 import { LinearDataTexture } from './LinearDataTexture.js';
@@ -11,23 +11,6 @@ import { linearTextureLoadFn, linearTextureLoadUintFn } from './nodes/utils.wgsl
 const MIN_DISTANCE_SQ = 1e-20;
 
 const _box = /* @__PURE__ */ new Box3();
-const _emissive = /* @__PURE__ */ new Vector3();
-const _luminanceCoefficients = /* @__PURE__ */ new Vector3();
-
-// returns the material's emitted luminance, ignoring its emissive map. Fog boundaries don't emit
-function getEmissiveLuminance( material ) {
-
-	if ( ! material || ! material.emissive || material.isFogVolumeMaterial ) {
-
-		return 0;
-
-	}
-
-	const { emissive, emissiveIntensity = 1 } = material;
-	ColorManagement.getLuminanceCoefficients( _luminanceCoefficients );
-	return _emissive.setFromColor( emissive ).dot( _luminanceCoefficients ) * emissiveIntensity;
-
-}
 
 // Samples emissive triangles as lights using a light tree, as in pbrt-v4
 export class EmissiveTrianglesInfo {
@@ -57,6 +40,8 @@ export class EmissiveTrianglesInfo {
 
 	// Rebuilds the textures. Call when the scene, its materials or its transforms change
 	// TODO: only rebuild the tree on a material change when an object starts or stops emitting
+	// TODO: refit the tree's bounds on a transform change instead of rebuilding it and its textures, since animated
+	// scenes update the transforms every frame
 	update( bvhData ) {
 
 		// the bvh data has not been built yet
@@ -75,7 +60,7 @@ export class EmissiveTrianglesInfo {
 		objectInfos.forEach( info => {
 
 			const { objectIndex, primitiveOffset, primitiveCount } = info;
-			const luminance = getEmissiveLuminance( bvhData.getMaterial( info ) );
+			const luminance = bvhData.shadingModel.getEmissiveLuminance( bvhData.getMaterial( info ) );
 			if ( luminance > 0 && bvhData.isRecordVisible( objectIndex ) ) {
 
 				firstTriangles[ objectIndex * 2 ] = emissiveTriangleCount + 1;

@@ -279,6 +279,19 @@ export class ShadingModel {
 	}
 
 	/**
+	 * Returns the luminance a material emits per unit area, which the emissive triangle light sampling weighs the
+	 * triangles by. It only needs to estimate what "fns.getHitEmission" returns, and anything above zero is sampled.
+	 * The base model emits nothing.
+	 *
+	 * @returns {number}
+	 */
+	getEmissiveLuminance( /* material */ ) {
+
+		return 0;
+
+	}
+
+	/**
 	 * Packs the materials' textures into the atlas "fns.sampleTexel" reads. Call after "updateMaterials".
 	 * Returns whether the number of textures changed, so the kernels need rebuilding.
 	 *

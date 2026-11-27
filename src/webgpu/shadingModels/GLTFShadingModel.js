@@ -1,4 +1,4 @@
-import { BackSide, FrontSide, DoubleSide } from 'three/webgpu';
+import { BackSide, FrontSide, DoubleSide, ColorManagement, Vector3 } from 'three/webgpu';
 import { float } from 'three/tsl';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { ShadingModel } from './ShadingModel.js';
@@ -21,6 +21,9 @@ import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } fro
 import { ifFeature } from '../nodes/features.js';
 import { TurquinTexture } from '../TurquinTexture.js';
 import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
+
+const _emissive = /* @__PURE__ */ new Vector3();
+const _luminanceCoefficients = /* @__PURE__ */ new Vector3();
 
 const CLEARCOAT_IOR = float( 1.5 );
 const SINGULAR_EVENT_SCALE = float( 1e6 );
@@ -712,6 +715,20 @@ export class GLTFShadingModel extends ShadingModel {
 			features.setUsed( 'CLEARCOAT' );
 
 		}
+
+	}
+
+	// the emissive color and intensity, ignoring the emissive map. Fog boundaries don't emit
+	getEmissiveLuminance( material ) {
+
+		if ( ! material || ! material.emissive || material.isFogVolumeMaterial ) {
+
+			return 0;
+
+		}
+
+		ColorManagement.getLuminanceCoefficients( _luminanceCoefficients );
+		return _emissive.setFromColor( material.emissive ).dot( _luminanceCoefficients ) * this.getField( material, 'emissiveIntensity', 1 );
 
 	}
 
