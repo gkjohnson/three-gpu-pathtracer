@@ -62,6 +62,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Never rendering with "dynamicLowRes" off and a "renderDelay".
 - WebGPUPathTracer: Anisotropic materials losing energy and rendering darker as "anisotropy" increases.
 - WebGPUPathTracer: An error thrown when it's disposed right after being created, such as in React's StrictMode.
+- WebGPUPathTracer: Calling "updateMaterials" while "setScene" is building hiding every object in the new scene.
 
 ## [0.0.28] - 2026.11.02
 ### Added

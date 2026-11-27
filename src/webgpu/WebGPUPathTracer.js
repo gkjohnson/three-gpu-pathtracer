@@ -1128,12 +1128,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		} );
 
-		// the materials are written first since the bvh data writes their indices with the transforms
-		const { _shadingModel: shadingModel } = this;
-		shadingModel.updateMaterials( scene );
-		shadingModel.updateFeatures();
-
 		// Build TLAS and compute functions
+		const { _shadingModel: shadingModel } = this;
 		const bvhData = new PathtracerBVHComputeData( scene, shadingModel );
 		await bvhData.update();
 
@@ -1143,6 +1139,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 			return;
 
 		}
+
+		// the materials are read once the scene is built, since "updateMaterials" calls made while building still
+		// apply to the previous scene
+		shadingModel.updateMaterials( scene );
+		shadingModel.updateFeatures();
+		bvhData.updateMaterialIndices();
 
 		this._setStage( STAGE_COMPILING );
 		shadingModel.updateTextures( this._renderer );
