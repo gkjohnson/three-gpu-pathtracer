@@ -611,7 +611,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 		// the material indices are written with the object records, so the shading model's materials must
 		// be updated first
+		const { bvh } = this;
 		await super.update();
+
+		// nothing was built when a later "update" or "dispose" cancelled this one
+		if ( this.bvh === bvh ) {
+
+			return;
+
+		}
 
 		// build the channel -> uv lookup now that the geometry struct (and its uv members) exist
 		this.updateUvSampleFunction();
