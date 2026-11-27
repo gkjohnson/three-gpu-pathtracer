@@ -1,5 +1,6 @@
-import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture, RenderTarget } from 'three';
+import { Camera, Color, EventDispatcher, Mesh, Object3D, RenderTarget, Scene, Texture, ExternalTexture } from 'three';
 import { StorageArrayTexture, WebGPURenderer, MeshBasicNodeMaterial, MeshBasicNodeMaterialParameters } from 'three/webgpu';
+import { ObjectInfo } from 'three-mesh-bvh/webgpu';
 import { BVHWorker } from '../index.js';
 
 // three.js type augmentation
@@ -123,8 +124,19 @@ export interface OIDNDenoiserOptions {
 	useAuxiliaryBuffers?: boolean;
 	maxTileSize?: number | null;
 	dynamicTile?: boolean | object | null;
+	onBeforeDenoise?: OIDNBeforeDenoiseCallback | null;
 
 }
+
+export interface OIDNDenoiseImages {
+
+	color?: Texture;
+	albedo?: Texture | null;
+	normal?: Texture | null;
+
+}
+
+export type OIDNBeforeDenoiseCallback = ( color: Texture, albedo: Texture | null, normal: Texture | null ) => OIDNDenoiseImages;
 
 export interface OIDNDenoiserEventMap {
 
@@ -143,6 +155,7 @@ export class OIDNDenoiser extends EventDispatcher<OIDNDenoiserEventMap> {
 	useAuxiliaryBuffers: boolean;
 	maxTileSize: number | null;
 	dynamicTile: boolean | object | null;
+	onBeforeDenoise: OIDNBeforeDenoiseCallback | null;
 
 	readonly texture: ExternalTexture | null;
 	readonly complete: boolean;
@@ -153,6 +166,78 @@ export class OIDNDenoiser extends EventDispatcher<OIDNDenoiserEventMap> {
 	denoise( color: Texture, albedo?: Texture | null, normal?: Texture | null ): Promise<void>;
 	reset(): void;
 	dispose(): void;
+
+}
+
+// shading model
+
+export class ShadingModel {
+
+	structs: object;
+	storage: object;
+	fns: object;
+	textures: Array<Texture>;
+
+	init( renderer: WebGPURenderer ): void;
+	updateFunctions(): void;
+	getTextureDescriptor( material: object, key: string ): number;
+	getField( material: object, key: string, def: any ): any;
+	writeTextureMatrixToArray( material: object, textureKey: string, array: Float32Array, offset: number ): number;
+	writeMaterialsBuffer( materials: Array<object> ): { materialData: Int32Array };
+	dispose(): void;
+
+}
+
+export class GLTFShadingModel extends ShadingModel {
+
+	constructor( options?: object );
+
+}
+
+// baking
+
+export interface AOMapShadingModelOptions {
+
+	radius?: number;
+	falloff?: boolean;
+
+}
+
+export class AOMapShadingModel extends ShadingModel {
+
+	constructor( options?: AOMapShadingModelOptions );
+
+	radius: { value: number };
+	falloff: { value: number };
+
+}
+
+export class LightmapShadingModel extends GLTFShadingModel {}
+
+export class UVMapCamera extends Camera {
+
+	constructor( root: Object3D );
+
+	root: Object3D;
+	readonly idTexture: { readonly texture: Texture };
+
+	dispose(): void;
+
+}
+
+export class AOMapCamera extends UVMapCamera {}
+
+export interface LightmapCameraOptions {
+
+	originOffset?: number;
+
+}
+
+export class LightmapCamera extends UVMapCamera {
+
+	constructor( root: Object3D, options?: LightmapCameraOptions );
+
+	originOffset: { value: number };
 
 }
 
@@ -235,6 +320,8 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	readonly textureAtlas: AtlasTexture;
 
 	getSampleCountsAsync(): Promise<SampleCounts>;
+	setShadingModel( shadingModel: ShadingModel ): void;
+	getObjectInfo( object: Mesh, instanceId?: number, group?: number ): ObjectInfo | null;
 	setMultipleImportanceSampling( value: boolean ): void;
 	setDenoiser( denoiser: OIDNDenoiser | null ): void;
 	setUpscaler( upscaler: FSRUpscaler | null ): void;

@@ -67,6 +67,7 @@
     "three-mesh-bvh": "^0.10.0",
     "typescript": "^5.9.2",
     "vite": "^8.2.2",
+    "watlas": "^1.0.1",
     "yargs": "^17.5.1"
   },
   "peerDependencies": {

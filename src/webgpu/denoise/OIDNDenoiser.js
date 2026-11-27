@@ -78,6 +78,10 @@ export class OIDNDenoiser extends EventDispatcher {
 	 * @param {number|null} [options.maxTileSize]
 	 * @param {DynamicTileSetting|null} [options.dynamicTile] - `false` pins every tile to
 	 * `maxTileSize`. An object tunes the adaptive sizing.
+	 * @param {function(Texture,Texture,Texture):Object|null} [options.onBeforeDenoise] - Called by
+	 * `update` with the path traced color and the albedo and normal images, null when unused. Returns
+	 * an object with the `color`, `albedo` or `normal` images to denoise in their place, the others
+	 * are kept. The returned textures are read until the pass completes.
 	 */
 	constructor( options = {} ) {
 
@@ -90,6 +94,7 @@ export class OIDNDenoiser extends EventDispatcher {
 			useAuxiliaryBuffers = true,
 			maxTileSize = null,
 			dynamicTile = null,
+			onBeforeDenoise = null,
 		} = options;
 
 		if ( ! initUNetFromURL ) {
@@ -108,6 +113,8 @@ export class OIDNDenoiser extends EventDispatcher {
 		// tiling, passed through to oidn-webgpu. Null keeps its defaults
 		this.maxTileSize = maxTileSize;
 		this.dynamicTile = dynamicTile;
+
+		this.onBeforeDenoise = onBeforeDenoise;
 
 		this.renderer = null;
 
@@ -168,8 +175,18 @@ export class OIDNDenoiser extends EventDispatcher {
 
 		}
 
+		let color = target;
+		if ( this.onBeforeDenoise ) {
+
+			const images = this.onBeforeDenoise( color, albedo, normal );
+			color = images.color ?? color;
+			albedo = images.albedo ?? albedo;
+			normal = images.normal ?? normal;
+
+		}
+
 		// a failure, such as the weights failing to download, is reported once rather than every frame
-		this.denoise( target, albedo, normal ).catch( error => {
+		this.denoise( color, albedo, normal ).catch( error => {
 
 			this._failed = true;
 			this.dispatchEvent( { type: 'error', error } );

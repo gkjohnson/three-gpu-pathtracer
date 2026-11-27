@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Added
+- WebGPUPathTracer: AO map and lightmap baking with "AOMapCamera" and "LightmapCamera".
+- WebGPUPathTracer: "getObjectInfo" tells where an object was packed, for cameras that read the scene data.
+- WebGPUPathTracer: "setShadingModel" is public, and the shading model is given the hit it evaluates at, with "AOMapShadingModel" and "LightmapShadingModel" for baking.
 - WebGPUPathTracer: Support for bump maps, with "bumpScale" as a height in object units.
 - WebGPUPathTracer: "interpolateDisplay", set to false to show the render without interpolation when it's drawn at a different size than the canvas.
 - WebGPUPathTracer: "renderTime" and "elapsedTime" in the sample counts, the milliseconds spent rendering and the milliseconds since rendering started.

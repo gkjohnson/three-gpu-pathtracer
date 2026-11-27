@@ -22,7 +22,8 @@ import { GLTFShadingModel } from './shadingModels/GLTFShadingModel.js';
 import { expandByNearPlane } from './shims/nearPlaneBounds.js';
 import { TRANSMISSIVE_BACKGROUND_OVERLAY, RANDOM_SOBOL } from './constants.js';
 import { createOutputTarget } from './compute/targets.js';
-/** @import { Camera, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
+/** @import { Camera, Object3D, Scene, Texture, WebGPURenderer } from 'three/webgpu' */
+/** @import { ObjectInfo } from 'three-mesh-bvh/webgpu' */
 /** @import { AtlasTexture } from './AtlasTexture.js' */
 /** @import { OIDNDenoiser } from './denoise/OIDNDenoiser.js' */
 /** @import { FSRUpscaler } from './upscale/FSRUpscaler.js' */
@@ -1174,10 +1175,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
-	 * Replaces the shading model and recompiles the kernels.
+	 * Replaces the shading model and recompiles the kernels. The model evaluates every surface the
+	 * paths hit, so a custom one can bake quantities other than the rendered color, as
+	 * `AOMapShadingModel` and `LightmapShadingModel` do.
 	 *
 	 * @param {ShadingModel} shadingModel
-	 * @private
 	 */
 	setShadingModel( shadingModel ) {
 
@@ -1215,12 +1217,30 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Where an object's geometry group landed in the packed scene buffers, as in three-mesh-bvh's
+	 * `BVHComputeData.getObjectInfo`, or null if it was not packed. For a camera that reads the scene
+	 * data by triangle, such as `UVMapCamera`. Valid once the scene is set.
+	 *
+	 * @param {Object3D} object
+	 * @param {number} [instanceId=0] - The instance of an instanced or batched mesh.
+	 * @param {number} [group=0] - The geometry group.
+	 * @returns {ObjectInfo|null}
+	 */
+	getObjectInfo( object, instanceId = 0, group = 0 ) {
+
+		return this._bvhData.getObjectInfo( object, instanceId, group );
+
+	}
+
+	/**
 	 * Replaces the camera the rays are generated from. Cameras with a `getCameraRayFn`, such as
-	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation, and optionally
-	 * `getRayOriginBounds( box, boundsToWorld )`, the bounds of where their rays start in camera space.
-	 * Its WGSL `getCameraRay( pixel: vec2u, sample: vec2f, resolution: vec2f, ray ) -> bool` receives the
-	 * pixel to render and a `[ 0, 1 )` random sample for the point within it, and returns false to skip
-	 * the pixel.
+	 * `PhysicalCamera` and `EquirectCamera`, provide their own ray generation: a WGSL
+	 * `getCameraRay( pixel: vec2u, sample: vec2f, resolution: vec2f, ray ) -> bool` given the pixel to render,
+	 * where pixel row 0 is v = 0, and a `[ 0, 1 )` random sample for the point within it. Returning `false`
+	 * marks the pixel finished, with no content. The kernel context exposes the scene data as `bvhData`, so
+	 * the function can read the geometry and materials through `contextProxy` and `contextProxyFn`. Its
+	 * `update( pathTracer )` is called when the scene, camera or size changes. Optionally
+	 * `getRayOriginBounds( box, boundsToWorld )` gives the bounds of where their rays start in camera space.
 	 *
 	 * @param {Camera} camera
 	 */
@@ -1275,7 +1295,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		}
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
-		this._cameraRayFnHandle.update();
+		this._cameraRayFnHandle.update( this );
 		this._updateCameraInVolume();
 		this._pathTracer.rebuild();
 		this.reset();
@@ -1329,7 +1349,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 	updateCamera() {
 
 		const { _cameraRayFnHandle, _pathTracer } = this;
-		if ( _cameraRayFnHandle.update() ) {
+		if ( _cameraRayFnHandle.update( this ) ) {
 
 			_pathTracer.rebuild();
 
@@ -1458,7 +1478,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			this._size.set( x, y );
 
-			// cameras can depend on the size
+			// cameras can depend on the size, such as UVMapCamera
 			if ( this._cameraRayFnHandle ) {
 
 				this.updateCamera();
