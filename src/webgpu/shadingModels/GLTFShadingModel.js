@@ -1,8 +1,10 @@
-import { BackSide, FrontSide, DoubleSide, ColorManagement, Vector3 } from 'three/webgpu';
-import { float } from 'three/tsl';
+import { BackSide, FrontSide, DoubleSide, Matrix4, ColorManagement, Vector3 } from 'three/webgpu';
+import { float, uniform } from 'three/tsl';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { ShadingModel } from './ShadingModel.js';
-import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc, getSurfaceRecordFunc, applyDispersionFunc, getHitOpacityFunc, getHitEmissionFunc } from '../nodes/material.wgsl.js';
+import { MaterialGraphInterpreter } from '../materialGraphs/MaterialGraphInterpreter.js';
+import { getConstantNodeValue, getValueLanes } from '../materialGraphs/MaterialGraphCompiler.js';
+import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc, getSurfaceRecordFunc, applyDispersionFunc, getGraphHitOpacityFunc, getGraphHitEmissionFunc } from '../nodes/material.wgsl.js';
 import { getMaterialExtinctionFn } from '../nodes/medium.wgsl.js';
 import { isAuxSurfaceFn } from '../nodes/auxiliary.wgsl.js';
 import { eonBrdfFunc, eonDirectionFunc, eonPDFFunc } from '../nodes/eon.wgsl.js';
@@ -54,6 +56,19 @@ export class GLTFShadingModel extends ShadingModel {
 		this.iridescentFresnel = iridescentFresnel;
 		this.transmissionFresnel = transmissionFresnelFunc( iridescentFresnel );
 
+		// the render camera's view and world matrices, the view space of the material graphs
+		this.cameraViewMatrix = uniform( new Matrix4() );
+		this.cameraWorldMatrix = uniform( new Matrix4() );
+
+		this.setMaterialGraphs( MaterialGraphInterpreter );
+
+	}
+
+	setCamera( camera ) {
+
+		this.cameraWorldMatrix.value.copy( camera.matrixWorld );
+		this.cameraViewMatrix.value.copy( camera.matrixWorld ).invert();
+
 	}
 
 	init( renderer ) {
@@ -66,6 +81,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 		super.dispose();
 		this.turquinTexture.dispose();
+		this.materialGraphs.dispose();
 
 	}
 
@@ -87,6 +103,7 @@ export class GLTFShadingModel extends ShadingModel {
 			getTextureSize: fns.getTextureSize,
 			getUvFromChannel: contextProxyFn( 'bvhData.fns.getUvFromChannel' ),
 			getColor: contextProxyFn( 'bvhData.fns.getColor' ),
+			runMaterialGraph: fns.runMaterialGraph,
 		} );
 
 		const surfaceRecordStruct = structs.surfaceRecord;
@@ -644,8 +661,8 @@ export class GLTFShadingModel extends ShadingModel {
 
 		`;
 
-		fns.getHitOpacity = getHitOpacityFunc;
-		fns.getHitEmission = getHitEmissionFunc;
+		fns.getHitOpacity = getGraphHitOpacityFunc;
+		fns.getHitEmission = getGraphHitEmissionFunc;
 
 		const materials = contextProxy( 'shadingModel.storage.materials' );
 		fns.getMaterialMedium = wgslTagFn/* wgsl */`
@@ -683,11 +700,43 @@ export class GLTFShadingModel extends ShadingModel {
 	}
 
 	/**
+	 * Sets the class running the TSL graphs of node materials, `MaterialGraphInterpreter` by default or
+	 * `MaterialGraphBuilder`. Update the materials for it to take effect.
+	 *
+	 * @param {Function} MaterialGraphsConstructor
+	 */
+	setMaterialGraphs( MaterialGraphsConstructor ) {
+
+		this.materialGraphs?.dispose();
+		this.materialGraphs = new MaterialGraphsConstructor( {
+			sampleTexel: this.fns.sampleTexel,
+			getTextureDescriptor: value => this.getTextureDescriptor( { value }, 'value' ),
+		} );
+		this.fns.runMaterialGraph = this.materialGraphs.getRunFn();
+
+	}
+
+	/**
 	 * Returns the material's field, or the default when it has none. For use in "writeMaterialsBuffer".
 	 */
 	getField( material, key, def ) {
 
+		// a node material's constant or uniform node replaces the property
+		const nodeValue = material.isNodeMaterial ? getConstantNodeValue( material[ `${ key }Node` ] ) : null;
+		if ( nodeValue !== null ) {
+
+			return nodeValue;
+
+		}
+
 		return key in material ? material[ key ] : def;
+
+	}
+
+	// a material without thickness or attenuation. A thickness graph makes the material solid
+	isThinWallMaterial( material ) {
+
+		return this.getField( material, 'thickness', 0.0 ) === 0.0 && ! material.thicknessNode && this.getField( material, 'attenuationDistance', Infinity ) === Infinity;
 
 	}
 
@@ -697,8 +746,8 @@ export class GLTFShadingModel extends ShadingModel {
 	isVolumeMaterial( material ) {
 
 		const isFogVolume = Boolean( material.isFogVolumeMaterial );
-		const isThinWall = this.getField( material, 'thickness', 0.0 ) === 0.0 && this.getField( material, 'attenuationDistance', Infinity ) === Infinity;
-		return ( ! isThinWall && material.transmission > 0.0 ) || isFogVolume;
+		const isTransmissive = material.transmission > 0.0 || Boolean( material.transmissionNode );
+		return ( ! this.isThinWallMaterial( material ) && isTransmissive ) || isFogVolume;
 
 	}
 
@@ -710,7 +759,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 		}
 
-		if ( this.getField( material, 'clearcoat', 0.0 ) > 0.0 ) {
+		if ( this.getField( material, 'clearcoat', 0.0 ) > 0.0 || material.clearcoatNode ) {
 
 			features.setUsed( 'CLEARCOAT' );
 
@@ -718,21 +767,44 @@ export class GLTFShadingModel extends ShadingModel {
 
 	}
 
-	// the emissive color and intensity, ignoring the emissive map. Fog boundaries don't emit
+	// the emissive color and intensity, ignoring the emissive map. An emission graph's value is used when it's constant,
+	// and taken as white otherwise. Fog boundaries don't emit
 	getEmissiveLuminance( material ) {
 
-		if ( ! material || ! material.emissive || material.isFogVolumeMaterial ) {
+		if ( ! material || material.isFogVolumeMaterial ) {
 
 			return 0;
 
 		}
 
 		ColorManagement.getLuminanceCoefficients( _luminanceCoefficients );
+		if ( material.emissiveNode ) {
+
+			const value = getConstantNodeValue( material.emissiveNode );
+			return value === null ? 1 : _emissive.fromArray( getValueLanes( value ) ).dot( _luminanceCoefficients );
+
+		}
+
+		if ( ! material.emissive ) {
+
+			return 0;
+
+		}
+
 		return _emissive.setFromColor( material.emissive ).dot( _luminanceCoefficients ) * this.getField( material, 'emissiveIntensity', 1 );
 
 	}
 
 	writeMaterialsBuffer( materials ) {
+
+		// the graphs are compiled first since the materials store where their programs start
+		const { materialGraphs, fns } = this;
+		const functionsChanged = materialGraphs.update( materials, material => this.materialObjects.get( material ) );
+		if ( functionsChanged ) {
+
+			fns.runMaterialGraph = materialGraphs.getRunFn();
+
+		}
 
 		let index = 0;
 
@@ -867,8 +939,7 @@ export class GLTFShadingModel extends ShadingModel {
 			intArray[ index ++ ] = this.getTextureDescriptor( m, 'specularIntensityMap' );
 
 			// isThinWall
-			const isThinWall = this.getField( m, 'thickness', 0.0 ) === 0.0 && this.getField( m, 'attenuationDistance', Infinity ) === Infinity;
-			intArray[ index ++ ] = Number( isThinWall );
+			intArray[ index ++ ] = Number( this.isThinWallMaterial( m ) );
 			index ++;
 
 			// attenuation - offset 44. A fog volume's "density" is its extinction per unit length. The kernels derive
@@ -882,9 +953,10 @@ export class GLTFShadingModel extends ShadingModel {
 
 			} else if ( 'attenuationColor' in m ) {
 
-				floatArray[ index ++ ] = m.attenuationColor.r;
-				floatArray[ index ++ ] = m.attenuationColor.g;
-				floatArray[ index ++ ] = m.attenuationColor.b;
+				const attenuationColor = this.getField( m, 'attenuationColor', null );
+				floatArray[ index ++ ] = attenuationColor.r;
+				floatArray[ index ++ ] = attenuationColor.g;
+				floatArray[ index ++ ] = attenuationColor.b;
 
 			} else {
 
@@ -908,7 +980,9 @@ export class GLTFShadingModel extends ShadingModel {
 			intArray[ index ++ ] = this.getTextureDescriptor( m, 'alphaMap' );
 			intArray[ index ++ ] = Number( this.getField( m, 'castShadow', true ) ); // shadow
 			floatArray[ index ++ ] = m.opacity;
-			floatArray[ index ++ ] = m.alphaTest;
+
+			// an alpha test graph is tested by the opacity program
+			floatArray[ index ++ ] = m.alphaTestNode ? 0.0 : m.alphaTest;
 
 			// side & matte - offset 52. Volumes are entered and left through both faces
 			if ( this.isVolumeMaterial( m ) ) {
@@ -1037,12 +1111,15 @@ export class GLTFShadingModel extends ShadingModel {
 			floatArray[ index ++ ] = this.getField( m, 'scatterStrength', 0.0 );
 			floatArray[ index ++ ] = this.getField( m, 'scatterAnisotropy', 0.0 );
 
-			// padding to the struct's 16 byte alignment
-			index += 3;
+			// TSL graph programs - offset 293
+			const { program, opacityProgram, emissionProgram } = materialGraphs.getPrograms( m );
+			intArray[ index ++ ] = program;
+			intArray[ index ++ ] = opacityProgram;
+			intArray[ index ++ ] = emissionProgram;
 
 		}
 
-		return { materialData: intArray };
+		return { materialData: intArray, functionsChanged };
 
 	}
 

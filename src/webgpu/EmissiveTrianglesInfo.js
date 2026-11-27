@@ -303,8 +303,9 @@ export class EmissiveTrianglesInfo {
 				let side = select( - 1.0, 1.0, cosLight > 0.0 );
 
 				// get the light emitted toward the position, scaled by the surface's opacity
-				let opacity = ${ getHitOpacity }( objectInfo.materialIndex, objectInfo.color.a, indices, objectInfo.attributesOffset, barycoord, side );
-				let emission = opacity * ${ getHitEmission }( objectInfo.materialIndex, indices, objectInfo.attributesOffset, barycoord, side );
+				let view = toPosition * inverseSqrt( distSq );
+				let opacity = ${ getHitOpacity }( triangle.objectIndex, indices, barycoord, side );
+				let emission = opacity * ${ getHitEmission }( triangle.objectIndex, indices, barycoord, side, view );
 				if ( triangle.area <= 0.0 || distSq <= 0.0 || cosLight == 0.0 || all( emission == vec3f( 0.0 ) ) ) {
 
 					return lightRec;

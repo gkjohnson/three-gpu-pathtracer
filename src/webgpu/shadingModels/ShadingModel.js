@@ -1,4 +1,4 @@
-/** @import { WebGPURenderer } from 'three/webgpu' */
+/** @import { Camera, Object3D, WebGPURenderer } from 'three/webgpu' */
 import { RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, texture, uniformArray } from 'three/tsl';
 import { wgslTagFn, proxyFn, contextProxy } from 'three-mesh-bvh/webgpu';
@@ -77,6 +77,9 @@ export class ShadingModel {
 		this.features = new MaterialFeatures();
 		this.materials = [];
 		this.materialsMap = new Map();
+
+		// the first object found using each material, which the nodes of its graphs may read
+		this.materialObjects = new Map();
 		this.textures = [];
 		this.texturesMap = new Map();
 
@@ -93,6 +96,15 @@ export class ShadingModel {
 	}
 
 	/**
+	 * Called with the render camera when it's set or moves, for materials that read view space.
+	 *
+	 * @param {Camera} camera
+	 */
+	setCamera( /* camera */ ) {
+
+	}
+
+	/**
 	 * Assigns the structs and functions the kernels read. Subclasses call it and then replace the ones
 	 * they change:
 	 * - "structs.material": the struct each material is written to.
@@ -104,12 +116,11 @@ export class ShadingModel {
 	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
 	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.
-	 * - "fns.getHitOpacity": ( materialIndex, objectAlpha, indices, attributesOffset, barycoord, side ) -> f32, the
-	 *   opacity of a triangle the ray traversal hits, with its vertices read at "attributesOffset": 0 for a face on a
-	 *   side the material doesn't render, a side of 0 counting either side, or for a fully transparent or alpha tested
-	 *   surface, below 1 for a partially transparent one, and 1 otherwise. Defaults to 1.
-	 * - "fns.getHitEmission": ( materialIndex, indices, attributesOffset, barycoord, side ) -> vec3f, the light a point
-	 *   on a triangle emits from the side "side", read by the emissive triangle light sampling. Defaults to none.
+	 * - "fns.getHitOpacity": ( objectIndex, indices, barycoord, side ) -> f32, the opacity of a triangle the ray traversal
+	 *   hits: 0 for a face on a side the material doesn't render, a side of 0 counting either side, or for a fully
+	 *   transparent or alpha tested surface, below 1 for a partially transparent one, and 1 otherwise. Defaults to 1.
+	 * - "fns.getHitEmission": ( objectIndex, indices, barycoord, side, view ) -> vec3f, the light a point on a triangle
+	 *   emits from the side "side" toward "view", read by the emissive triangle light sampling. Defaults to none.
 	 * - "fns.getMaterialMedium": ( materialIndex ) -> MaterialMedium, the material's volume. Defaults to none.
 	 * - "fns.applyDispersion": ( ptr<SurfaceRecord>, wavelength ) -> bool, refracting a dispersive surface at a
 	 *   wavelength, returning whether the surface is dispersive. Defaults to false.
@@ -192,7 +203,7 @@ export class ShadingModel {
 		// needs them, so opaque materials don't pay for building them in the traversal
 		fns.getHitOpacity = wgslTagFn/* wgsl */`
 
-			fn getHitOpacity( materialIndex: u32, objectAlpha: f32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
+			fn getHitOpacity( objectIndex: u32, indices: vec3u, barycoord: vec3f, side: f32 ) -> f32 {
 
 				return 1.0;
 
@@ -203,7 +214,7 @@ export class ShadingModel {
 		// nothing emits by default
 		fns.getHitEmission = wgslTagFn/* wgsl */`
 
-			fn getHitEmission( materialIndex: u32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> vec3f {
+			fn getHitEmission( objectIndex: u32, indices: vec3u, barycoord: vec3f, side: f32, view: vec3f ) -> vec3f {
 
 				return vec3f( 0.0 );
 
@@ -390,7 +401,8 @@ export class ShadingModel {
 	/**
 	 *
 	 * Must write the given materials to an array in the material struct layout, returning
-	 * { materialData }. The "*Map" fields index the textures added with "getTextureDescriptor"
+	 * { materialData }. The "*Map" fields index the textures added with "getTextureDescriptor". Returns a
+	 * "functionsChanged" of true as well when the functions in "fns" changed, so the kernels need rebuilding
 	 *
 	 */
 	writeMaterialsBuffer( materials ) {
@@ -414,10 +426,18 @@ export class ShadingModel {
 
 	}
 
+	/**
+	 * Collects and writes the materials of the objects under "root". Returns whether the functions in "fns"
+	 * changed, so the kernels need rebuilding.
+	 *
+	 * @param {Object3D} root
+	 * @returns {boolean}
+	 */
 	updateMaterials( root ) {
 
-		const { materials, materialsMap, textures, texturesMap, structs } = this;
+		const { materials, materialsMap, materialObjects, textures, texturesMap, structs } = this;
 		materialsMap.clear();
+		materialObjects.clear();
 		materials.length = 0;
 
 		// collected again by "getTextureDescriptor" as the materials are written
@@ -429,11 +449,11 @@ export class ShadingModel {
 
 				if ( Array.isArray( o.material ) ) {
 
-					o.material.forEach( m => m && add( m ) );
+					o.material.forEach( m => m && add( m, o ) );
 
 				} else {
 
-					add( o.material );
+					add( o.material, o );
 
 				}
 
@@ -462,7 +482,7 @@ export class ShadingModel {
 
 		}
 
-		const { materialData } = this.writeMaterialsBuffer( materials );
+		const { materialData, functionsChanged = false } = this.writeMaterialsBuffer( materials );
 		const materialStruct = structs.material.proxyNode;
 		const materialsStorage = this.storage.materials.proxyNode;
 		const count = materialData.length / materialStruct.getLength();
@@ -476,12 +496,15 @@ export class ShadingModel {
 		materialsStorage.value.array.set( materialData );
 		materialsStorage.value.needsUpdate = true;
 
-		function add( mat ) {
+		return functionsChanged;
+
+		function add( mat, object ) {
 
 			if ( ! materialsMap.has( mat ) ) {
 
 				materials.push( mat );
 				materialsMap.set( mat, - 1 );
+				materialObjects.set( mat, object );
 
 			}
 

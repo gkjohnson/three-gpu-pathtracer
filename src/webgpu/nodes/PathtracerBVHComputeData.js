@@ -425,8 +425,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							// partial opacity is resolved at surface processing, but faces on the side the material
 							// doesn't render, fully transparent and alpha tested surfaces are skipped here
-							let object = ${ storage.objects }[ ${ currentObjectIndex } ];
-							let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices, attributesOffset, triResult.barycoord, triResult.side );
+							let opacity = ${ getHitOpacity }( ${ currentObjectIndex }, indices, triResult.barycoord, triResult.side );
 							if ( opacity <= 0.0 ) {
 
 								continue;
@@ -489,7 +488,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							` }
 
 							// faces on either side block the light, past fully transparent and alpha tested surfaces
-							let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices, attributesOffset, triResult.barycoord, 0.0 );
+							let opacity = ${ getHitOpacity }( ${ currentObjectIndex }, indices, triResult.barycoord, 0.0 );
 							if ( opacity <= 0.0 ) {
 
 								continue;
@@ -501,7 +500,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 							// it's partially transparent
 							if ( object.visibleToShadowRays == 0u ) {
 
-								let sideOpacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices, attributesOffset, triResult.barycoord, triResult.side );
+								let sideOpacity = ${ getHitOpacity }( ${ currentObjectIndex }, indices, triResult.barycoord, triResult.side );
 								result.skippedOcclusion += ( 1.0 - result.skippedOcclusion ) * sideOpacity;
 								continue;
 
@@ -573,7 +572,7 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 						}
 
 						// fully transparent and alpha tested surfaces on either side are passed
-						let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices, attributesOffset, triResult.barycoord, 0.0 );
+						let opacity = ${ getHitOpacity }( ${ currentObjectIndex }, indices, triResult.barycoord, 0.0 );
 						if ( opacity <= 0.0 ) {
 
 							continue;

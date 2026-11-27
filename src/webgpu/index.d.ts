@@ -1,5 +1,5 @@
-import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture, RenderTarget } from 'three';
-import { StorageArrayTexture, WebGPURenderer, MeshBasicNodeMaterial, MeshBasicNodeMaterialParameters } from 'three/webgpu';
+import { Camera, Color, EventDispatcher, Scene, Texture, ExternalTexture, RenderTarget, Material, Object3D } from 'three';
+import { StorageArrayTexture, WebGPURenderer, MeshBasicNodeMaterial, MeshBasicNodeMaterialParameters, Node } from 'three/webgpu';
 import { BVHWorker } from '../index.js';
 
 // three.js type augmentation
@@ -88,6 +88,45 @@ export class FogVolumeNodeMaterial extends MeshBasicNodeMaterial {
 	scatterAnisotropy: number;
 
 }
+
+// material graphs
+
+export interface MaterialGraphsOptions {
+
+	sampleTexel: object;
+	getTextureDescriptor: ( texture: Texture ) => number;
+
+}
+
+export class MaterialGraphs {
+
+	constructor( options: MaterialGraphsOptions );
+
+	update( materials: Array<Material>, getObject?: ( material: Material ) => Object3D | null ): boolean;
+	getPrograms( material: Material ): { program: number, opacityProgram: number, emissionProgram: number };
+	getRunFn(): object;
+	dispose(): void;
+
+}
+
+export class MaterialGraphInterpreter extends MaterialGraphs {}
+
+export class MaterialGraphBuilder extends MaterialGraphs {}
+
+export class HeightToNormalNode extends Node {
+
+	constructor( heightNode: Node, scaleNode: Node, texcoordNode: Node );
+
+	readonly isHeightToNormalNode: true;
+	heightNode: Node;
+	scaleNode: Node;
+	texcoordNode: Node;
+
+}
+
+export function heightToNormal( height: Node | number, scale?: Node | number, texcoord?: Node ): Node;
+
+export function patchMaterialXLibrary( library: object ): void;
 
 // upscaler
 

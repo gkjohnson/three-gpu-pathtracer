@@ -1,7 +1,8 @@
 import { DataTexture, NearestFilter } from 'three/webgpu';
 
-// the largest texture width guaranteed by WebGPU
-const LINEAR_TEXTURE_WIDTH = 8192;
+// the largest texture width guaranteed by WebGPU. It's a power of two, and the rows are only narrower when there's one,
+// so item "i" is always at texel ( i % LINEAR_TEXTURE_WIDTH, i / LINEAR_TEXTURE_WIDTH )
+export const LINEAR_TEXTURE_WIDTH = 8192;
 
 // A data texture storing a 1D array that's wrapped into rows. Read with "linearTextureLoad"
 export class LinearDataTexture extends DataTexture {

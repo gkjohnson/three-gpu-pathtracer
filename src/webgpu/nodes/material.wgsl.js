@@ -23,6 +23,14 @@ import {
 } from './ggx.wgsl.js';
 import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { materialGraphInputStruct, materialGraphResultStruct } from '../materialGraphs/materialGraph.wgsl.js';
+
+// the surface inputs a material graph reads and writes under their own names
+const GRAPH_VALUES = [
+	'roughness', 'metalness', 'emission', 'specularColor', 'specularIntensity', 'ior', 'transmission', 'clearcoat',
+	'clearcoatRoughness', 'sheen', 'sheenColor', 'sheenRoughness', 'iridescence', 'iridescenceIor',
+	'iridescenceThickness', 'dispersion',
+];
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
 // the normal towards the geometry normal such that the perfect reflection ray is just above the
@@ -144,6 +152,7 @@ export const getSurfaceRecordFunc = ( {
 	getTextureSize,
 	getUvFromChannel,
 	getColor,
+	runMaterialGraph,
 } ) => wgslTagFn/* wgsl */`
 	${ [ constants ] }
 	fn getSurfaceRecord(
@@ -224,12 +233,6 @@ export const getSurfaceRecordFunc = ( {
 			normal = normalize( abs( det ) * baseNormal - grad );
 
 		}
-
-		normal *= side;
-
-		normal = ${ ensureValidViewNormal }( normal, faceNormal, view );
-
-		normal = ${ ensureValidReflectionNormal }( normal, faceNormal, view );
 
 		var albedo = vec4( material.color, material.opacity ) * objectColor;
 		if ( material.vertexColors == 1 ) {
@@ -329,12 +332,6 @@ export const getSurfaceRecordFunc = ( {
 
 		}
 
-		clearcoatNormal *= side;
-
-		clearcoatNormal = ${ ensureValidViewNormal }( clearcoatNormal, faceNormal, view );
-
-		clearcoatNormal = ${ ensureValidReflectionNormal }( clearcoatNormal, faceNormal, view );
-
 		var sheenColor = material.sheenColor;
 		if ( material.sheenColorMap != -1 ) {
 
@@ -394,6 +391,11 @@ export const getSurfaceRecordFunc = ( {
 
 		}
 
+		var sheen = material.sheen;
+		var ior = material.ior;
+		var iridescenceIor = material.iridescenceIor;
+		var dispersion = material.dispersion;
+
 		// extract the anisotropy magnitude vector in tangent space
 		var anisotropyDirVec = material.anisotropy * vec2f( cos( material.anisotropyRotation ), sin( material.anisotropyRotation ) );
 		if ( material.anisotropyMap != -1 ) {
@@ -415,6 +417,112 @@ export const getSurfaceRecordFunc = ( {
 			}
 
 		}
+
+		// a node material's TSL graphs replace the inputs they have outputs for
+		if ( material.graph != -1 ) {
+
+			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
+
+			var input: ${ materialGraphInputStruct };
+			input.uv = ${ getUvFromChannel }( vertexData, 0 );
+			input.uv1 = ${ getUvFromChannel }( vertexData, 1 << 23 );
+			input.positionWorld = vertexData.position.xyz;
+			input.positionLocal = ( objectInfo.inverseMatrixWorld * vec4f( vertexData.position.xyz, 1.0 ) ).xyz;
+			input.normalWorld = baseNormal;
+			input.normalLocal = normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( baseNormal, 0.0 ) ).xyz );
+			input.view = view;
+			input.color = ${ getColor }( vertexData );
+			input.tint = objectColor * select( vec4f( 1.0 ), input.color, material.vertexColors == 1 );
+			input.viewMatrix = ${ graphCameraViewMatrix };
+			input.cameraWorldMatrix = ${ graphCameraWorldMatrix };
+			input.modelWorldMatrix = objectInfo.matrixWorld;
+			input.modelNormalMatrix = transpose( objectInfo.inverseMatrixWorld );
+
+			// the change of the position per unit of uv, from the triangle's edges
+			let graphA0 = ${ getVertex }( hit.indices.x, objectInfo.attributesOffset );
+			let graphA1 = ${ getVertex }( hit.indices.y, objectInfo.attributesOffset );
+			let graphA2 = ${ getVertex }( hit.indices.z, objectInfo.attributesOffset );
+			let graphEdge1 = graphA1.position.xyz - graphA0.position.xyz;
+			let graphEdge2 = graphA2.position.xyz - graphA0.position.xyz;
+			let graphUvEdge1 = ${ getUvFromChannel }( graphA1, 0 ) - ${ getUvFromChannel }( graphA0, 0 );
+			let graphUvEdge2 = ${ getUvFromChannel }( graphA2, 0 ) - ${ getUvFromChannel }( graphA0, 0 );
+			let graphUvDet = graphUvEdge1.x * graphUvEdge2.y - graphUvEdge2.x * graphUvEdge1.y;
+			if ( abs( graphUvDet ) > 0.0 ) {
+
+				input.positionLocalDu = ( graphEdge1 * graphUvEdge2.y - graphEdge2 * graphUvEdge1.y ) / graphUvDet;
+				input.positionLocalDv = ( graphEdge2 * graphUvEdge1.x - graphEdge1 * graphUvEdge2.x ) / graphUvDet;
+				input.positionWorldDu = ( objectInfo.matrixWorld * vec4f( input.positionLocalDu, 0.0 ) ).xyz;
+				input.positionWorldDv = ( objectInfo.matrixWorld * vec4f( input.positionLocalDv, 0.0 ) ).xyz;
+
+			}
+
+			// the tangent frame from the tangents, or else from the triangle's uvs like three.js derives it from
+			// the screen-space derivatives
+			if ( length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
+
+				input.tangentWorld = normalize( vertexData.tangent.xyz );
+				input.bitangentWorld = normalize( cross( baseNormal, input.tangentWorld ) * vertexData.tangent.w );
+
+			} else {
+
+				let orthoTangent = input.positionWorldDu - baseNormal * dot( baseNormal, input.positionWorldDu );
+				if ( length( orthoTangent ) > 0.0 ) {
+
+					input.tangentWorld = normalize( orthoTangent );
+					input.bitangentWorld = normalize( cross( baseNormal, input.tangentWorld ) ) * sign( dot( cross( baseNormal, input.tangentWorld ), input.positionWorldDv ) );
+
+				} else {
+
+					let basis = ${ getBasisFromNormalFunc }( baseNormal );
+					input.tangentWorld = basis[ 0 ];
+					input.bitangentWorld = basis[ 1 ];
+
+				}
+
+			}
+
+			var graph: ${ materialGraphResultStruct };
+			graph.color = albedo.rgb;
+			graph.opacity = albedo.a;
+			graph.normal = normal;
+			graph.clearcoatNormal = clearcoatNormal;
+			${ GRAPH_VALUES.map( name => `graph.${ name } = ${ name };` ).join( '\n' ) }
+			graph.anisotropy = anisotropyDirVec;
+			${ runMaterialGraph }( material.graph, input, &graph );
+
+			albedo = vec4f( graph.color, graph.opacity );
+			${ GRAPH_VALUES.map( name => `${ name } = graph.${ name };` ).join( '\n' ) }
+
+			// a graph normal that's zero or not finite, as from the missing derivatives, keeps the material's
+			let normalLengthSq = dot( graph.normal, graph.normal );
+			if ( normalLengthSq > 0.0 && normalLengthSq < 1e30 ) {
+
+				normal = graph.normal * inverseSqrt( normalLengthSq );
+
+			}
+
+			let clearcoatNormalLengthSq = dot( graph.clearcoatNormal, graph.clearcoatNormal );
+			if ( clearcoatNormalLengthSq > 0.0 && clearcoatNormalLengthSq < 1e30 ) {
+
+				clearcoatNormal = graph.clearcoatNormal * inverseSqrt( clearcoatNormalLengthSq );
+
+			}
+
+			anisotropyDirVec = graph.anisotropy;
+
+		}
+
+		normal *= side;
+
+		normal = ${ ensureValidViewNormal }( normal, faceNormal, view );
+
+		normal = ${ ensureValidReflectionNormal }( normal, faceNormal, view );
+
+		clearcoatNormal *= side;
+
+		clearcoatNormal = ${ ensureValidViewNormal }( clearcoatNormal, faceNormal, view );
+
+		clearcoatNormal = ${ ensureValidReflectionNormal }( clearcoatNormal, faceNormal, view );
 
 		// adjust the surface basis to be oriented along the anisotropic vector
 		let anisotropyStrength = length( anisotropyDirVec );
@@ -450,22 +558,22 @@ export const getSurfaceRecordFunc = ( {
 		surf.opacity = select( 1.0, albedo.a, material.transparent != 0 );
 		surf.matte = material.matte != 0;
 
-		surf.ior = material.ior;
+		surf.ior = ior;
 		surf.transmission = transmission;
 		surf.thinWall = material.thinWall == 1;
-		surf.dispersion = material.dispersion;
+		surf.dispersion = dispersion;
 
 		surf.clearcoatNormal = clearcoatNormal;
 		surf.clearcoat = clearcoat;
 
 		surf.iridescence = iridescence;
-		surf.iridescenceIor = material.iridescenceIor;
+		surf.iridescenceIor = iridescenceIor;
 		surf.iridescenceThickness = iridescenceThickness;
 
 		surf.specularColor = specularColor;
 		surf.specularIntensity = specularIntensity;
 
-		surf.sheen = material.sheen;
+		surf.sheen = sheen;
 		surf.sheenColor = sheenColor;
 
 		let minRoughness = max( MIN_ROUGHNESS, blurRoughness );
@@ -479,11 +587,11 @@ export const getSurfaceRecordFunc = ( {
 		surf.frontFace = side == 1.0 || transmission == 0.0;
 		if ( material.thinWall == 1 || surf.frontFace ) {
 
-			surf.eta = 1.0 / material.ior;
+			surf.eta = 1.0 / ior;
 
 		} else {
 
-			surf.eta = material.ior;
+			surf.eta = ior;
 
 		}
 		surf.f0 = ${ iorToF0Func }( surf.eta );
@@ -686,14 +794,21 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 // the map and alpha map, for a shading model's "getHitOpacity". Reads the materials, texture sampling and vertex data
 // through the node context so any shading model whose material struct has these fields can use it
 const materialsStorage = /* @__PURE__ */ contextProxy( 'shadingModel.storage.materials' );
+const objectsStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.objects' );
+const objectRecordStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.objectRecord' );
 const sampleTrianglePoint = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
 const sampleTexel = /* @__PURE__ */ contextProxyFn( 'shadingModel.fns.sampleTexel' );
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
 const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
+const runMaterialGraph = /* @__PURE__ */ contextProxyFn( 'shadingModel.fns.runMaterialGraph' );
+const graphCameraViewMatrix = /* @__PURE__ */ contextProxy( 'shadingModel.cameraViewMatrix' );
+const graphCameraWorldMatrix = /* @__PURE__ */ contextProxy( 'shadingModel.cameraWorldMatrix' );
 export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
-	fn getHitOpacity( materialIndex: u32, objectAlpha: f32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
+	fn getHitOpacity( objectIndex: u32, indices: vec3u, barycoord: vec3f, side: f32 ) -> f32 {
 
+		let objectInfo = &${ objectsStorage }[ objectIndex ];
+		let materialIndex = objectInfo.materialIndex;
 		let material = &${ materialsStorage }[ materialIndex ];
 		if ( side != 0.0 && material.side != 0.0 && side != material.side ) {
 
@@ -707,8 +822,8 @@ export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
 		}
 
-		let vertex = ${ sampleTrianglePoint }( barycoord, indices, attributesOffset );
-		var opacity = material.opacity * objectAlpha;
+		let vertex = ${ sampleTrianglePoint }( barycoord, indices, objectInfo.attributesOffset );
+		var opacity = material.opacity * objectInfo.color.a;
 		if ( material.vertexColors == 1 ) {
 
 			opacity *= ${ getColor }( vertex ).a;
@@ -747,12 +862,84 @@ export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
 `;
 
-// The light emitted by a point on one side of a triangle, for a shading model's "getHitEmission". Sides the material doesn't
-// render don't emit
+// The inputs of a material graph at a point on a triangle, with a tangent frame from the normal alone
+const getTriangleGraphInputFunc = wgslTagFn/* wgsl */ `
+
+	fn getTriangleGraphInput( objectInfo: ${ objectRecordStruct }, indices: vec3u, barycoord: vec3f ) -> ${ materialGraphInputStruct } {
+
+		let vertex = ${ sampleTrianglePoint }( barycoord, indices, objectInfo.attributesOffset );
+		var input: ${ materialGraphInputStruct };
+		input.uv = ${ getUvFromChannel }( vertex, 0 );
+		input.uv1 = ${ getUvFromChannel }( vertex, 1 << 23 );
+		input.positionLocal = vertex.position;
+		input.normalLocal = normalize( vertex.normal.xyz );
+		input.positionWorld = ( objectInfo.matrixWorld * vec4f( input.positionLocal, 1.0 ) ).xyz;
+		input.normalWorld = normalize( ( transpose( objectInfo.inverseMatrixWorld ) * vec4f( input.normalLocal, 0.0 ) ).xyz );
+
+		let basis = ${ getBasisFromNormalFunc }( input.normalWorld );
+		input.tangentWorld = basis[ 0 ];
+		input.bitangentWorld = basis[ 1 ];
+
+		input.color = ${ getColor }( vertex );
+		input.viewMatrix = ${ graphCameraViewMatrix };
+		input.cameraWorldMatrix = ${ graphCameraWorldMatrix };
+		input.modelWorldMatrix = objectInfo.matrixWorld;
+		input.modelNormalMatrix = transpose( objectInfo.inverseMatrixWorld );
+		return input;
+
+	}
+
+`;
+
+// The same for a material that may have a TSL opacity graph. The graph's opacity replaces the material's, tinted by the
+// object and vertex color alpha
+export const getGraphHitOpacityFunc = wgslTagFn/* wgsl */ `
+
+	fn getGraphHitOpacity( objectIndex: u32, indices: vec3u, barycoord: vec3f, side: f32 ) -> f32 {
+
+		// a whole struct, not a pointer alias, as Safari fails to compile a matrix read through one
+		let objectInfo = ${ objectsStorage }[ objectIndex ];
+		let material = &${ materialsStorage }[ objectInfo.materialIndex ];
+		if ( material.graphOpacity == - 1 ) {
+
+			return ${ getHitOpacityFunc }( objectIndex, indices, barycoord, side );
+
+		}
+
+		if ( side != 0.0 && material.side != 0.0 && side != material.side ) {
+
+			return 0.0;
+
+		}
+
+		var input = ${ getTriangleGraphInputFunc }( objectInfo, indices, barycoord );
+		input.tint = vec4f( 1.0, 1.0, 1.0, objectInfo.color.a * select( 1.0, input.color.a, material.vertexColors == 1 ) );
+
+		var graph: ${ materialGraphResultStruct };
+		graph.opacity = material.opacity * objectInfo.color.a;
+		graph.alphaTest = 0.0;
+		${ runMaterialGraph }( material.graphOpacity, input, &graph );
+
+		if ( graph.opacity < max( graph.alphaTest, material.alphaTest ) || graph.opacity <= 0.0 ) {
+
+			return 0.0;
+
+		}
+
+		return select( 1.0, graph.opacity, material.transparent != 0 );
+
+	}
+
+`;
+
+// The light emitted by a point on one side of a triangle: the emissive color and intensity times the emissive map.
+// Sides the material doesn't render don't emit
 export const getHitEmissionFunc = wgslTagFn/* wgsl */ `
 
-	fn getHitEmission( materialIndex: u32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> vec3f {
+	fn getHitEmission( objectIndex: u32, indices: vec3u, barycoord: vec3f, side: f32 ) -> vec3f {
 
+		let objectInfo = &${ objectsStorage }[ objectIndex ];
+		let materialIndex = objectInfo.materialIndex;
 		let material = &${ materialsStorage }[ materialIndex ];
 		if ( material.side != 0.0 && side != material.side ) {
 
@@ -763,7 +950,7 @@ export const getHitEmissionFunc = wgslTagFn/* wgsl */ `
 		var emission = material.emissiveIntensity * material.emissive;
 		if ( material.emissiveMap != - 1 ) {
 
-			let vertex = ${ sampleTrianglePoint }( barycoord, indices, attributesOffset );
+			let vertex = ${ sampleTrianglePoint }( barycoord, indices, objectInfo.attributesOffset );
 			let uv = ${ getUvFromChannel }( vertex, material.emissiveMap );
 			let uvPrime = ${ materialsStorage }[ materialIndex ].emissiveMapTransform * vec3f( uv, 1.0 );
 			emission *= ${ sampleTexel }( uvPrime.xy, material.emissiveMap, 0.0 ).rgb;
@@ -771,6 +958,38 @@ export const getHitEmissionFunc = wgslTagFn/* wgsl */ `
 		}
 
 		return emission;
+
+	}
+
+`;
+
+// The same for a material that may have a TSL emission graph, seen along "view", for a shading model's
+// "getHitEmission"
+export const getGraphHitEmissionFunc = wgslTagFn/* wgsl */ `
+
+	fn getGraphHitEmission( objectIndex: u32, indices: vec3u, barycoord: vec3f, side: f32, view: vec3f ) -> vec3f {
+
+		// a whole struct, not a pointer alias, as Safari fails to compile a matrix read through one
+		let objectInfo = ${ objectsStorage }[ objectIndex ];
+		let material = &${ materialsStorage }[ objectInfo.materialIndex ];
+		if ( material.graphEmission == - 1 ) {
+
+			return ${ getHitEmissionFunc }( objectIndex, indices, barycoord, side );
+
+		}
+
+		if ( material.side != 0.0 && side != material.side ) {
+
+			return vec3f( 0.0 );
+
+		}
+
+		var input = ${ getTriangleGraphInputFunc }( objectInfo, indices, barycoord );
+		input.view = view;
+
+		var graph: ${ materialGraphResultStruct };
+		${ runMaterialGraph }( material.graphEmission, input, &graph );
+		return graph.emission;
 
 	}
 

@@ -1184,6 +1184,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._shadingModel = shadingModel;
 		shadingModel.updateFunctions();
 
+		// the constructor sets the shading model before the camera
+		if ( this.camera ) {
+
+			shadingModel.setCamera( this.camera );
+
+		}
+
 		// the shading model writes the materials, so rewrite them in its struct
 		const { _bvhData, _renderer, scene } = this;
 		if ( _bvhData ) {
@@ -1276,6 +1283,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
+		this._shadingModel.setCamera( camera );
 		this._updateCameraInVolume();
 		this._pathTracer.rebuild();
 		this.reset();
@@ -1289,15 +1297,15 @@ export class WebGPUPathTracer extends EventDispatcher {
 	updateMaterials() {
 
 		const { _bvhData, _renderer, _shadingModel, scene } = this;
-		_shadingModel.updateMaterials( scene );
+		const functionsChanged = _shadingModel.updateMaterials( scene );
 		_bvhData.updateMaterialIndices();
 		this._updateEmissiveTriangles();
 
-		// the kernels size the texture info and compile in the used features when they're built, so a new texture
-		// count or feature set needs a rebuild
+		// the kernels size the texture info, compile in the used features and include the functions TSL graphs call
+		// when they're built, so a new texture count, feature set or graph function needs a rebuild
 		const featuresChanged = _shadingModel.updateFeatures();
 		const texturesChanged = _shadingModel.updateTextures( _renderer );
-		if ( featuresChanged || texturesChanged ) {
+		if ( featuresChanged || texturesChanged || functionsChanged ) {
 
 			this._pathTracer.rebuild();
 
@@ -1335,6 +1343,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._shadingModel.setCamera( this.camera );
 		this._updateCameraInVolume();
 		this.reset();
 
