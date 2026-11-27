@@ -51,10 +51,11 @@ const _drawingBufferSize = /* @__PURE__ */ new Vector2();
 // milliseconds between sample count readbacks while waiting for the render to complete
 const COMPLETE_CHECK_INTERVAL = 250;
 
-// How the adaptive frame budget follows the measured frame time. The budget is only reconsidered once
-// a window of measurements has been taken at it, and only changes when their average is off the target
-// by the threshold ratio, since a wavefront budget change reallocates the path buffers. It moves at most
-// the step ratio per window.
+// How the adaptive frame budget follows the measured frame time. The budget is only reconsidered after the
+// window's number of measurements at it, or sooner once they add up to that many target frames of gpu time so
+// slow frames adapt as quickly as fast ones. It only changes when their average is off the target by the
+// threshold ratio, since a wavefront budget change reallocates the path buffers, and moves at most the step
+// ratio per window.
 // TODO: adapt more often, with a window of around 4, once the wavefront path buffers are grow-only so a budget
 // change only changes the active slot count rather than reallocating them
 const BUDGET_WINDOW = 16;
@@ -683,6 +684,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// adaptive frame budget and preview state
 		this._timingCount = 0;
 		this._frameTimeTotal = 0;
+		this._frameWorkTotal = 0;
 		this._frameTimeCount = 0;
 		this._warnedTimestamps = false;
 
@@ -1575,22 +1577,26 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( ! this.adaptiveFrameBudget || frameBudget !== this.frameBudget ) {
 
 			this._frameTimeTotal = 0;
+			this._frameWorkTotal = 0;
 			this._frameTimeCount = 0;
 			return;
 
 		}
 
+		const { targetFrameTime } = this;
 		this._frameTimeTotal += timing.frameTime;
+		this._frameWorkTotal += timing.frameWork;
 		this._frameTimeCount ++;
-		if ( this._frameTimeCount < BUDGET_WINDOW ) {
+		if ( this._frameTimeCount < BUDGET_WINDOW && this._frameTimeTotal < BUDGET_WINDOW * targetFrameTime ) {
 
 			return;
 
 		}
 
-		const { targetFrameTime } = this;
 		const average = this._frameTimeTotal / this._frameTimeCount;
+		const workPerTime = this._frameWorkTotal / this._frameTimeTotal;
 		this._frameTimeTotal = 0;
+		this._frameWorkTotal = 0;
 		this._frameTimeCount = 0;
 
 		// leave the budget alone while it's close enough to the target
@@ -1601,8 +1607,9 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		// scale the budget to land the average on the target
-		const next = frameBudget * targetFrameTime / average;
+		// the work that fits in the target at the measured rate. The work done can differ from the budget, such as
+		// the megakernel's whole tiles and whole frames
+		const next = workPerTime * targetFrameTime;
 		const stepped = MathUtils.clamp( next, frameBudget / BUDGET_MAX_STEP, frameBudget * BUDGET_MAX_STEP );
 		this.frameBudget = Math.max( Math.round( stepped ), MIN_FRAME_BUDGET );
 

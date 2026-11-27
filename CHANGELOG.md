@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: Dark background and clear colors rendering darker than set, quantized to 8 bits.
 - WebGPUPathTracer: Fireflies around small bright areas of the environment map, which is now importance sampled with the bilinear filtering it's read with.
 - WebGPUPathTracer: Pixels staying flagged as active after a smaller frame budget drops their path.
+- WebGPUPathTracer: The megakernel's adaptive frame budget overshooting "targetFrameTime" in heavy scenes and alternating between one and two samples per frame in light ones.
 - WebGPUPathTracer: The triangles of a BatchedMesh's geometries being mixed together.
 - WebGPUPathTracer: "stableNoise" not always rendering the same noise.
 - WebGPUPathTracer: Never rendering with "dynamicLowRes" off and a "renderDelay".
