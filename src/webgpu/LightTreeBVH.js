@@ -32,6 +32,9 @@ export class LightTreeBVH extends BVH {
 		this.init( {
 			// TODO: try a split that accounts for power. A power weighted SAH was no better than CENTER on the Zero-Day
 			// and Bistro scenes
+			// TODO: add pbrt-v4's orientation handling: a normal cone and two-sided flag per node, merged up the tree, so
+			// the importance skips nodes facing away from the position, and a "strategy" function that splits by
+			// pbrt's surface area orientation heuristic over buckets of power, bounds and normal cones
 			strategy: CENTER,
 			targetLeafSize: 1,
 			_strictLeafSize: 1,
