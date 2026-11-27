@@ -1,8 +1,8 @@
 import { Matrix3, DataTexture, LinearFilter } from 'three/webgpu';
 import { texture, sampler, uniform, PI } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
-import { EnvironmentCdfTexture, getEnvPatchFns } from './EnvironmentCdfTexture.js';
-import { readCdfFn, searchCdfFn } from './nodes/cdf.wgsl.js';
+import { EnvironmentCdfTexture } from './EnvironmentCdfTexture.js';
+import { readCdfFn, searchCdfFn, getEnvRowEdgeFn, getEnvPatchCornersFn } from './nodes/cdf.wgsl.js';
 import { environmentSampleStruct } from './nodes/structs.wgsl.js';
 import { equirectDirectionToUvFn, equirectUvToDirectionFn } from './nodes/sampling.wgsl.js';
 
@@ -57,8 +57,6 @@ export class EquirectHdrInfoNode {
 			rotationNode,
 			intensityNode,
 		} = this;
-
-		const { getRowEdgeFn, getCornersFn } = getEnvPatchFns( mapNode );
 
 		// the sum of the map's patch weights, the CDFs' last entry
 		this.getTotalSum = wgslTagFn/* wgsl */`
@@ -124,7 +122,7 @@ export class EquirectHdrInfoNode {
 				let cell = vec2u( column, row );
 
 				// the row within the patch from the bilinear marginal, then the column from the conditional at it
-				let corners = ${ getCornersFn }( cell );
+				let corners = ${ getEnvPatchCornersFn }( ${ mapNode }, cell );
 				var local: vec2f;
 				local.y = ${ sampleLinearFn }( rowFraction, corners.x + corners.y, corners.z + corners.w );
 				local.x = ${ sampleLinearFn }( columnFraction, mix( corners.x, corners.z, local.y ), mix( corners.y, corners.w, local.y ) );
@@ -132,7 +130,7 @@ export class EquirectHdrInfoNode {
 				// patches start at texel centers, wrapping around the seam
 				let position = vec2f(
 					f32( column ) + 0.5 + local.x,
-					mix( ${ getRowEdgeFn }( row ), ${ getRowEdgeFn }( row + 1u ), local.y ),
+					mix( ${ getEnvRowEdgeFn }( ${ mapNode }, row ), ${ getEnvRowEdgeFn }( ${ mapNode }, row + 1u ), local.y ),
 				);
 				let uv = vec2f( fract( position.x / f32( resolution.x ) ), position.y / f32( resolution.y ) );
 
@@ -170,11 +168,11 @@ export class EquirectHdrInfoNode {
 				let y = mapUv.y * f32( resolution.y );
 				let column = u32( floor( x ) + f32( resolution.x ) ) % resolution.x;
 				let row = min( u32( y + 0.5 ), resolution.y );
-				let start = ${ getRowEdgeFn }( row );
-				let end = ${ getRowEdgeFn }( row + 1u );
+				let start = ${ getEnvRowEdgeFn }( ${ mapNode }, row );
+				let end = ${ getEnvRowEdgeFn }( ${ mapNode }, row + 1u );
 				let local = vec2f( x - floor( x ), saturate( ( y - start ) / ( end - start ) ) );
 
-				return ${ getPatchPdfFn }( ${ getCornersFn }( vec2u( column, row ) ), local, mapUv );
+				return ${ getPatchPdfFn }( ${ getEnvPatchCornersFn }( ${ mapNode }, vec2u( column, row ) ), local, mapUv );
 
 			}
 		`;

@@ -1,62 +1,11 @@
 import { StorageTexture, RedFormat, FloatType, NearestFilter } from 'three/webgpu';
-import { texture, storageTexture, globalId, PI } from 'three/tsl';
+import { texture, storageTexture, globalId } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { ComputeKernel } from './compute/ComputeKernel.js';
+import { getEnvRowEdgeFn, getEnvPatchCornersFn } from './nodes/cdf.wgsl.js';
 
 // the texture width WebGPU guarantees, so an 8k environment map's CDFs fit in a few rows
 const CDF_TEXTURE_WIDTH = 8192;
-
-// The environment is read with bilinear filtering, which makes its radiance a grid of bilinear patches between texel
-// centers. Each patch is sampled in proportion to its bilinear luminance, as Mitsuba 3's environment emitter does, so
-// the sampling matches the filtered radiance. See "Sampling the Bilinear Function" in
-// https://pbr-book.org/4ed/Monte_Carlo_Integration/Transforming_between_Distributions
-// and https://github.com/mitsuba-renderer/mitsuba3/blob/master/src/emitters/envmap.cpp
-//
-// The map wraps around horizontally and is clamped at the poles, as the path tracer's environment cache sets it, so
-// patch "x" spans from texel center "x" to the next one, across the seam for the last, and the rows of patches are
-// half height at the poles where the filter clamps. Patch corners are texel centers, and the sampling weight there is
-// the luminance times the sine of its angle, the solid angle it covers.
-export const getEnvPatchFns = mapNode => {
-
-	// the texel position of the patch row edge "k": the poles, and the texel centers between them
-	const getRowEdgeFn = wgslTagFn/* wgsl */`
-		fn getEnvRowEdge( k: u32 ) -> f32 {
-
-			let height = f32( textureDimensions( ${ mapNode } ).y );
-			return clamp( f32( k ) - 0.5, 0.0, height );
-
-		}
-	`;
-
-	// the sampling weight at the corner in column "x" on the row edge "k"
-	const getCornerWeightFn = wgslTagFn/* wgsl */`
-		fn getEnvCornerWeight( x: u32, k: u32 ) -> f32 {
-
-			let size = textureDimensions( ${ mapNode } );
-			let texel = vec2u( x % size.x, u32( clamp( i32( k ) - 1, 0, i32( size.y ) - 1 ) ) );
-			let luminance = dot( textureLoad( ${ mapNode }, texel, 0 ).rgb, vec3f( 0.2126, 0.7152, 0.0722 ) );
-			return luminance * sin( ${ PI } * ${ getRowEdgeFn }( k ) / f32( size.y ) );
-
-		}
-	`;
-
-	// the weights at the four corners of a patch, ordered ( x0 y0, x1 y0, x0 y1, x1 y1 )
-	const getCornersFn = wgslTagFn/* wgsl */`
-		fn getEnvPatchCorners( cell: vec2u ) -> vec4f {
-
-			return vec4f(
-				${ getCornerWeightFn }( cell.x, cell.y ),
-				${ getCornerWeightFn }( cell.x + 1u, cell.y ),
-				${ getCornerWeightFn }( cell.x, cell.y + 1u ),
-				${ getCornerWeightFn }( cell.x + 1u, cell.y + 1u ),
-			);
-
-		}
-	`;
-
-	return { getRowEdgeFn, getCornersFn };
-
-};
 
 // The importance sampling CDFs of an equirect environment map, built on the GPU. With a "width" x "height" map there
 // are "width" x "height + 1" patches. One array laid out in the texture's rows, entry "i" at texel
@@ -119,7 +68,6 @@ export class EnvironmentCdfTexture extends StorageTexture {
 
 		const mapNode = texture( envMap );
 		const cdfNode = storageTexture( this ).toReadWrite();
-		const { getRowEdgeFn, getCornersFn } = getEnvPatchFns( mapNode );
 
 		const readEntryFn = wgslTagFn/* wgsl */`
 			fn readCdfEntry( i: u32 ) -> f32 {
@@ -143,8 +91,8 @@ export class EnvironmentCdfTexture extends StorageTexture {
 		const getPatchWeightFn = wgslTagFn/* wgsl */`
 			fn getPatchWeight( cell: vec2u ) -> f32 {
 
-				let height = ${ getRowEdgeFn }( cell.y + 1u ) - ${ getRowEdgeFn }( cell.y );
-				return height * dot( ${ getCornersFn }( cell ), vec4f( 0.25 ) );
+				let height = ${ getEnvRowEdgeFn }( ${ mapNode }, cell.y + 1u ) - ${ getEnvRowEdgeFn }( ${ mapNode }, cell.y );
+				return height * dot( ${ getEnvPatchCornersFn }( ${ mapNode }, cell ), vec4f( 0.25 ) );
 
 			}
 		`;
