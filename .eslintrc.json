@@ -17,7 +17,8 @@
 		],
 		"quotes": [ "error", "single" ],
 		"indent": [ "error", "tab", { "SwitchCase": 1 } ],
-		"no-var": [ "error" ]
+		"no-var": [ "error" ],
+		"no-unused-vars": [ "error", { "args": "none" } ]
 	},
     	"overrides": [
 		{

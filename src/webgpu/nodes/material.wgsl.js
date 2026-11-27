@@ -1,3 +1,4 @@
+import { ColorManagement, LinearSRGBColorSpace } from 'three/webgpu';
 import { wgslFn, mat3 } from 'three/tsl';
 import {
 	inverseMat3x3Func,
@@ -21,7 +22,7 @@ import {
 	ggxShadowMaskG1Func,
 } from './ggx.wgsl.js';
 import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
-import { wgslTagFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
 // the normal towards the geometry normal such that the perfect reflection ray is just above the
@@ -137,8 +138,8 @@ export const getSurfaceRecordFunc = ( {
 	materialStruct,
 	surfaceRecordStruct,
 	attributesStruct,
-	attributesStorage,
-	transformsStorage,
+	getVertex,
+	objectsStorage,
 	sampleTexel,
 	getTextureSize,
 	getUvFromChannel,
@@ -191,10 +192,10 @@ export const getSurfaceRecordFunc = ( {
 			// "Bump Mapping Unparametrized Surfaces on the GPU" by Morten S. Mikkelsen, as in three.js, with the
 			// triangle's edges in place of the screen-space derivatives
 			// https://mmikk.github.io/papers3d/mm_sfgrad_bump.pdf
-			let objectInfo = ${ transformsStorage }[ hit.objectIndex ];
-			let a0 = ${ attributesStorage }[ hit.indices.x ];
-			let a1 = ${ attributesStorage }[ hit.indices.y ];
-			let a2 = ${ attributesStorage }[ hit.indices.z ];
+			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
+			let a0 = ${ getVertex }( hit.indices.x, objectInfo.attributesOffset );
+			let a1 = ${ getVertex }( hit.indices.y, objectInfo.attributesOffset );
+			let a2 = ${ getVertex }( hit.indices.z, objectInfo.attributesOffset );
 
 			// the triangle's edges in world space, and in the bump map's uv space
 			let sigmaX = ( objectInfo.matrixWorld * vec4f( a1.position.xyz - a0.position.xyz, 0.0 ) ).xyz;
@@ -628,8 +629,45 @@ export const thinWallTransmissionRoughnessFunc = wgslFn( /* wgsl */ `
 // Continuous Cauchy IOR approximation derived from the Fraunhofer C, d, and F spectral lines:
 // https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_dispersion
 // https://github.com/bsdorra/slang-pbr/blob/c12046ec3b9628bcfc384ed2c275c92d007e5d7e/src/models/enterprise/components/transmission.slang#L20-L27
-export const DISPERSION_MIN_WAVELENGTH = 360;
-export const DISPERSION_MAX_WAVELENGTH = 830;
+export const DISPERSION_MIN_WAVELENGTH = 380;
+export const DISPERSION_MAX_WAVELENGTH = 780;
+
+// Wavelengths in nm are importance sampled in proportion to their luminance under D65 light, so few samples land
+// in the dim violet and red ends. The distribution is Cycles' logistic fit over 380 to 780 nm:
+// https://projects.blender.org/blender/blender/src/branch/main/intern/cycles/kernel/util/colorspace.h
+const WAVELENGTH_FIT = /* wgsl */`
+	const WAVELENGTH_FIT_A = 21.71348444564851;
+	const WAVELENGTH_FIT_X0 = 0.5554867905834258;
+	const WAVELENGTH_FIT_Y0 = 0.021659159132699574;
+	const WAVELENGTH_FIT_N = 0.9707633294863183;
+`;
+
+export const sampleDispersionWavelengthFunc = wgslFn( /* wgsl */ `
+
+	fn sampleDispersionWavelength( rand: f32 ) -> f32 {
+
+		${ WAVELENGTH_FIT }
+		let r = WAVELENGTH_FIT_N * rand + WAVELENGTH_FIT_Y0;
+		let micrometers = - log( 1.0 / r - 1.0 ) / WAVELENGTH_FIT_A + WAVELENGTH_FIT_X0;
+		return clamp( 1000.0 * micrometers, ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0 );
+
+	}
+
+` );
+
+// The probability density of the sampled wavelength, relative to sampling the range uniformly
+const dispersionWavelengthPdfFunc = wgslFn( /* wgsl */ `
+
+	fn dispersionWavelengthPdf( wavelength: f32 ) -> f32 {
+
+		${ WAVELENGTH_FIT }
+		let cdf = 1.0 / ( 1.0 + exp( - WAVELENGTH_FIT_A * ( wavelength / 1000.0 - WAVELENGTH_FIT_X0 ) ) );
+		let range = ( ${ DISPERSION_MAX_WAVELENGTH }.0 - ${ DISPERSION_MIN_WAVELENGTH }.0 ) / 1000.0;
+		return WAVELENGTH_FIT_A * cdf * ( 1.0 - cdf ) * range / WAVELENGTH_FIT_N;
+
+	}
+
+` );
 
 export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
@@ -644,58 +682,147 @@ export const dispersionIorFunc = wgslFn( /* wgsl */ `
 
 ` );
 
-// takes the surface by name since the shading model defines its struct
-export const applyDispersionFunc = wgslTagFn/* wgsl */ `
+// The opacity of a hit from the material's side, the material and object opacity, the vertex colors and the alpha of
+// the map and alpha map, for a shading model's "getHitOpacity". Reads the materials, texture sampling and vertex data
+// through the node context so any shading model whose material struct has these fields can use it
+const materialsStorage = /* @__PURE__ */ contextProxy( 'shadingModel.storage.materials' );
+const sampleTrianglePoint = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.sampleTrianglePoint' );
+const sampleTexel = /* @__PURE__ */ contextProxyFn( 'shadingModel.fns.sampleTexel' );
+const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
+const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
+export const getHitOpacityFunc = wgslTagFn/* wgsl */ `
 
-	fn applyDispersion( surf: ptr<function, SurfaceRecord>, dispersion: f32, wavelength: f32 ) -> void {
+	fn getHitOpacity( materialIndex: u32, objectAlpha: f32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
 
-		surf.ior = ${ dispersionIorFunc }( surf.ior, dispersion, wavelength );
-		surf.eta = select( surf.ior, 1.0 / surf.ior, surf.thinWall || surf.frontFace );
-		surf.f0 = ${ iorToF0Func }( surf.eta );
+		let material = &${ materialsStorage }[ materialIndex ];
+		if ( side != 0.0 && material.side != 0.0 && side != material.side ) {
+
+			return 0.0;
+
+		}
+
+		if ( material.transparent == 0 && material.alphaTest <= 0.0 ) {
+
+			return 1.0;
+
+		}
+
+		let vertex = ${ sampleTrianglePoint }( barycoord, indices, attributesOffset );
+		var opacity = material.opacity * objectAlpha;
+		if ( material.vertexColors == 1 ) {
+
+			opacity *= ${ getColor }( vertex ).a;
+
+		}
+
+		if ( material.map != - 1 ) {
+
+			let uv = ${ getUvFromChannel }( vertex, material.map );
+			// TODO: the transform is read by index to work around a WebKit bug, which fails to compile a
+			// matrix read through a storage pointer times a vector. Use "material" once it's fixed.
+			let uvPrime = ${ materialsStorage }[ materialIndex ].mapTransform * vec3f( uv, 1 );
+			opacity *= ${ sampleTexel }( uvPrime.xy, material.map, 0 ).a;
+
+		}
+
+		if ( material.alphaMap != - 1 ) {
+
+			let uv = ${ getUvFromChannel }( vertex, material.alphaMap );
+			let uvPrime = ${ materialsStorage }[ materialIndex ].alphaMapTransform * vec3f( uv, 1 );
+			opacity *= ${ sampleTexel }( uvPrime.xy, material.alphaMap, 0 ).g;
+
+		}
+
+		// alpha tested surfaces below the cutoff and fully transparent ones are passed, and opaque alpha tested
+		// surfaces are fully opaque
+		if ( opacity < material.alphaTest || opacity <= 0.0 ) {
+
+			return 0.0;
+
+		}
+
+		return select( 1.0, opacity, material.transparent != 0 );
 
 	}
 
 `;
 
-// A path keeps one uniformly sampled hero wavelength after its first dispersive interaction.
-// The CIE 1931 fit is converted to linear Rec. 709, clamped to the RGB gamut, and normalized so
-// every channel has an expected weight of one over the uniformly sampled wavelength interval.
-// This preserves the expected value of the renderer's existing RGB throughput while providing
-// continuous hues. The renderer still uses RGB material and light data rather than spectral data.
-// CIE fit: https://jcgt.org/published/0002/02/01/
-// Hero wavelength sampling:
-// https://pbr-book.org/4ed/Textures_and_Materials/Material_Interface_and_Implementations.html#sec:dielectric-material
-// https://doi.org/10.1111/cgf.12419
-export const dispersionColorWeightFunc = wgslFn( /* wgsl */ `
+// Refracts a dispersive surface at the wavelength, returning whether the surface is dispersive: transmissive with a
+// volume, an ior above one and some dispersion. Takes the surface by name since the shading model defines its struct
+export const applyDispersionFunc = wgslTagFn/* wgsl */ `
 
-	fn dispersionColorWeight( wavelength: f32 ) -> vec3f {
+	fn applyDispersion( surf: ptr<function, SurfaceRecord>, wavelength: f32 ) -> bool {
 
-		let lambda = clamp( wavelength, ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0 );
+		if ( surf.dispersion <= 0.0 || surf.ior <= 1.0 || surf.transmission <= 0.0 || surf.thinWall ) {
 
-		let x1 = ( lambda - 442.0 ) * select( 0.0374, 0.0624, lambda < 442.0 );
-		let x2 = ( lambda - 599.8 ) * select( 0.0323, 0.0264, lambda < 599.8 );
-		let x3 = ( lambda - 501.1 ) * select( 0.0382, 0.0490, lambda < 501.1 );
-		let x = 0.362 * exp( - 0.5 * x1 * x1 ) + 1.056 * exp( - 0.5 * x2 * x2 ) - 0.065 * exp( - 0.5 * x3 * x3 );
+			return false;
 
-		let y1 = ( lambda - 568.8 ) * select( 0.0247, 0.0213, lambda < 568.8 );
-		let y2 = ( lambda - 530.9 ) * select( 0.0322, 0.0613, lambda < 530.9 );
-		let y = 0.821 * exp( - 0.5 * y1 * y1 ) + 0.286 * exp( - 0.5 * y2 * y2 );
+		}
 
-		let z1 = ( lambda - 437.0 ) * select( 0.0278, 0.0845, lambda < 437.0 );
-		let z2 = ( lambda - 459.0 ) * select( 0.0725, 0.0385, lambda < 459.0 );
-		let z = 1.217 * exp( - 0.5 * z1 * z1 ) + 0.681 * exp( - 0.5 * z2 * z2 );
+		surf.ior = ${ dispersionIorFunc }( surf.ior, surf.dispersion, wavelength );
+		surf.eta = select( surf.ior, 1.0 / surf.ior, surf.thinWall || surf.frontFace );
+		surf.f0 = ${ iorToF0Func }( surf.eta );
+		return true;
 
-		let linearRgb = max( vec3f(
-			3.2404542 * x - 1.5371385 * y - 0.4985314 * z,
-			- 0.9692660 * x + 1.8760108 * y + 0.0415560 * z,
-			0.0556434 * x - 0.2040259 * y + 1.0572252 * z,
-		), vec3f( 0.0 ) );
+	}
 
-		return linearRgb * vec3f( 2.6699448, 4.0708066, 4.2980494 );
+`;
+
+// Wyman, Sloan and Shirley's multi-lobe fit of the CIE 1931 color matching functions, each lobe
+// [ amplitude, center in nm, inverse width below the center, inverse width above it ]:
+// https://jcgt.org/published/0002/02/01/
+const CIE_X_LOBES = [[ 0.362, 442.0, 0.0624, 0.0374 ], [ 1.056, 599.8, 0.0264, 0.0323 ], [ - 0.065, 501.1, 0.0490, 0.0382 ]];
+const CIE_Y_LOBES = [[ 0.821, 568.8, 0.0213, 0.0247 ], [ 0.286, 530.9, 0.0613, 0.0322 ]];
+const CIE_Z_LOBES = [[ 1.217, 437.0, 0.0845, 0.0278 ], [ 0.681, 459.0, 0.0385, 0.0725 ]];
+
+const XYZ_TO_LINEAR_REC709 = mat3( ColorManagement.spaces[ LinearSRGBColorSpace ].fromXYZ );
+
+// 1 / the average of each linear Rec. 709 channel of the fit over the sampled wavelengths, so each channel's weight
+// averages to one
+const DISPERSION_RGB_NORMALIZATION = [ 2.2719377, 3.4647771, 3.6605261 ];
+
+const cieLobeFunc = wgslFn( /* wgsl */ `
+
+	fn cieLobe( lambda: f32, center: f32, widthBelow: f32, widthAbove: f32 ) -> f32 {
+
+		let t = ( lambda - center ) * select( widthAbove, widthBelow, lambda < center );
+		return exp( - 0.5 * t * t );
 
 	}
 
 ` );
+
+// the sum of a color matching function's lobes at "lambda"
+const sumCieLobes = lobes => lobes
+	.map( ( [ amplitude, center, widthBelow, widthAbove ] ) => `${ amplitude } * cieLobe( lambda, ${ center }, ${ widthBelow }, ${ widthAbove } )` )
+	.join( ' + ' );
+
+// A path keeps one sampled hero wavelength after its first dispersive interaction.
+// The CIE 1931 fit is converted to linear Rec. 709, clamped to the RGB gamut, and normalized so
+// every channel has an expected weight of one over the wavelength range, then divided by the sampling pdf.
+// This preserves the expected value of the renderer's existing RGB throughput while providing
+// continuous hues. The renderer still uses RGB material and light data rather than spectral data.
+// Hero wavelength sampling:
+// https://pbr-book.org/4ed/Textures_and_Materials/Material_Interface_and_Implementations.html#sec:dielectric-material
+// https://doi.org/10.1111/cgf.12419
+export const dispersionColorWeightFunc = wgslTagFn/* wgsl */ `
+
+	${ [ cieLobeFunc ] }
+	fn dispersionColorWeight( wavelength: f32 ) -> vec3f {
+
+		let lambda = clamp( wavelength, ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0 );
+		let xyz = vec3f(
+			${ sumCieLobes( CIE_X_LOBES ) },
+			${ sumCieLobes( CIE_Y_LOBES ) },
+			${ sumCieLobes( CIE_Z_LOBES ) },
+		);
+
+		let linearRgb = max( ${ XYZ_TO_LINEAR_REC709 } * xyz, vec3f( 0.0 ) );
+		return linearRgb * vec3f( ${ DISPERSION_RGB_NORMALIZATION.join( ', ' ) } ) / ${ dispersionWavelengthPdfFunc }( lambda );
+
+	}
+
+`;
 
 // Dielectric layer fresnel operator that supports custom f0 color, specular weight.
 // Based on the specular color specification:
@@ -723,12 +850,6 @@ export const fresnelMixFunc = wgslFn( /* wgsl */ `
 
 `, [ schlickFresnelVecFunc, iorToF0Func, totalInternalReflectionFunc ] );
 
-const XYZ_TO_REC709 = mat3(
-	3.2404542, - 0.9692660, 0.0556434,
-	- 1.5371385, 1.8760108, - 0.2040259,
-	- 0.4985314, 0.0415560, 1.0572252,
-);
-
 const evalSensitivityFunc = wgslTagFn/* wgsl */`
 
 	fn evalSensitivity( OPD: f32, shift: vec3f ) -> vec3f {
@@ -742,7 +863,7 @@ const evalSensitivityFunc = wgslTagFn/* wgsl */`
 		xyz.x += 9.7470e-14 * sqrt(2.0 * ${ Math.PI } * 4.5282e+09) * cos(2.2399e+06 * phase + shift.x) * exp(-4.5282e+09 * phase * phase);
 		xyz /= 1.0685e-7;
 
-		let rgb = ${ XYZ_TO_REC709 } * xyz;
+		let rgb = ${ XYZ_TO_LINEAR_REC709 } * xyz;
 		return rgb;
 
 	}

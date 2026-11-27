@@ -134,7 +134,7 @@ async function init() {
 	sphericalControls.target.copy( center ).addScaledVector( forward, 0.05 );
 	sphericalControls.update();
 
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 
 	loader.setPercentage( 1 );
 	loader.setCredits( CREDITS );

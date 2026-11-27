@@ -111,7 +111,7 @@ function rebuild() {
 
 // the first build generates the shared sphere's bvh in the worker
 buildGrid();
-pathTracer.setSceneAsync( scene, camera ).then( () => renderer.setAnimationLoop( animate ) );
+pathTracer.setScene( scene, camera ).then( () => renderer.setAnimationLoop( animate ) );
 updateBackground();
 onResize();
 window.addEventListener( 'resize', onResize );

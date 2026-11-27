@@ -9,11 +9,11 @@ import {
 	isSubsurfaceMaterialFn, getShadowMediumStackFn, getShadowMediumDepthFn, sampleFogDistanceFn,
 } from '../../nodes/medium.wgsl.js';
 import { sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../../nodes/sampling.wgsl.js';
-import { applyDispersionFunc, dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
+import { dispersionColorWeightFunc } from '../../nodes/material.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { isTerminatingScatterFunc, offsetRayOriginFunc } from '../../nodes/utils.wgsl.js';
 import { getShadowRayFn } from '../../nodes/lights.wgsl.js';
-import { isAuxSurfaceFn } from '../../nodes/auxiliary.wgsl.js';
+import { ifFeature } from '../../nodes/features.js';
 
 // Pure material evaluation: live slots evaluate the vertex staged by LogicKernel, a surface or a scatter event in
 // fog, sample the next direction, and enqueue the next bounce ray plus the NEE shadow ray toward the light
@@ -42,8 +42,12 @@ export class MaterialKernel extends ComputeKernel {
 		const getSurfaceRecordFn = contextProxyFn( 'shadingModel.fns.getSurfaceRecord' );
 		const bsdfSampleFn = contextProxyFn( 'shadingModel.fns.bsdfSample' );
 		const bsdfEvalPdfFn = contextProxyFn( 'shadingModel.fns.bsdfEvalPdf' );
+		const getMaterialMediumFn = contextProxyFn( 'shadingModel.fns.getMaterialMedium' );
+		const applyDispersionFn = contextProxyFn( 'shadingModel.fns.applyDispersion' );
+		const isAuxSurfaceFn = contextProxyFn( 'shadingModel.fns.isAuxSurface' );
+		const isMatteFn = contextProxyFn( 'shadingModel.fns.isMatte' );
 		const materialsStorage = contextProxy( 'shadingModel.storage.materials' );
-		const transformsStorage = contextProxy( 'bvhData.storage.transforms' );
+		const objectsStorage = contextProxy( 'bvhData.storage.objects' );
 
 		// Queues the NEE shadow ray toward the light LogicKernel selected, from the hit point and its normal ( zero in
 		// fog ), starting in the given media, and returns its index in the queue. A whole struct is written to the
@@ -80,7 +84,10 @@ export class MaterialKernel extends ComputeKernel {
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( ${ params.globalSeed }, indexUV, input.sampleIndex, rngIndex );
-				let scatterDist = ${ sampleFogDistanceFn }( medium, throughput, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+				var scatterDist = 0.0;
+				${ ifFeature( 'FOG' )/* wgsl */`
+					scatterDist = ${ sampleFogDistanceFn }( medium, throughput, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+				` }
 
 				var queuedRay: ${ traceQueuedRayStruct };
 				queuedRay.origin = origin;
@@ -151,27 +158,30 @@ export class MaterialKernel extends ComputeKernel {
 					var fogBounces = input.fogBounces;
 					var isTerminated = false;
 
-					if ( input.fogScatter != 0u ) {
+					// without fog the surface branch below is a plain block
+					${ ifFeature( 'FOG' )/* wgsl */`
+						if ( input.fogScatter != 0u ) {
 
-						// A scatter event in fog, staged at "origin" by LogicKernel. The phase function is its own pdf, so a
-						// sample's weight is one. Out of fog bounces the path ends here, keeping the light sampled at it
-						lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, input.lightDirection ), medium.anisotropy );
-						lightEvalColor = vec3f( lightEvalPdf );
-						scatterRec.direction = ${ sampleHenyeyGreensteinFn }( input.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
-						scatterRec.pdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, scatterRec.direction ), medium.anisotropy );
-						scatterRec.color = vec3f( scatterRec.pdf );
-						isTerminated = fogBounces >= maxFogBounces;
-						fogBounces ++;
+							// A scatter event in fog, staged at "origin" by LogicKernel. The phase function is its own pdf, so a
+							// sample's weight is one. Out of fog bounces the path ends here, keeping the light sampled at it
+							lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, input.lightDirection ), medium.anisotropy );
+							lightEvalColor = vec3f( lightEvalPdf );
+							scatterRec.direction = ${ sampleHenyeyGreensteinFn }( input.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+							scatterRec.pdf = ${ henyeyGreensteinPdfFn }( dot( input.direction, scatterRec.direction ), medium.anisotropy );
+							scatterRec.color = vec3f( scatterRec.pdf );
+							isTerminated = fogBounces >= maxFogBounces;
+							fogBounces ++;
 
-					} else {
+						} else
+					` } {
 
-						let objectInfo = ${ transformsStorage }[ u32( input.hit.objectIndex ) ];
+						let objectInfo = ${ objectsStorage }[ u32( input.hit.objectIndex ) ];
 						let materialInfo = ${ materialsStorage }[ objectInfo.materialIndex ];
 
-						var vertexData = ${ sampleTrianglePointFn }( input.hit.barycoord, input.hit.indices );
-						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vertexData.normal );
+						var vertexData = ${ sampleTrianglePointFn }( input.hit.barycoord, input.hit.indices, objectInfo.attributesOffset );
+						vertexData.normal = normalize( transpose( objectInfo.inverseMatrixWorld ) * vec4f( vertexData.normal.xyz, 0.0 ) );
 						vertexData.tangent = vec4f( ( objectInfo.matrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
-						vertexData.position = objectInfo.matrixWorld * vertexData.position;
+						vertexData.position = ( objectInfo.matrixWorld * vec4f( vertexData.position, 1.0 ) ).xyz;
 
 						let view = - input.direction;
 
@@ -180,10 +190,11 @@ export class MaterialKernel extends ComputeKernel {
 						let blurRoughness = sqrt( clamp( 1.0 - filterGlossy * input.minPdf, 0.0, 1.0 ) ) * 0.5;
 
 						var surface = ${ getSurfaceRecordFn }( materialInfo, objectInfo.color, vertexData, input.hit, view, blurRoughness );
+						let materialMedium = ${ getMaterialMediumFn }( objectInfo.materialIndex );
 
 						// a matte surface hit by the camera ray renders as a fully transparent, behind the lights its
 						// segment passed, which stay opaque: at this point the result holds only those light hits
-						let isMatte = surface.matte && input.hit.bounce == 0u;
+						let isMatte = ${ isMatteFn }( surface ) && input.hit.bounce == 0u;
 						if ( isMatte ) {
 
 							rayDataStorage[ index ].resultColor = vec4f( input.resultColor.rgb, select( 0.0, 1.0, input.cameraHitLight != 0u ) );
@@ -198,8 +209,7 @@ export class MaterialKernel extends ComputeKernel {
 						// Stochastically pass through partially transparent surfaces by re-enqueueing
 						// the ray at the hit point, advancing the alpha depth but not the bounce count. A
 						// fog volume's boundary is always passed, entering or leaving its volume
-						let isFogBoundary = materialInfo.fogVolume != 0;
-						let passesThrough = isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
+						let passesThrough = ${ ifFeature( 'FOG' )/* wgsl */`materialMedium.fogVolume ||` } ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
 						if ( passesThrough ) {
 
 							// out of transparent bounces, so stop rather than shading a surface that
@@ -214,24 +224,26 @@ export class MaterialKernel extends ComputeKernel {
 
 							}
 
-							if ( isFogBoundary ) {
+							${ ifFeature( 'FOG' )/* wgsl */`
+								if ( materialMedium.fogVolume ) {
 
-								var stack = medium.stack;
-								if ( input.hit.side > 0.0 ) {
+									var stack = medium.stack;
+									if ( input.hit.side > 0.0 ) {
 
-									${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
+										${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
 
-								} else {
+									} else {
 
-									${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
+										${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
+
+									}
+
+									// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
+									medium = ${ getCombinedMediumFn }( stack );
+									${ params.rayDataStorage }[ index ].medium = medium;
 
 								}
-
-								// a whole struct is written to the buffer, not through the pointer alias, which Safari fails to compile
-								medium = ${ getCombinedMediumFn }( stack );
-								${ params.rayDataStorage }[ index ].medium = medium;
-
-							}
+							` }
 
 							let alphaOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, input.direction, input.hit.normal );
 							if ( medium.subsurface != 0u ) {
@@ -271,18 +283,12 @@ export class MaterialKernel extends ComputeKernel {
 
 						// apply the hero wavelength to dispersive surfaces, folding the spectral weight
 						// into the throughput at the path's first dispersive interaction
-						let isDispersive = surface.dispersion > 0.0 && surface.ior > 1.0 && surface.transmission > 0.0 && ! surface.thinWall;
-						if ( isDispersive ) {
+						let wavelength = abs( input.dispersionWavelength );
+						if ( ${ applyDispersionFn }( &surface, wavelength ) && input.dispersionWavelength < 0.0 ) {
 
-							let wavelength = abs( input.dispersionWavelength );
-							${ applyDispersionFunc }( &surface, surface.dispersion, wavelength );
-							if ( input.dispersionWavelength < 0.0 ) {
-
-								rayDataStorage[ index ].dispersionWavelength = wavelength;
-								throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
-								rayDataStorage[ index ].throughputColor = throughputColor;
-
-							}
+							rayDataStorage[ index ].dispersionWavelength = wavelength;
+							throughputColor *= ${ dispersionColorWeightFunc }( wavelength );
+							rayDataStorage[ index ].throughputColor = throughputColor;
 
 						}
 
@@ -298,7 +304,7 @@ export class MaterialKernel extends ComputeKernel {
 							shadowHitPoint = vertexData.position.xyz;
 							shadowHitNormal = input.hit.normal;
 							shadowStack = ${ getShadowMediumStackFn }(
-								medium.stack, objectInfo.materialIndex, input.hit.side, surface.thinWall,
+								medium.stack, objectInfo.materialIndex, input.hit.side, ! materialMedium.volume,
 								input.direction, input.lightDirection, input.hit.normal,
 							);
 
@@ -328,7 +334,7 @@ export class MaterialKernel extends ComputeKernel {
 						minPdf = min( input.minPdf, scatterRec.pdf );
 
 						// refracting through a volume's surface enters or exits it
-						if ( scatterRec.isTransmissive && ! surface.thinWall ) {
+						if ( scatterRec.isTransmissive && materialMedium.volume ) {
 
 							var stack = medium.stack;
 							if ( input.hit.side > 0.0 ) {

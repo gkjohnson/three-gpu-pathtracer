@@ -11,49 +11,10 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 		super( renderer );
 
-		// every pixel in a tile finishes its sample in one dispatch, so the counts follow from how
-		// far through the tile cycle the render is and need no GPU work to measure
-		this._completedSamples = 0;
-		this._tileProgress = 0;
-
 		// kernels
 		this.kernel = new PathTracerMegaKernel( ).setWorkgroupSize( 8, 8, 1 );
 		this.kernel.context.clampDirect = this.clampDirect;
 		this.kernel.context.clampIndirect = this.clampIndirect;
-
-	}
-
-	resetSeed() {
-
-		this.kernel.globalSeed = 0;
-
-	}
-
-	reset() {
-
-		super.reset();
-		this.kernel.globalSeed ++;
-		this._completedSamples = 0;
-		this._tileProgress = 0;
-
-	}
-
-	async getSampleCountsAsync() {
-
-		if ( this.lowResMode ) {
-
-			return { min: 0, max: 0, avg: 0 };
-
-		}
-
-		const completed = this._completedSamples;
-		const progress = this._tileProgress;
-
-		return {
-			min: progress === 1 ? completed + 1 : completed,
-			max: completed + 1,
-			avg: completed + progress,
-		};
 
 	}
 
@@ -123,10 +84,15 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	compileKernels() {
+
+		super.compileKernels( [ this.kernel ] );
+
+	}
+
 	*createRenderTask() {
 
 		const {
-			renderer,
 			kernel,
 			maxBounces,
 			maxTransparentBounces,
@@ -151,12 +117,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 		kernel.maxFogBounces = maxFogBounces;
 		kernel.cameraInVolume = Number( cameraInVolume );
 
-		// compile the kernel before its first dispatch
-		yield* this.compileKernels( [ kernel ] );
+		// each render gets its own seed without "stableNoise"
+		kernel.globalSeed = this.stableNoise ? 0 : kernel.globalSeed + 1;
 
-		// Number of tile cycles that have finished, ie. the sample count every pixel has reached. It is the sample
-		// index of the next cycle, as in the wavefront, and the global seed gives each render its own sequence
+		// Number of tile cycles that have finished, ie. the sample count every pixel has reached
 		let completedSamples = 0;
+
+		// the dispatches of the current update
+		let updateDispatches = 0;
 
 		while ( true ) {
 
@@ -166,6 +134,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			kernel.accumulateAux = this.auxTarget ? 1 : 0;
 			if ( this.maxSamples !== 0 && completedSamples >= this.maxSamples ) {
 
+				updateDispatches = 0;
 				yield;
 				continue;
 
@@ -177,10 +146,7 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			tiles.x = Math.ceil( Math.sqrt( budgetTiles ) );
 			tiles.y = Math.ceil( budgetTiles / tiles.x );
 
-			// every pixel in a tile finishes its sample in a single dispatch, so the sample counts
-			// can be derived from how far through the tile cycle we are without reading anything back
 			const tileCount = this.lowResMode ? 1 : tiles.x * tiles.y;
-			let completedTiles = 0;
 
 			const tileSize = kernel.tileSize;
 			if ( lowResMode ) {
@@ -194,14 +160,14 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 			}
 
 			const dispatchSize = kernel.getDispatchSize( tileSize.x, tileSize.y );
-			kernel.sampleIndex = completedSamples;
 
-			// Swap targets to support devices without <rgba32float, read_write> textures
-			// Copy latest data to a new outputTarget to keep the appearance
-			renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
-			[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
-			kernel.prevOutputTarget = this.prevOutputTarget;
-			kernel.outputTarget = this.outputTarget;
+			// a frame rendered in one tile takes as many samples per update as fit in the budget
+			let updateSamples = 1;
+			if ( tileCount === 1 && ! lowResMode ) {
+
+				updateSamples = Math.max( 1, Math.floor( this.frameBudget / ( _size.x * _size.y ) ) );
+
+			}
 
 			for ( let x = 0; x < tiles.x; x ++ ) {
 
@@ -210,12 +176,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 					kernel.offset.set( x, y ).multiply( tileSize );
 					this.dispatch( kernel, dispatchSize );
 
-					// in low res mode the tiles past the first fall outside the target and do no work
-					completedTiles = Math.min( completedTiles + 1, tileCount );
-					this._completedSamples = completedSamples;
-					this._tileProgress = completedTiles / tileCount;
+					updateDispatches ++;
+					if ( updateDispatches >= updateSamples ) {
 
-					yield;
+						updateDispatches = 0;
+						yield;
+
+					}
 
 				}
 

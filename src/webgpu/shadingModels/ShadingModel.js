@@ -1,15 +1,15 @@
 /** @import { WebGPURenderer } from 'three/webgpu' */
-import { BackSide, FrontSide, DoubleSide, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute } from 'three/webgpu';
+import { RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, texture, uniformArray } from 'three/tsl';
-import { wgslTagFn, proxyFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, proxyFn, contextProxy } from 'three-mesh-bvh/webgpu';
 import { NodeProxyObject } from '../nodes/NodeProxyObject.js';
 import { AtlasTexture } from '../AtlasTexture.js';
 import { rand2, RNG_INDEX_SCATTER_DIRECTION } from '../nodes/random.wgsl.js';
 import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
-import { hitRecordStruct, materialStruct, scatterRecordStruct, surfaceRecordStruct } from '../nodes/structs.wgsl.js';
-import { getSurfaceRecordFunc } from '../nodes/material.wgsl.js';
-import { sampleTexelFunc, getTextureSizeFunc } from '../nodes/utils.wgsl.js';
+import { hitRecordStruct, scatterRecordStruct, materialMediumStruct } from '../nodes/structs.wgsl.js';
+import { sampleTexelFunc, getTextureSizeFunc, getBasisFromNormalFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
+import { MaterialFeatures } from '../../uniforms/MaterialsTexture.js';
 
 function encodeTextureWrap( wrap ) {
 
@@ -28,17 +28,27 @@ function encodeTextureWrap( wrap ) {
 
 }
 
+const materialStruct = new StructTypeNode( {
+	color: 'vec3',
+}, 'Material' );
+
+// the fields the kernels read
+const surfaceRecordStruct = new StructTypeNode( {
+	normal: 'vec3f',
+	color: 'vec3f',
+	emission: 'vec3f',
+	opacity: 'f32',
+}, 'SurfaceRecord' );
+
 /**
- * Defines how the pathtracer interprets the scene's materials
+ * Defines how the pathtracer interprets the scene's materials. The base model renders each material's color as an
+ * opaque, double sided, diffuse surface. See GLTFShadingModel for the full glTF material.
  *
- * A custom material struct must keep the fields the ray traversal and medium stack read: "opacity", "side",
- * "transparent", "alphaTest", "vertexColors", "map", "mapTransform", "alphaMap", "alphaMapTransform",
- * "transmission", "thinWall", "fogVolume", "attenuationColor", "attenuationDistance", "multiscatterColor",
- * "scatterStrength" and "scatterAnisotropy".
+ * The ray traversal, medium stack and kernels read the materials only through the "fns" below, so a custom material
+ * struct only needs the fields its functions read.
  *
- * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read:
- * "normal", "color", "emission", "opacity", "matte", "roughness", "metalness", "ior", "eta", "f0",
- * "frontFace", "transmission", "thinWall" and "dispersion".
+ * A custom surface record struct must be named "SurfaceRecord" and keep the fields the kernels read: "normal",
+ * "color", "emission" and "opacity", along with any its functions read.
  *
  * The kernels read the "structs", "storage" and "fns" members through the node context as "shadingModel".
  */
@@ -50,8 +60,20 @@ export class ShadingModel {
 		// across rebuilds, like BVHComputeData
 		this.structs = new NodeProxyObject( { material: null, surfaceRecord: null } );
 		this.storage = new NodeProxyObject( { materials: null } );
-		this.fns = new NodeProxyObject( { sampleTexel: null, getSurfaceRecord: null, bsdfSample: null, bsdfEvalPdf: null }, proxyFn );
+		this.fns = new NodeProxyObject( {
+			sampleTexel: null,
+			getTextureSize: null,
+			getSurfaceRecord: null,
+			bsdfSample: null,
+			bsdfEvalPdf: null,
+			getHitOpacity: null,
+			getMaterialMedium: null,
+			applyDispersion: null,
+			isAuxSurface: null,
+			isMatte: null,
+		}, proxyFn );
 		this.textureAtlas = new AtlasTexture();
+		this.features = new MaterialFeatures();
 		this.materials = [];
 		this.materialsMap = new Map();
 		this.textures = [];
@@ -75,11 +97,22 @@ export class ShadingModel {
 	 * - "structs.material": the struct each material is written to.
 	 * - "structs.surfaceRecord": the struct a surface is evaluated into at a hit.
 	 * - "fns.sampleTexel": ( uv, map, lod ) -> vec4f, sampling a material's texture from the atlas.
+	 * - "fns.getTextureSize": ( map ) -> vec2f, the size of a material's texture in the atlas.
 	 * - "fns.getSurfaceRecord": ( material, objectColor, vertexData, hit, view, blurRoughness ) -> SurfaceRecord,
 	 *   reading the surface from the material struct at a HitRecord, tinted by the object's instance color.
 	 * - "fns.bsdfSample": ( hit, surface, worldView ) -> ScatterRecord, sampling the next direction.
 	 * - "fns.bsdfEvalPdf": ( hit, surface, worldView, worldLight ) -> ScatterRecord, the bsdf value and sampling
 	 *   pdf for a given light direction, used by next event estimation.
+	 * - "fns.getHitOpacity": ( materialIndex, objectAlpha, indices, attributesOffset, barycoord, side ) -> f32, the
+	 *   opacity of a triangle the ray traversal hits, with its vertices read at "attributesOffset": 0 for a face on a
+	 *   side the material doesn't render, a side of 0 counting either side, or for a fully transparent or alpha tested
+	 *   surface, below 1 for a partially transparent one, and 1 otherwise. Defaults to 1.
+	 * - "fns.getMaterialMedium": ( materialIndex ) -> MaterialMedium, the material's volume. Defaults to none.
+	 * - "fns.applyDispersion": ( ptr<SurfaceRecord>, wavelength ) -> bool, refracting a dispersive surface at a
+	 *   wavelength, returning whether the surface is dispersive. Defaults to false.
+	 * - "fns.isAuxSurface": ( surface, scatter ) -> bool, whether the denoiser's guides show the surface rather than
+	 *   what it reflects or transmits. Defaults to true.
+	 * - "fns.isMatte": ( surface ) -> bool, whether the surface renders transparent to the camera. Defaults to false.
 	 */
 	updateFunctions() {
 
@@ -90,19 +123,28 @@ export class ShadingModel {
 		// the atlas refills its texture info array in place, so this reads the latest placements
 		const textureInfo = uniformArray( textureAtlas.textureInfo, 'uvec4' ).setName( 'shadingModel_textureInfo' );
 		fns.sampleTexel = sampleTexelFunc( textureInfo, texture( textureAtlas.texture ) );
+		fns.getTextureSize = getTextureSizeFunc( textureInfo );
 
-		// the geometry helpers come from the bvh data through the node context
-		fns.getSurfaceRecord = getSurfaceRecordFunc( {
-			materialStruct: structs.material,
-			surfaceRecordStruct: structs.surfaceRecord,
-			attributesStruct: contextProxy( 'bvhData.structs.attributes' ),
-			attributesStorage: contextProxy( 'bvhData.storage.attributes' ),
-			transformsStorage: contextProxy( 'bvhData.storage.transforms' ),
-			sampleTexel: fns.sampleTexel,
-			getTextureSize: getTextureSizeFunc( textureInfo ),
-			getUvFromChannel: contextProxyFn( 'bvhData.fns.getUvFromChannel' ),
-			getColor: contextProxyFn( 'bvhData.fns.getColor' ),
-		} );
+		fns.getSurfaceRecord = wgslTagFn/* wgsl */`
+
+			fn getSurfaceRecord(
+				material: ${ structs.material },
+				objectColor: vec4f,
+				vertexData: ${ contextProxy( 'bvhData.structs.attributes' ) },
+				hit: ${ hitRecordStruct },
+				view: vec3f,
+				blurRoughness: f32,
+			) -> ${ structs.surfaceRecord } {
+
+				var surf: ${ structs.surfaceRecord };
+				surf.normal = hit.normal;
+				surf.color = material.color * objectColor.rgb;
+				surf.opacity = 1.0;
+				return surf;
+
+			}
+
+		`;
 
 		fns.bsdfSample = wgslTagFn/* wgsl */`
 
@@ -110,11 +152,12 @@ export class ShadingModel {
 
 				var record: ${ scatterRecordStruct };
 
-				let wo = normalize( surf.normalInvBasis * worldWo );
+				let basis = ${ getBasisFromNormalFunc }( surf.normal );
+				let wo = normalize( worldWo * basis );
 				let wi = ${ diffuseDirectionFunc }( wo, ${ rand2 }( ${ RNG_INDEX_SCATTER_DIRECTION } ) );
-				record.color = surf.color * max( wi.z, 0.0 );
+				record.color = surf.color * max( wi.z, 0.0 ) / PI;
 				record.pdf = max( wi.z, 0.0 ) / PI;
-				record.direction = normalize( surf.normalBasis * wi );
+				record.direction = normalize( basis * wi );
 
 				return record;
 
@@ -129,16 +172,95 @@ export class ShadingModel {
 				var record: ${ scatterRecordStruct };
 				record.direction = worldWi;
 
-				let wo = normalize( surf.normalInvBasis * worldWo );
-				let wi = normalize( surf.normalInvBasis * worldWi );
-				record.color = surf.color * max( wi.z, 0.0 );
-				record.pdf = max( wi.z, 0.0 ) / PI;
+				let cosine = max( dot( surf.normal, worldWi ), 0.0 );
+				record.color = surf.color * cosine / PI;
+				record.pdf = cosine / PI;
 
 				return record;
 
 			}
 
 		`;
+
+		// every surface is opaque and hit from either side by default
+		// TODO: the hit is given as triangle indices and barycentric coordinates, which lines, points and custom
+		// primitives like SDFs don't have. Pass a generic hit instead, the primitive index and a coordinate the
+		// primitive type defines, and fetch the interpolated attributes from the bvh data only when the material
+		// needs them, so opaque materials don't pay for building them in the traversal
+		fns.getHitOpacity = wgslTagFn/* wgsl */`
+
+			fn getHitOpacity( materialIndex: u32, objectAlpha: f32, indices: vec3u, attributesOffset: u32, barycoord: vec3f, side: f32 ) -> f32 {
+
+				return 1.0;
+
+			}
+
+		`;
+
+		fns.getMaterialMedium = wgslTagFn/* wgsl */`
+
+			fn getMaterialMedium( materialIndex: u32 ) -> ${ materialMediumStruct } {
+
+				var medium: ${ materialMediumStruct };
+				return medium;
+
+			}
+
+		`;
+
+		fns.applyDispersion = wgslTagFn/* wgsl */`
+
+			fn applyDispersion( surf: ptr<function, ${ structs.surfaceRecord }>, wavelength: f32 ) -> bool {
+
+				return false;
+
+			}
+
+		`;
+
+		fns.isAuxSurface = wgslTagFn/* wgsl */`
+
+			fn isAuxSurface( surf: ${ structs.surfaceRecord }, scatterRec: ${ scatterRecordStruct } ) -> bool {
+
+				return true;
+
+			}
+
+		`;
+
+		fns.isMatte = wgslTagFn/* wgsl */`
+
+			fn isMatte( surf: ${ structs.surfaceRecord } ) -> bool {
+
+				return false;
+
+			}
+
+		`;
+
+	}
+
+	/**
+	 * Detects the optional features the materials use, like "FOG", so the kernels only compile in the code
+	 * for those. Call after "updateMaterials". Returns whether the set changed, so the kernels need rebuilding.
+	 *
+	 * @returns {boolean}
+	 */
+	updateFeatures() {
+
+		const { features } = this;
+		const before = features.getUsedFeatures().sort().join();
+		features.reset();
+		this.materials.forEach( material => this.detectFeatures( material, features ) );
+
+		return features.getUsedFeatures().sort().join() !== before;
+
+	}
+
+	/**
+	 * Marks the features a material uses with "features.setUsed". The base model supports none.
+	 */
+	detectFeatures( /* material, features */ ) {
 
 	}
 
@@ -195,22 +317,11 @@ export class ShadingModel {
 	}
 
 	/**
-	 * Returns the material's field, or the default when it has none. For use in "writeMaterialsBuffer".
+	 * Returns whether the material is a volume the camera can be inside of. Defaults to false.
 	 */
-	getField( material, key, def ) {
+	isVolumeMaterial( /* material */ ) {
 
-		return key in material ? material[ key ] : def;
-
-	}
-
-	/**
-	 * Returns whether the material is a volume: fog, or transmissive and not thin walled.
-	 */
-	isVolumeMaterial( material ) {
-
-		const isFogVolume = Boolean( material.isFogVolumeMaterial );
-		const isThinWall = this.getField( material, 'thickness', 0.0 ) === 0.0 && this.getField( material, 'attenuationDistance', Infinity ) === Infinity;
-		return ( ! isThinWall && material.transmission > 0.0 ) || isFogVolume;
+		return false;
 
 	}
 
@@ -257,317 +368,22 @@ export class ShadingModel {
 	 */
 	writeMaterialsBuffer( materials ) {
 
-		let index = 0;
-
 		// NOTE: make the minimum material buffer length 2 in order to avoid TSL converting it to a scalar
 		// TODO: remove this when fixed in three
-		const materialBufferLength = Math.max( materials.length, 2 );
-		const floatArray = new Float32Array( materialBufferLength * this.structs.material.proxyNode.getLength() );
-		const intArray = new Int32Array( floatArray.buffer );
-
-		// TODO: make features work
-		// features.reset();
+		const length = this.structs.material.proxyNode.getLength();
+		const floatArray = new Float32Array( Math.max( materials.length, 2 ) * length );
 		for ( let i = 0, l = materials.length; i < l; i ++ ) {
 
-			const m = materials[ i ];
-			const isFogVolume = Boolean( m.isFogVolumeMaterial );
-
-			// color - offset 0
 			// materials without a color, like NodeMaterial or ShaderMaterial, default to white
-			if ( 'color' in m ) {
-
-				floatArray[ index ++ ] = m.color.r;
-				floatArray[ index ++ ] = m.color.g;
-				floatArray[ index ++ ] = m.color.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-
-			}
-
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'map' );
-
-			// metalness & roughness - offset 4
-			floatArray[ index ++ ] = this.getField( m, 'metalness', 0.0 );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'metalnessMap' );
-			floatArray[ index ++ ] = this.getField( m, 'roughness', 0.0 );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'roughnessMap' );
-
-			// transmission & emissiveIntensity - offset 8
-			// three.js assumes a default f0 of 0.04 if no ior is provided which equates to an ior of 1.5
-			floatArray[ index ++ ] = this.getField( m, 'ior', 1.5 );
-			floatArray[ index ++ ] = this.getField( m, 'transmission', 0.0 );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'transmissionMap' );
-			floatArray[ index ++ ] = this.getField( m, 'emissiveIntensity', 0.0 );
-
-			// emission - offset 12
-			if ( 'emissive' in m ) {
-
-				floatArray[ index ++ ] = m.emissive.r;
-				floatArray[ index ++ ] = m.emissive.g;
-				floatArray[ index ++ ] = m.emissive.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-
-			}
-
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'emissiveMap' );
-
-			// normals - offset 16
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'normalMap' );
-			index ++; // because of vec2 alignment
-			if ( 'normalScale' in m ) {
-
-				floatArray[ index ++ ] = m.normalScale.x;
-				floatArray[ index ++ ] = m.normalScale.y;
-
-			} else {
-
-				floatArray[ index ++ ] = 1;
-				floatArray[ index ++ ] = 1;
-
-			}
-
-			// clearcoat - offset 20
-			floatArray[ index ++ ] = this.getField( m, 'clearcoat', 0.0 );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'clearcoatMap' );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'clearcoatNormalMap' );
-			index ++; // because of vec2 alignment
-
-			// offset 24
-			if ( 'clearcoatNormalScale' in m ) {
-
-				floatArray[ index ++ ] = m.clearcoatNormalScale.x;
-				floatArray[ index ++ ] = m.clearcoatNormalScale.y;
-
-			} else {
-
-				floatArray[ index ++ ] = 1;
-				floatArray[ index ++ ] = 1;
-
-			}
-
-			floatArray[ index ++ ] = this.getField( m, 'clearcoatRoughness', 0.0 );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'clearcoatRoughnessMap' );
-
-			// iridescence - offset 28
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'iridescenceMap' );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'iridescenceThicknessMap' );
-
-			floatArray[ index ++ ] = this.getField( m, 'iridescence', 0.0 );
-			floatArray[ index ++ ] = this.getField( m, 'iridescenceIOR', 1.3 );
-
-			// offset 32
-			floatArray[ index ++ ] = this.getField( m, 'iridescenceThicknessMinimum', 100 );
-			floatArray[ index ++ ] = this.getField( m, 'iridescenceThicknessMaximum', 400 );
-			floatArray[ index ++ ] = this.getField( m, 'diffuseRoughness', 0.0 );
-			floatArray[ index ++ ] = this.getField( m, 'dispersion', 0.0 );
-
-			// specular color - offset 36
-			if ( 'specularColor' in m ) {
-
-				floatArray[ index ++ ] = m.specularColor.r;
-				floatArray[ index ++ ] = m.specularColor.g;
-				floatArray[ index ++ ] = m.specularColor.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-
-			}
-
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'specularColorMap' );
-
-			// specular intensity - offset 40
-			floatArray[ index ++ ] = this.getField( m, 'specularIntensity', 1.0 );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'specularIntensityMap' );
-
-			// isThinWall
-			const isThinWall = this.getField( m, 'thickness', 0.0 ) === 0.0 && this.getField( m, 'attenuationDistance', Infinity ) === Infinity;
-			intArray[ index ++ ] = Number( isThinWall );
-			index ++;
-
-			// attenuation - offset 44. A fog volume's "density" is its extinction per unit length. The kernels derive
-			// extinction as "- log( attenuationColor ) / attenuationDistance", so a color of e^-1 and a distance of
-			// 1 / density give the density back
-			if ( isFogVolume ) {
-
-				floatArray[ index ++ ] = Math.exp( - 1 );
-				floatArray[ index ++ ] = Math.exp( - 1 );
-				floatArray[ index ++ ] = Math.exp( - 1 );
-
-			} else if ( 'attenuationColor' in m ) {
-
-				floatArray[ index ++ ] = m.attenuationColor.r;
-				floatArray[ index ++ ] = m.attenuationColor.g;
-				floatArray[ index ++ ] = m.attenuationColor.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-				floatArray[ index ++ ] = 1.0;
-
-			}
-
-			if ( isFogVolume ) {
-
-				floatArray[ index ++ ] = m.density > 0 ? 1 / m.density : Infinity;
-
-			} else {
-
-				floatArray[ index ++ ] = this.getField( m, 'attenuationDistance', Infinity );
-
-			}
-
-			// alphaMap - offset 48
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'alphaMap' );
-			intArray[ index ++ ] = Number( this.getField( m, 'castShadow', true ) ); // shadow
-			floatArray[ index ++ ] = m.opacity;
-			floatArray[ index ++ ] = m.alphaTest;
-
-			// side & matte - offset 52. Volumes are entered and left through both faces
-			if ( this.isVolumeMaterial( m ) ) {
-
-				floatArray[ index ++ ] = 0;
-
-			} else {
-
-				switch ( m.side ) {
-
-					case FrontSide:
-						floatArray[ index ++ ] = 1;
-						break;
-					case BackSide:
-						floatArray[ index ++ ] = - 1;
-						break;
-					case DoubleSide:
-						floatArray[ index ++ ] = 0;
-						break;
-
-				}
-
-			}
-
-			intArray[ index ++ ] = Number( this.getField( m, 'matte', false ) ); // matte
-			floatArray[ index ++ ] = this.getField( m, 'sheen', 0.0 );
-			index ++; // vec3 alignment requirements
-
-			// sheenColor - offset 56
-			if ( 'sheenColor' in m ) {
-
-				floatArray[ index ++ ] = m.sheenColor.r;
-				floatArray[ index ++ ] = m.sheenColor.g;
-				floatArray[ index ++ ] = m.sheenColor.b;
-
-			} else {
-
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-				floatArray[ index ++ ] = 0.0;
-
-			}
-
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'sheenColorMap' );
-
-			// sheenRoughness, flags - offset 60
-			floatArray[ index ++ ] = this.getField( m, 'sheenRoughness', 0.0 );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'sheenRoughnessMap' );
-
-			intArray[ index ++ ] = Number( m.vertexColors );
-			intArray[ index ++ ] = Number( m.flatShading );
-
-			// transparent, fogVolume - offset 64
-			intArray[ index ++ ] = Number( m.transparent );
-			intArray[ index ++ ] = Number( isFogVolume );
-
-			// anisotropy, anisotropyRotation, anisotropyMap - offset 66
-			floatArray[ index ++ ] = this.getField( m, 'anisotropy', 0.0 );
-			floatArray[ index ++ ] = this.getField( m, 'anisotropyRotation', 0.0 );
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'anisotropyMap' );
-
-			// bumpMap, bumpScale - offset 69
-			intArray[ index ++ ] = this.getTextureDescriptor( m, 'bumpMap' );
-			floatArray[ index ++ ] = this.getField( m, 'bumpScale', 1.0 );
-			index ++; // padding for mat3 alignment
-
-			// map transform - offset 72
-			index += this.writeTextureMatrixToArray( m, 'map', floatArray, index );
-
-			// metalnessMap transform - offset 84
-			index += this.writeTextureMatrixToArray( m, 'metalnessMap', floatArray, index );
-
-			// roughnessMap transform - offset 96
-			index += this.writeTextureMatrixToArray( m, 'roughnessMap', floatArray, index );
-
-			// transmissionMap transform - offset 108
-			index += this.writeTextureMatrixToArray( m, 'transmissionMap', floatArray, index );
-
-			// emissiveMap transform - offset 120
-			index += this.writeTextureMatrixToArray( m, 'emissiveMap', floatArray, index );
-
-			// normalMap transform - offset 132
-			index += this.writeTextureMatrixToArray( m, 'normalMap', floatArray, index );
-
-			// clearcoatMap transform - offset 144
-			index += this.writeTextureMatrixToArray( m, 'clearcoatMap', floatArray, index );
-
-			// clearcoatNormalMap transform - offset 156
-			index += this.writeTextureMatrixToArray( m, 'clearcoatNormalMap', floatArray, index );
-
-			// clearcoatRoughnessMap transform - offset 168
-			index += this.writeTextureMatrixToArray( m, 'clearcoatRoughnessMap', floatArray, index );
-
-			// sheenColorMap transform - offset 180
-			index += this.writeTextureMatrixToArray( m, 'sheenColorMap', floatArray, index );
-
-			// sheenRoughnessMap transform - offset 192
-			index += this.writeTextureMatrixToArray( m, 'sheenRoughnessMap', floatArray, index );
-
-			// iridescenceMap transform - offset 204
-			index += this.writeTextureMatrixToArray( m, 'iridescenceMap', floatArray, index );
-
-			// iridescenceThicknessMap transform - offset 216
-			index += this.writeTextureMatrixToArray( m, 'iridescenceThicknessMap', floatArray, index );
-
-			// specularColorMap transform - offset 228
-			index += this.writeTextureMatrixToArray( m, 'specularColorMap', floatArray, index );
-
-			// specularIntensityMap transform - offset 240
-			index += this.writeTextureMatrixToArray( m, 'specularIntensityMap', floatArray, index );
-
-			// alphaMap transform - offset 252
-			index += this.writeTextureMatrixToArray( m, 'alphaMap', floatArray, index );
-
-			// anisotropyMap transform - offset 264
-			index += this.writeTextureMatrixToArray( m, 'anisotropyMap', floatArray, index );
-
-			// bumpMap transform - offset 276
-			index += this.writeTextureMatrixToArray( m, 'bumpMap', floatArray, index );
-
-			// scattering volume - offset 288. A fog volume's color is its single scatter albedo, used as is
-			const multiscatterColor = isFogVolume ? m.color : this.getField( m, 'multiscatterColor', null );
-			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.r : 1.0;
-			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.g : 1.0;
-			floatArray[ index ++ ] = multiscatterColor ? multiscatterColor.b : 1.0;
-			floatArray[ index ++ ] = this.getField( m, 'scatterStrength', 0.0 );
-			floatArray[ index ++ ] = this.getField( m, 'scatterAnisotropy', 0.0 );
-
-			// padding to the struct's 16 byte alignment
-			index += 3;
+			const m = materials[ i ];
+			const index = i * length;
+			floatArray[ index + 0 ] = 'color' in m ? m.color.r : 1.0;
+			floatArray[ index + 1 ] = 'color' in m ? m.color.g : 1.0;
+			floatArray[ index + 2 ] = 'color' in m ? m.color.b : 1.0;
 
 		}
 
-		return { materialData: intArray };
+		return { materialData: new Int32Array( floatArray.buffer ) };
 
 	}
 

@@ -1,6 +1,7 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
 import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
+import { loadOutputFn, storeOutputFn } from '../../nodes/output.wgsl.js';
 import { blendAuxFn, AUX_LAYERS } from '../../nodes/auxiliary.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { proxy, proxyFn, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -16,6 +17,7 @@ import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, NO_PIXEL } from './structs.js';
 import { getMediumSegmentWeightFn } from '../../nodes/medium.wgsl.js';
+import { ifFeature } from '../../nodes/features.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -32,8 +34,7 @@ export class LogicKernel extends ComputeKernel {
 			lightsInfo: { value: null },
 
 			// targets
-			prevOutputTarget: textureStore( createOutputTarget() ).toReadOnly(),
-			outputTarget: textureStore( createOutputTarget() ).toWriteOnly(),
+			outputTarget: textureStore( createOutputTarget() ).toReadWrite(),
 			sampleCountTarget: textureStore( createSampleCountTarget() ).toReadWrite(),
 
 			// the per pixel first hit albedo and normal, as running means like the color
@@ -56,7 +57,7 @@ export class LogicKernel extends ComputeKernel {
 		};
 
 		// environment + background resources pulled off their providers (embedded functions)
-		const envTotalSumNode = proxy( 'envInfo.value.totalSumNode', params );
+		const getEnvTotalSum = proxy( 'envInfo.value.getTotalSum', params );
 		const envIntensityNode = proxy( 'envInfo.value.intensityNode', params );
 		const sampleEnvColor = proxy( 'envInfo.value.sampleColor', params );
 		const getEnvDirPdf = proxy( 'envInfo.value.getDirPdf', params );
@@ -173,10 +174,13 @@ export class LogicKernel extends ComputeKernel {
 					// the segment's medium weight. In fog it scatters at its sampled distance unless a surface is nearer, a
 					// vertex staged like a surface hit
 					throughputColor *= ${ getMediumSegmentWeightFn }( input.medium, throughputColor, input.scatterDist, surfaceDist );
-					let isFogScatter = input.scatterDist > 0.0 && input.scatterDist < surfaceDist;
-					let segmentDist = select( surfaceDist, input.scatterDist, isFogScatter );
-
-					let didHit = didHitSurface || isFogScatter;
+					var segmentDist = surfaceDist;
+					var didHit = didHitSurface;
+					${ ifFeature( 'FOG' )/* wgsl */`
+						let isFogScatter = input.scatterDist > 0.0 && input.scatterDist < surfaceDist;
+						segmentDist = select( surfaceDist, input.scatterDist, isFogScatter );
+						didHit = didHitSurface || isFogScatter;
+					` }
 
 					// MIS weights against the light sampling at the vertex this segment left. Camera segments have none,
 					// and neither do scatter events in a subsurface walk
@@ -195,18 +199,22 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.side = hitResult.side;
 						rayDataStorage[ index ].hit.indices = hitResult.indices;
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
-						rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
+						${ ifFeature( 'FOG' )/* wgsl */`
+							rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
+						` }
 
 						// a fog scatter has no object, and is staged at "origin". Any non-negative index keeps the slot from
 						// being respawned, and MaterialKernel handles the scatter before reading the object
 						var position = hitResult.position;
 						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
-						if ( isFogScatter ) {
+						${ ifFeature( 'FOG' )/* wgsl */`
+							if ( isFogScatter ) {
 
-							position = input.origin + input.direction * ( input.rayStart + input.scatterDist );
-							rayDataStorage[ index ].origin = position;
+								position = input.origin + input.direction * ( input.rayStart + input.scatterDist );
+								rayDataStorage[ index ].origin = position;
 
-						}
+							}
+						` }
 
 						// next event estimation: choose one light or the environment by its estimated
 						// contribution. MaterialKernel evaluates the bsdf, or the phase function at a scatter
@@ -268,7 +276,7 @@ export class LogicKernel extends ComputeKernel {
 								let transparency = ( 1.0 - bg.a ) * avg;
 
 								var misWeight = 1.0;
-								if ( misEnabled != 0u && ${ envTotalSumNode } > 0.0 && ${ envIntensityNode } > 0.0 ) {
+								if ( misEnabled != 0u && ${ getEnvTotalSum }() > 0.0 && ${ envIntensityNode } > 0.0 ) {
 
 									let envPdf = ${ getEnvDirPdf }( input.direction );
 									misWeight = ${ misHeuristicFn }( input.scatterPdf, envPdf );
@@ -330,11 +338,12 @@ export class LogicKernel extends ComputeKernel {
 				if ( isTerminated ) {
 
 					// blend the finished sample into the output and free the slot for a new camera ray
+					// the color is updated in place
 					let sampleCount = storedSamples + 1;
-					let prevColor = textureLoad( ${ params.prevOutputTarget }, colorIndex );
+					let prevColor = ${ loadOutputFn }( ${ params.outputTarget }, colorIndex );
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
-					textureStore( ${ params.outputTarget }, colorIndex, blendedColor );
+					${ storeOutputFn }( ${ params.outputTarget }, colorIndex, blendedColor );
 
 					// the auxiliary images are blended the same way, in the same row order
 					if ( accumulateAux != 0u ) {
@@ -365,7 +374,7 @@ export class LogicKernel extends ComputeKernel {
 					// the low res preview shows the path so far, which the first sample overwrites
 					if ( lowResMode != 0u && storedSamples == 0u ) {
 
-						textureStore( ${ params.outputTarget }, colorIndex, resultColor );
+						${ storeOutputFn }( ${ params.outputTarget }, colorIndex, resultColor );
 
 					}
 

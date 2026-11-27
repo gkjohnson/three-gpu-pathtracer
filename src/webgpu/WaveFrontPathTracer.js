@@ -21,17 +21,6 @@ import {
 } from './compute/wavefront/structs.js';
 import { PathTracerBackend } from './PathTracerBackend.js';
 import { FILTER_GLOSSY_DISABLED } from './nodes/material.wgsl.js';
-import {
-	PrimeSampleCountersKernel,
-	TallySampleCountsKernel,
-	SAMPLE_COUNTER_LENGTH,
-	SAMPLE_COUNTER_MAX,
-	SAMPLE_COUNTER_MIN,
-	SAMPLE_COUNTER_PIXEL_COUNT,
-	SAMPLE_COUNTER_TOTAL_HI,
-	SAMPLE_COUNTER_TOTAL_LO,
-	U32_RANGE,
-} from './compute/TallySampleCountsKernel.js';
 
 // set the buffers to the max possible size supported by default (128MB)
 // TODO: this can be increased based on platform.
@@ -42,6 +31,10 @@ const MAX_BUFFER_SIZE = 134217728;
 const MAX_RAY_DATA_COUNT = Math.floor( MAX_BUFFER_SIZE / ( rayDataStruct.getLength() * 4 ) );
 
 const LOW_RES_ITERATIONS = 5;
+
+const MAX_SAMPLE_ITERATIONS = 32;
+
+const SAMPLE_COUNT_READBACK_INTERVAL_MS = 250;
 
 export class WaveFrontPathTracer extends PathTracerBackend {
 
@@ -82,11 +75,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.pixelQueueInfo = new StorageBufferAttribute( new Uint32Array( pixelQueueInfoStruct.getLength() ), pixelQueueInfoStruct.getLength() );
 		this.pixelQueueInfo.name = 'Pixel Queue Info';
 
-		// reduction target for the per pixel sample counts, read back asynchronously
-		this.sampleCountersStorage = new StorageBufferAttribute( new Uint32Array( SAMPLE_COUNTER_LENGTH ), SAMPLE_COUNTER_LENGTH );
-		this.sampleCountersStorage.name = 'Sample Counters';
-		this._samplesPromise = null;
-
 		// kernels
 		this.populatePixelIndicesKernel = new PopulatePixelIndicesKernel().setWorkgroupSize( 8, 8, 1 );
 		this.logicKernel = new LogicKernel().setWorkgroupSize( 64, 1, 1 );
@@ -100,8 +88,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayDispatchConverter = new QueueLengthToDispatchKernel( RAY_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
 		this.shadowDispatchConverter = new QueueLengthToDispatchKernel( SHADOW_RAY_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
 		this.mediumDispatchConverter = new QueueLengthToDispatchKernel( MEDIUM_QUEUE_LENGTH ).setWorkgroupSize( 1, 1, 1 );
-		this.primeSampleCountersKernel = new PrimeSampleCountersKernel().setWorkgroupSize( 1, 1, 1 );
-		this.tallySampleCountsKernel = new TallySampleCountsKernel().setWorkgroupSize( 8, 8, 1 );
 
 		// pool resizing: carry live slots into a reallocated pool and idle the rest
 		this.resetSlotsKernel = new ResetSlotsKernel().setWorkgroupSize( 64, 1, 1 );
@@ -122,20 +108,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// clear kernels
 		this.zeroDispatchKernel = new ZeroOutBufferKernel().setWorkgroupSize( 1, 1, 1 );
-
-	}
-
-	resetSeed() {
-
-		this.globalSeed = 0;
-
-	}
-
-	reset() {
-
-		super.reset();
-		this.globalSeed ++;
-		this._samplesPromise = null;
 
 	}
 
@@ -182,7 +154,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setShadingModel( shadingModel ) {
 
-		// the ray traversal reads the shading model's materials
+		// the ray traversal reads the shading model's materials, and the kernels its features
+		this.logicKernel.context.shadingModel = shadingModel;
 		this.materialKernel.context.shadingModel = shadingModel;
 		this.traceRayKernel.context.shadingModel = shadingModel;
 		this.traceShadowRayKernel.context.shadingModel = shadingModel;
@@ -240,7 +213,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayIntersectionsStorage?.dispose();
 		this.shadowRayIntersectionsStorage?.dispose();
 		this.mediumQueue?.dispose();
-		this.sampleCountersStorage.dispose();
 		this.pixelQueue?.dispose();
 		this.pixelQueueInfo.dispose();
 
@@ -262,8 +234,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		this.rayDispatchConverter.dispose();
 		this.shadowDispatchConverter.dispose();
 		this.mediumDispatchConverter.dispose();
-		this.primeSampleCountersKernel.dispose();
-		this.tallySampleCountsKernel.dispose();
 		this.resetSlotsKernel.dispose();
 		this.copyRayDataKernel.dispose();
 		this.zeroDispatchKernel.dispose();
@@ -374,10 +344,14 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// The slot count the current budget asks for, capped by the pool limit
-	_getRequestedSlotCount() {
+	// The slot count the current budget asks for, capped by the pool limit and the pixels left to sample, since each
+	// pixel has one path in flight. That's rounded up to a power of two so the pool isn't reallocated at every
+	// measurement
+	_getRequestedSlotCount( unfinishedPixels ) {
 
-		return Math.min( MAX_RAY_DATA_COUNT, Math.max( 1, Math.floor( this.frameBudget ) ) );
+		const budgetSlots = Math.max( 1, Math.floor( this.frameBudget ) );
+		const pixelSlots = 2 ** Math.ceil( Math.log2( Math.max( unfinishedPixels, 1 ) ) );
+		return Math.min( MAX_RAY_DATA_COUNT, budgetSlots, pixelSlots );
 
 	}
 
@@ -395,10 +369,11 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
-	// Resizes the pool when the budget changes. Paths in flight past a smaller budget are dropped.
-	_applyBudget( pixelCount ) {
+	// Resizes the pool when the budget or the pixels left to sample change it. Paths in flight past a smaller pool
+	// are dropped.
+	_applyBudget( pixelCount, unfinishedPixels ) {
 
-		const requested = this._getRequestedSlotCount();
+		const requested = this._getRequestedSlotCount( unfinishedPixels );
 		if ( requested !== this.rayCount ) {
 
 			this._resizePool( requested, pixelCount );
@@ -407,10 +382,34 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	compileKernels() {
+
+		// including the pool resize's
+		super.compileKernels( [
+			this.logicKernel,
+			this.materialKernel,
+			this.traceRayKernel,
+			this.traceShadowRayKernel,
+			this.subsurfaceKernel,
+			this.queueMediumWalksKernel,
+			this.cameraRayKernel,
+			this.cameraMediumKernel,
+			this.rayDispatchConverter,
+			this.shadowDispatchConverter,
+			this.mediumDispatchConverter,
+			this.zeroDispatchKernel,
+			this.populatePixelIndicesKernel,
+			this.resetSlotsKernel,
+			this.copyRayDataKernel,
+			this.pixelQueueRebuildDispatchKernel,
+			this.rebuildPixelQueueKernel,
+		] );
+
+	}
+
 	*createRenderTask() {
 
 		const {
-			renderer,
 			maxTransparentBounces,
 
 			logicKernel,
@@ -426,32 +425,9 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 			mediumDispatchConverter,
 			zeroDispatchKernel,
 			populatePixelIndicesKernel,
-			resetSlotsKernel,
-			copyRayDataKernel,
 			pixelQueueRebuildDispatchKernel,
 			rebuildPixelQueueKernel,
 		} = this;
-
-		// compile the kernels before their first dispatch, including the pool resize's below
-		yield* this.compileKernels( [
-			logicKernel,
-			materialKernel,
-			traceRayKernel,
-			traceShadowRayKernel,
-			subsurfaceKernel,
-			queueMediumWalksKernel,
-			cameraRayKernel,
-			cameraMediumKernel,
-			rayDispatchConverter,
-			shadowDispatchConverter,
-			mediumDispatchConverter,
-			zeroDispatchKernel,
-			populatePixelIndicesKernel,
-			resetSlotsKernel,
-			copyRayDataKernel,
-			pixelQueueRebuildDispatchKernel,
-			rebuildPixelQueueKernel,
-		] );
 
 		// a resize resets, recreating this task, so the dimensions and pixel queue hold for its
 		// lifetime. The slot pool starts tight, at the budget, and is resized in the loop below.
@@ -463,7 +439,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 		// the populate pass below overwrites whatever the resize carried over
 		const pixelCount = targetDimensions.x * targetDimensions.y;
-		this._applyBudget( pixelCount );
+		this._applyBudget( pixelCount, Infinity );
 
 		// reset the trace queues — only their lengths need zeroing
 		zeroDispatchKernel.target = this.queueCounters;
@@ -479,7 +455,8 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		populatePixelIndicesKernel.targetDimensions.copy( targetDimensions );
 		this.dispatch( populatePixelIndicesKernel, populatePixelIndicesKernel.getDispatchSize( targetDimensions.x, targetDimensions.y, 1 ) );
 
-		// the sample count indexes each pixel's sequence, and the global seed gives each render its own
+		// the sample count indexes each pixel's sequence, and the global seed gives each render its own without "stableNoise"
+		this.globalSeed = this.stableNoise ? 0 : this.globalSeed + 1;
 		logicKernel.globalSeed = this.globalSeed;
 		materialKernel.globalSeed = this.globalSeed;
 		cameraRayKernel.globalSeed = this.globalSeed;
@@ -488,22 +465,21 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 		subsurfaceKernel.globalSeed = this.globalSeed;
 		cameraMediumKernel.globalSeed = this.globalSeed;
 
+		// the pixels left to sample as of the last measurement, which limit the paths in flight. A reset or rebuild
+		// replaces this task, so measurements from before it can't change them
+		let unfinishedPixels = Infinity;
+		let lastMeasureTime = - Infinity;
 		while ( true ) {
 
-			// the iterations that spend the budget over the slots in use
-			const activeSlots = Math.min( this._getRequestedSlotCount(), pixelCount );
+			// the iterations that spend the budget over the paths in flight, which the pixels left to sample limit once
+			// most have finished. Each still dispatches over every slot, so they're capped
+			const activeSlots = Math.max( 1, Math.min( this.rayCount, pixelCount, unfinishedPixels ) );
 			const minIterations = this.lowResMode ? this._getPreviewIterations() : 1;
-			const iter = Math.max( minIterations, Math.round( this.frameBudget / activeSlots ) );
+			const budgetIterations = Math.round( this.frameBudget / activeSlots );
+			const iter = Math.min( MAX_SAMPLE_ITERATIONS, Math.max( minIterations, budgetIterations ) );
 
 			for ( let i = 0; i < iter; i ++ ) {
 
-				// Swap targets to support devices without <rgba32float, read_write> textures
-				// Copy latest data to a new outputTarget to keep the appearance
-				// TODO: this full resolution copy runs every frame - remove it by writing terminated
-				// samples to both targets or gating the swap on devices that support read_write
-				renderer.copyTextureToTexture( this.outputTarget, this.prevOutputTarget );
-				[ this.outputTarget, this.prevOutputTarget ] = [ this.prevOutputTarget, this.outputTarget ];
-				logicKernel.prevOutputTarget = this.prevOutputTarget;
 				logicKernel.outputTarget = this.outputTarget;
 				logicKernel.sampleCountTarget = this.sampleCountTarget;
 				logicKernel.auxTarget = this.auxTarget ?? this._auxPlaceholder;
@@ -520,7 +496,7 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 				this.dispatch( logicKernel, logicKernel.getDispatchSize( logicKernel.rayCount, 1, 1 ) );
 
 				// the trace results are consumed, so only the slot state has to survive a resize
-				this._applyBudget( pixelCount );
+				this._applyBudget( pixelCount, unfinishedPixels );
 
 				const {
 					rayDataStorage,
@@ -618,83 +594,22 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 			}
 
+			// measure the pixels left to sample every so often
+			const now = performance.now();
+			if ( now - lastMeasureTime >= SAMPLE_COUNT_READBACK_INTERVAL_MS ) {
+
+				lastMeasureTime = now;
+				this.getSampleCountsAsync().then( counts => {
+
+					unfinishedPixels = counts.unfinishedPixels;
+
+				} );
+
+			}
+
 			yield;
 
 		}
-
-	}
-
-	// Reduces the per pixel sample counts and reads them back. Runs a full resolution pass, so it
-	// only happens when asked for.
-	getSampleCountsAsync() {
-
-		// share the in flight measurement rather than dispatching another
-		if ( this._samplesPromise === null ) {
-
-			const promise = this._measureSampleCounts().finally( () => {
-
-				// a reset may have started a newer measurement in the meantime
-				if ( this._samplesPromise === promise ) {
-
-					this._samplesPromise = null;
-
-				}
-
-			} );
-
-			this._samplesPromise = promise;
-
-		}
-
-		return this._samplesPromise;
-
-	}
-
-	async _measureSampleCounts() {
-
-		const {
-			renderer,
-			sampleCountTarget,
-			sampleCountersStorage,
-			primeSampleCountersKernel,
-			tallySampleCountsKernel,
-		} = this;
-
-		if ( ! renderer.initialized || this.lowResMode ) {
-
-			return { min: 0, max: 0, avg: 0 };
-
-		}
-
-		primeSampleCountersKernel.counters = sampleCountersStorage;
-		renderer.compute( primeSampleCountersKernel.kernel, [ 1, 1, 1 ] );
-
-		tallySampleCountsKernel.counters = sampleCountersStorage;
-		tallySampleCountsKernel.sampleCountTarget = sampleCountTarget;
-		renderer.compute(
-			tallySampleCountsKernel.kernel,
-			tallySampleCountsKernel.getDispatchSize( sampleCountTarget.width, sampleCountTarget.height ),
-		);
-
-		const buffer = await renderer.getArrayBufferAsync( sampleCountersStorage );
-		const counters = new Uint32Array( buffer );
-		const pixelCount = counters[ SAMPLE_COUNTER_PIXEL_COUNT ];
-
-		// no camera ray has been dispatched yet, so there is nothing to average over
-		if ( pixelCount === 0 ) {
-
-			return { min: 0, max: 0, avg: 0 };
-
-		}
-
-		// the total is accumulated as a split 64 bit value to survive high sample counts
-		const total = counters[ SAMPLE_COUNTER_TOTAL_HI ] * U32_RANGE + counters[ SAMPLE_COUNTER_TOTAL_LO ];
-
-		return {
-			min: counters[ SAMPLE_COUNTER_MIN ],
-			max: counters[ SAMPLE_COUNTER_MAX ],
-			avg: total / pixelCount,
-		};
 
 	}
 

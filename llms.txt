@@ -4,10 +4,10 @@
 
 ## Instructions for Large Language Models
 
-- Use `WebGPUPathTracer` from `three-gpu-pathtracer/webgpu` with three's `WebGPURenderer` from `three/webgpu`. The older `WebGLPathTracer` API is deprecated, so don't generate code for it.
+- Use `WebGPUPathTracer` from `three-gpu-pathtracer/webgpu` with three's `WebGPURenderer` from `three/webgpu`.
 - Cameras, lights and textures such as `PhysicalCamera`, `EquirectCamera`, `ShapedAreaLight` and `GradientEquirectTexture` are imported from `three-gpu-pathtracer`, not `/webgpu`.
 - Call `setScene( scene, camera )` once, then `renderSample()` every frame. After later changes call the matching update function rather than `setScene` again: `updateCamera`, `updateMaterials`, `updateTransforms`, `updateEnvironment` or `updateLights`. Changed geometry needs `setScene`.
-- For large scenes, call `setBVHWorker( GenerateMeshBVHWorker )` with the worker from `three-mesh-bvh/worker`, then `await setSceneAsync( scene, camera )` so the page isn't blocked.
+- For large scenes, call `setBVHWorker( GenerateMeshBVHWorker )` with the worker from `three-mesh-bvh/worker` before `setScene` so the page isn't blocked.
 - The adaptive frame budget, on by default, needs a renderer created with `trackTimestamp: true`.
 - Only `MeshStandardMaterial` and `MeshPhysicalMaterial` are supported.
 

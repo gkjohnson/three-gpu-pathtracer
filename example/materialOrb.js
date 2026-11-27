@@ -5,6 +5,7 @@ import {
 	Vector3,
 	RectAreaLightNode,
 	AgXToneMapping,
+	BufferAttribute,
 } from 'three/webgpu';
 import { RectAreaLightTexturesLib } from 'three/examples/jsm/lights/RectAreaLightTexturesLib.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -23,6 +24,8 @@ let camera, scene, loader;
 let gui, database, imgEl;
 
 const _color = new Color();
+const _bottomColor = new Color( 0xff0000 );
+const _topColor = new Color( 0xffb000 );
 const initialCameraPosition = new Vector3();
 const initialCameraTarget = new Vector3();
 
@@ -58,6 +61,7 @@ function getDefaultMaterialProperties() {
 		scatterAnisotropy: 0.0,
 		matte: false,
 		flatShading: false,
+		vertexColors: false,
 		castShadow: true,
 	};
 
@@ -151,7 +155,22 @@ async function init() {
 	material = orb.material;
 
 	// the model ships without tangents, which anisotropy needs to orient its frame
-	orb.scene.getObjectByName( 'material_surface' ).geometry.computeTangents();
+	const surfaceGeometry = orb.scene.getObjectByName( 'material_surface' ).geometry;
+	surfaceGeometry.computeTangents();
+
+	// vertex colors from red at the bottom to orange yellow at the top
+	surfaceGeometry.computeBoundingBox();
+	const { min, max } = surfaceGeometry.boundingBox;
+	const position = surfaceGeometry.attributes.position;
+	const colors = new Float32Array( position.count * 3 );
+	for ( let i = 0; i < position.count; i ++ ) {
+
+		const t = ( position.getZ( i ) - min.z ) / ( max.z - min.z );
+		_color.lerpColors( _bottomColor, _topColor, t ).toArray( colors, i * 3 );
+
+	}
+
+	surfaceGeometry.setAttribute( 'color', new BufferAttribute( colors, 3 ) );
 
 	// move camera to the scene
 	scene.attach( camera );
@@ -175,7 +194,7 @@ async function init() {
 	loader.setCredits( CREDITS );
 
 	onParamsChange();
-	await pathTracer.setSceneAsync( scene, camera );
+	await pathTracer.setScene( scene, camera );
 	onResize();
 	window.addEventListener( 'resize', onResize );
 
@@ -234,6 +253,7 @@ async function init() {
 	matFolder1.add( params.materialProperties, 'scatterAnisotropy', - 1.0, 1.0 ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'matte' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'flatShading' ).onChange( onParamsChange );
+	matFolder1.add( params.materialProperties, 'vertexColors' ).onChange( onParamsChange );
 	matFolder1.add( params.materialProperties, 'castShadow' ).onChange( onParamsChange );
 	matFolder1.close();
 
@@ -438,6 +458,7 @@ function onParamsChange() {
 	material.anisotropyRotation = materialProperties.anisotropyRotation;
 	material.transparent = material.opacity < 1;
 	material.flatShading = materialProperties.flatShading;
+	material.vertexColors = materialProperties.vertexColors;
 
 	// note: custom properties
 	material.diffuseRoughness = materialProperties.diffuseRoughness;

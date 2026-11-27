@@ -51,7 +51,7 @@ const COMMITS_URL = 'https://api.github.com/repos/gkjohnson/three-gpu-pathtracer
 
 			} else {
 
-				url2 = `https://media.githubusercontent.com/media/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/goldens/${ name }/${ imageType }-golden.png`;
+				url2 = `https://media.githubusercontent.com/media/KhronosGroup/glTF-Render-Fidelity-Generator/refs/heads/main/test/goldens/${ name }/${ imageType }-golden.webp`;
 
 			}
 

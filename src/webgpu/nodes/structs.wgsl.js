@@ -6,6 +6,7 @@ export const constants = wgsl( /* wgsl */ `
 
 	const PI: f32 = 3.141592653589793;
 	const EPSILON: f32 = 1e-5;
+	const ONE_MINUS_EPSILON: f32 = 0.99999994; // the largest f32 below 1
 	const MIN_ROUGHNESS: f32 = 1e-3;
 	const MIN_INCIDENT_COS: f32 = 1e-3;
 
@@ -17,6 +18,17 @@ export const scatterRecordStruct = new StructTypeNode( {
 	direction: 'vec3f',
 	pdf: 'float',
 }, 'ScatterRecord' );
+
+// a material's volume, from the shading model's "getMaterialMedium": whether it's a fog volume or a closed volume
+// a refracted path enters, and its coefficients, zero extinction for none
+export const materialMediumStruct = new StructTypeNode( {
+	extinction: 'vec3f',
+	fogVolume: 'bool',
+	multiscatterColor: 'vec3f',
+	scatterStrength: 'float',
+	scatterAnisotropy: 'float',
+	volume: 'bool',
+}, 'MaterialMedium' );
 
 export const transmissionFresnelStruct = new StructTypeNode( {
 	reflectance: 'vec3f',
@@ -237,13 +249,6 @@ export const surfaceRecordStruct = new StructTypeNode( {
 	specularColor: 'vec3f',
 	specularIntensity: 'f32',
 }, 'SurfaceRecord' );
-
-export const environmentInfoStruct = new StructTypeNode( {
-	rotation: 'mat3x3f',
-	intensity: 'float',
-	blur: 'float',
-	totalSum: 'float',
-}, 'EnvironmentInfo' );
 
 // Result of importance-sampling the environment map: a world-space direction,
 // its radiance, and the pdf (in solid-angle measure) of having sampled it.
