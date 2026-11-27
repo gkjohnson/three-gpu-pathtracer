@@ -677,11 +677,15 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 	}
 
-	// returns whether the object record is visible
-	isRecordVisible( objectIndex ) {
+	// adds whether the object record is visible to the object info
+	// TODO: remove once three-mesh-bvh reports "visible" in the object info (three-mesh-bvh#1029)
+	_getObjectInfoAt( objectIndex ) {
 
 		const records = this.storage.objects.proxyNode.value.array;
-		return records[ objectIndex * objectRecordStruct.getLength() + RECORD_VISIBLE_WORD ] !== 0;
+		return {
+			...super._getObjectInfoAt( objectIndex ),
+			visible: records[ objectIndex * objectRecordStruct.getLength() + RECORD_VISIBLE_WORD ] !== 0,
+		};
 
 	}
 

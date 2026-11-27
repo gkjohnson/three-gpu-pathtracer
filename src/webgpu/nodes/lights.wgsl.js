@@ -1,5 +1,5 @@
 import { wgslFn } from 'three/tsl';
-import { rayStruct } from 'three-mesh-bvh/webgpu';
+import { rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { constants, lightStruct, lightRecordStruct } from './structs.wgsl.js';
 import { offsetRayOriginFunc } from './utils.wgsl.js';
 
@@ -14,23 +14,29 @@ export const ENVIRONMENT_LIGHT_TYPE = 5;
 export const EMISSIVE_TRIANGLE_LIGHT_TYPE = 6;
 export const LIGHT_FAR_DISTANCE = 1e30;
 
+// The share of the distance to a sampled light point that shadow rays are shortened by, since over long distances
+// the float error is larger than the light point's offset from the light's surface
+const SHADOW_RAY_SHORTENING = 1 / 65536;
+
+// the smallest distance to a light point the direction is divided by, for a point at the ray origin
+const MIN_LIGHT_POINT_DISTANCE = 1e-5;
+
 // Writes the direction and distance to a point sampled on a light. The point is offset from the light's surface so shadow
 // rays don't hit it
-export const writeLightPointFn = wgslFn( /* wgsl */ `
+export const writeLightPointFn = wgslTagFn/* wgsl */`
+	fn writeLightPoint( lightRec: ptr<function, ${ lightRecordStruct }>, rayOrigin: vec3f, lightPoint: vec3f, lightNormal: vec3f ) -> void {
 
-	fn writeLightPoint( lightRec: ptr<function, LightRecord>, rayOrigin: vec3f, lightPoint: vec3f, lightNormal: vec3f ) -> void {
-
-		let toLight = offsetRayOrigin( lightPoint, rayOrigin - lightPoint, lightNormal ) - rayOrigin;
+		let toLight = ${ offsetRayOriginFunc }( lightPoint, rayOrigin - lightPoint, lightNormal ) - rayOrigin;
 		lightRec.dist = length( toLight );
-		lightRec.direction = toLight / max( lightRec.dist, EPSILON );
+		lightRec.direction = toLight / max( lightRec.dist, ${ MIN_LIGHT_POINT_DISTANCE } );
 
 	}
-
-`, [ lightRecordStruct, offsetRayOriginFunc, constants ] );
+`;
 
 // Writes "outRay", the shadow ray toward a light sampled from "hitPoint", the light "lightDist" away in
 // "lightDirection". The ray starts at the hit point offset off its surface along "hitNormal", or at the hit point
-// itself when the normal is zero, as for a scatter event in fog, and ends at the sampled light point
+// itself when the normal is zero, as for a scatter event in fog, and ends at the sampled light point. The light's
+// normal isn't available here, so the point is offset off the light's surface when it's sampled, in "writeLightPoint"
 export const getShadowRayFn = wgslFn( /* wgsl */ `
 
 	fn getShadowRay( hitPoint: vec3f, hitNormal: vec3f, lightDirection: vec3f, lightDist: f32, outRay: ptr<function, Ray> ) -> void {
@@ -49,10 +55,9 @@ export const getShadowRayFn = wgslFn( /* wgsl */ `
 		// lights at infinity have no point to end at
 		if ( lightDist < ${ LIGHT_FAR_DISTANCE } ) {
 
-			// shorten the ray slightly since over long distances the float error is larger than the light point's offset
 			let toLight = hitPoint + lightDirection * lightDist - rayStart;
 			let dist = length( toLight );
-			outRay.maxDist = dist * ( 1.0 - 1.0 / 65536.0 );
+			outRay.maxDist = dist * ( 1.0 - ${ SHADOW_RAY_SHORTENING } );
 			outRay.direction = toLight / dist;
 
 		}

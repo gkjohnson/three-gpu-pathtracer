@@ -59,9 +59,9 @@ export class EmissiveTrianglesInfo {
 		let emissiveTriangleCount = 0;
 		objectInfos.forEach( info => {
 
-			const { objectIndex, primitiveOffset, primitiveCount } = info;
+			const { objectIndex, primitiveOffset, primitiveCount, visible } = info;
 			const luminance = bvhData.shadingModel.getEmissiveLuminance( bvhData.getMaterial( info ) );
-			if ( luminance > 0 && bvhData.isRecordVisible( objectIndex ) ) {
+			if ( luminance > 0 && visible ) {
 
 				firstTriangles[ objectIndex * 2 ] = emissiveTriangleCount + 1;
 				firstTriangles[ objectIndex * 2 + 1 ] = primitiveOffset;

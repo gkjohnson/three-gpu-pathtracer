@@ -283,27 +283,23 @@ export const offsetRayOriginFunc = wgslFn( /* wgsl */ `
 ` );
 
 // loads the texel at an index of a LinearDataTexture
-export const linearTextureLoadFn = wgslFn( /* wgsl */ `
-
+export const linearTextureLoadFn = wgslTagFn/* wgsl */`
 	fn linearTextureLoad( tex: texture_2d<f32>, index: u32 ) -> vec4f {
 
 		let width = textureDimensions( tex ).x;
 		return textureLoad( tex, vec2u( index % width, index / width ), 0 );
 
 	}
+`;
 
-` );
-
-export const linearTextureLoadUintFn = wgslFn( /* wgsl */ `
-
+export const linearTextureLoadUintFn = wgslTagFn/* wgsl */`
 	fn linearTextureLoadUint( tex: texture_2d<u32>, index: u32 ) -> vec4u {
 
 		let width = textureDimensions( tex ).x;
 		return textureLoad( tex, vec2u( index % width, index / width ), 0 );
 
 	}
-
-` );
+`;
 
 // Wraps a bilinear tap that is off the edge of a tile back to the texel the wrap mode calls for
 export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
