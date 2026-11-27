@@ -16,7 +16,7 @@ import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFun
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
 import { ifFeature } from '../nodes/features.js';
 import { LIGHT_FAR_DISTANCE, getShadowRayFn } from '../nodes/lights.wgsl.js';
-import { dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
+import { dispersionColorWeightFunc, sampleDispersionWavelengthFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -214,7 +214,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var traceOrigin = ray.origin;
 
 				// negative until the first dispersive hit applies its weight
-				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
+				var dispersionWavelength = - ${ sampleDispersionWavelengthFunc }( ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
 				// scatter events in subsurface walks and fog, counted apart from bounces
 				var subsurfaceBounces = 0u;

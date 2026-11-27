@@ -18,6 +18,7 @@ import {
 	surfaceRecordStruct as gltfSurfaceRecordStruct,
 } from '../nodes/structs.wgsl.js';
 import { rand1, rand2, RNG_INDEX_SCATTER_DIRECTION, RNG_INDEX_SCATTER_TYPE } from '../nodes/random.wgsl.js';
+import { ifFeature } from '../nodes/features.js';
 import { TurquinTexture } from '../TurquinTexture.js';
 import { iorToF0Func, schlickFresnelFunc, schlickFresnelVecFunc, dielectricFresnelFunc } from '../nodes/utils.wgsl.js';
 
@@ -104,32 +105,34 @@ export class GLTFShadingModel extends ShadingModel {
 				var result = vec3f( 0.0 );
 				var attenuation = vec3f( 1.0 );
 
-				// clearcoat
-				if ( NdotL > 0.0 && surf.clearcoat > 0.0 ) {
+				${ ifFeature( 'CLEARCOAT' )/* wgsl */`
+					// clearcoat
+					if ( NdotL > 0.0 && surf.clearcoat > 0.0 ) {
 
-					// the clearcoat evaluates in its own frame
-					let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
-					let Vc = normalize( toClearcoatMat * ctx.V );
-					let Lc = normalize( toClearcoatMat * ctx.L );
-					let Hc = normalize( toClearcoatMat * ctx.H );
-					let NdotVc = Vc.z;
+						// the clearcoat evaluates in its own frame
+						let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
+						let Vc = normalize( toClearcoatMat * ctx.V );
+						let Lc = normalize( toClearcoatMat * ctx.L );
+						let Hc = normalize( toClearcoatMat * ctx.H );
+						let NdotVc = Vc.z;
 
-					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+						let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 
-					// reuse the same pattern for energy conservation used in the dielectric layer
-					let clearcoatEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotVc, surf.clearcoatRoughness ), 1e-5 );
-					let clearcoatBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - clearcoatEnergySS ) / clearcoatEnergySS;
+						// reuse the same pattern for energy conservation used in the dielectric layer
+						let clearcoatEnergySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotVc, surf.clearcoatRoughness ), 1e-5 );
+						let clearcoatBoost = 1.0 + ${ iorToF0Func }( 1.5 ) * ( 1.0 - clearcoatEnergySS ) / clearcoatEnergySS;
 
-					let clearcoatSpecular = ${ this.specularBrdf }( Vc, Lc, Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
-					let clearcoatFresnel = ${ schlickFresnelFunc }( abs( dot( Vc, Hc ) ), ${ iorToF0Func }( 1.5 ) );
+						let clearcoatSpecular = ${ this.specularBrdf }( Vc, Lc, Hc, vec2( clearcoatAlpha ) ) * clearcoatBoost;
+						let clearcoatFresnel = ${ schlickFresnelFunc }( abs( dot( Vc, Hc ) ), ${ iorToF0Func }( 1.5 ) );
 
-					// retrieve specular energy reflected by this layer
-					let clearcoatFresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotVc, surf.clearcoatRoughness, 1.5 ) * clearcoatBoost;
+						// retrieve specular energy reflected by this layer
+						let clearcoatFresnelEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotVc, surf.clearcoatRoughness, 1.5 ) * clearcoatBoost;
 
-					result += surf.clearcoat * clearcoatFresnel * clearcoatSpecular;
-					attenuation *= 1.0 - surf.clearcoat * clearcoatFresnelEnergySS;
+						result += surf.clearcoat * clearcoatFresnel * clearcoatSpecular;
+						attenuation *= 1.0 - surf.clearcoat * clearcoatFresnelEnergySS;
 
-				}
+					}
+				` }
 
 				// sheen
 				if ( NdotL > 0.0 && surf.sheen > 0.0 ) {
@@ -150,7 +153,8 @@ export class GLTFShadingModel extends ShadingModel {
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
-					// multiscatter compensation
+					// multiscatter compensation, looked up at the RMS alpha as in the specular lobe below
+					let compensationRoughness = sqrt( sqrt( 0.5 * dot( alpha, alpha ) ) );
 					var glassBoost = 0.0;
 					if ( matchedIor ) {
 
@@ -159,12 +163,12 @@ export class GLTFShadingModel extends ShadingModel {
 					} else if ( surf.thinWall ) {
 
 						// thin wall halves are reflection-shaped so each is compensated with the conductor albedo at its own roughness.
-						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleConductorFn }( NdotV, compensationRoughness ), 1e-5 );
 
 					} else {
 
 						// volumetric bsdf is scaled by its total reflected + refracted energy
-						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleTransmissiveFn }( NdotV, surf.roughness, surf.ior, surf.frontFace ), 1e-5 );
+						glassBoost = 1.0 / max( ${ this.turquinTexture.sampleTransmissiveFn }( NdotV, compensationRoughness, surf.ior, surf.frontFace ), 1e-5 );
 
 					}
 
@@ -225,8 +229,10 @@ export class GLTFShadingModel extends ShadingModel {
 					let alphaT = mix( alphaB, 1.0, surf.anisotropy * surf.anisotropy );
 					let alpha = vec2( alphaT, alphaB );
 
-					// Sample the single scatter energy for specular at the given roughness
-					let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, surf.roughness ), 1e-5 );
+					// Sample the single scatter energy for specular. Anisotropic lobes are looked up at the root mean square
+					// of their projected alpha over the view azimuth, which is the base roughness when isotropic
+					let compensationRoughness = sqrt( sqrt( 0.5 * dot( alpha, alpha ) ) );
+					let energySS = max( ${ this.turquinTexture.sampleConductorFn }( NdotV, compensationRoughness ), 1e-5 );
 					let specular = ${ this.specularBrdf }( ctx.V, ctx.L, ctx.H, alpha );
 
 					// metallic with the multiscatter comp
@@ -269,7 +275,7 @@ export class GLTFShadingModel extends ShadingModel {
 					// The energy the specular interface takes from the layers below, at the lobe's specular color
 					// and intensity. The table holds the albedo at the ior's f0, and the Schlick albedo is linear
 					// in f0, so the tinted albedo slides from it toward the conductor albedo at f0 = 1
-					let iorEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, surf.roughness, surf.ior );
+					let iorEnergySS = ${ this.turquinTexture.sampleDielectricFn }( NdotV, compensationRoughness, surf.ior );
 					let tintedEnergySS = iorEnergySS + ( dielectricF0 - surf.f0 ) * ( energySS - iorEnergySS ) / ( 1.0 - surf.f0 );
 					let fresnelEnergySS = surf.specularIntensity * tintedEnergySS * dielectricBoost;
 
@@ -335,28 +341,31 @@ export class GLTFShadingModel extends ShadingModel {
 				var deltaProbability = 1.0;
 				var isDead = false;
 
-				if ( lobeSample <= cdfClearcoat ) {
+				// without clearcoat the lobe chain starts at the specular lobe, so the gated "else" chains onto its "if"
+				${ ifFeature( 'CLEARCOAT' )/* wgsl */`
+					if ( lobeSample <= cdfClearcoat ) {
 
-					// clearcoat
-					let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-					let whCoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
-					let wiCoat = - normalize( reflect( woClearcoat, whCoat ) );
+						// clearcoat
+						let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+						let whCoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
+						let wiCoat = - normalize( reflect( woClearcoat, whCoat ) );
 
-					wi = normalize( surf.normalInvBasis * surf.clearcoatBasis * wiCoat );
-					wh = normalize( surf.normalInvBasis * surf.clearcoatBasis * whCoat );
+						wi = normalize( surf.normalInvBasis * surf.clearcoatBasis * wiCoat );
+						wh = normalize( surf.normalInvBasis * surf.clearcoatBasis * whCoat );
 
-					// reflected rays must leave above the geometry surface - flip rays that land
-					// below it due to the shading normal. Rays below the shading hemisphere are
-					// left as is since their loss is refunded by the energy compensation tables
-					let faceNormal = normalize( surf.normalInvBasis * surf.faceNormal );
-					let geomDotDir = dot( wi, faceNormal );
-					if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
+						// reflected rays must leave above the geometry surface - flip rays that land
+						// below it due to the shading normal. Rays below the shading hemisphere are
+						// left as is since their loss is refunded by the energy compensation tables
+						let faceNormal = normalize( surf.normalInvBasis * surf.faceNormal );
+						let geomDotDir = dot( wi, faceNormal );
+						if ( wi.z > 0.0 && geomDotDir < 0.0 ) {
 
-						wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
+							wi = normalize( wi - 2.0 * geomDotDir * faceNormal );
 
-					}
+						}
 
-				} else if ( lobeSample <= cdfSpecular ) {
+					} else
+				` } if ( lobeSample <= cdfSpecular ) {
 
 					// specular
 					// anisotropic roughness along tangent, bitangent
@@ -543,21 +552,23 @@ export class GLTFShadingModel extends ShadingModel {
 				// pdf mixture - every lobe that can produce the direction contributes its share,
 				// in the same cascade order and with the same terms as bsdfSample
 
-				// clearcoat
-				if ( weights.clearcoat > 0.0 ) {
+				${ ifFeature( 'CLEARCOAT' )/* wgsl */`
+					// clearcoat
+					if ( weights.clearcoat > 0.0 ) {
 
-					// the clearcoat lobe evaluates in its own frame
-					let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
-					let wiClearcoat = normalize( toClearcoatMat * wi );
-					if ( wiClearcoat.z > 0.0 ) {
+						// the clearcoat lobe evaluates in its own frame
+						let toClearcoatMat = surf.clearcoatInvBasis * surf.normalBasis;
+						let wiClearcoat = normalize( toClearcoatMat * wi );
+						if ( wiClearcoat.z > 0.0 ) {
 
-						let whClearcoat = normalize( toClearcoatMat * wh );
-						let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
-						result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
+							let whClearcoat = normalize( toClearcoatMat * wh );
+							let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
+							result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
+
+						}
 
 					}
-
-				}
+				` }
 
 				// specular
 				if ( weights.specular > 0.0 && wi.z > 0.0 ) {
@@ -692,6 +703,12 @@ export class GLTFShadingModel extends ShadingModel {
 		if ( material.isFogVolumeMaterial ) {
 
 			features.setUsed( 'FOG' );
+
+		}
+
+		if ( this.getField( material, 'clearcoat', 0.0 ) > 0.0 ) {
+
+			features.setUsed( 'CLEARCOAT' );
 
 		}
 
