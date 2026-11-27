@@ -5,6 +5,7 @@ import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand2, RNG_INDEX_MEDIUM_DISTANCE } from '../../nodes/random.wgsl.js';
 import { getCombinedMediumFn, getEmptyMediumStackFn, getMediumStackAtPointFn, sampleFogDistanceFn } from '../../nodes/medium.wgsl.js';
 import { rayDataStruct, traceQueuedRayStruct, RAY_QUEUE_LENGTH } from './structs.js';
+import { ifFeature } from '../../nodes/features.js';
 
 // Sets the medium of the camera rays CameraRayKernel spawned from the volumes around their origin, then queues
 // each ray to be traced, in fog up to a sampled scatter distance. Subsurface volumes aren't on the stack, so a camera
@@ -65,7 +66,10 @@ export class CameraMediumKernel extends ComputeKernel {
 
 				let indexUV = vec2u( input.pixelIndex >> 16, input.pixelIndex & 0xFFFF );
 				${ rngInit }( globalSeed, indexUV, input.sampleIndex, 0u );
-				let scatterDist = ${ sampleFogDistanceFn }( medium, input.throughputColor, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+				var scatterDist = 0.0;
+				${ ifFeature( 'FOG' )/* wgsl */`
+					scatterDist = ${ sampleFogDistanceFn }( medium, input.throughputColor, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+				` }
 				rayDataStorage[ index ].scatterDist = scatterDist;
 
 				let rayIndex = atomicAdd( &queueCounters[ ${ RAY_QUEUE_LENGTH }u ], 1u );

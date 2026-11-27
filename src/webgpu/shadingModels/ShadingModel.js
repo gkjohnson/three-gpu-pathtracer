@@ -9,6 +9,7 @@ import { diffuseDirectionFunc } from '../nodes/sampling.wgsl.js';
 import { hitRecordStruct, scatterRecordStruct, materialMediumStruct } from '../nodes/structs.wgsl.js';
 import { sampleTexelFunc, getTextureSizeFunc, getBasisFromNormalFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
+import { MaterialFeatures } from '../../uniforms/MaterialsTexture.js';
 
 function encodeTextureWrap( wrap ) {
 
@@ -73,6 +74,7 @@ export class ShadingModel {
 			isMatte: null,
 		}, proxyFn );
 		this.textureAtlas = new AtlasTexture();
+		this.features = new MaterialFeatures();
 		this.materials = [];
 		this.materialsMap = new Map();
 		this.textures = [];
@@ -249,6 +251,30 @@ export class ShadingModel {
 			}
 
 		`;
+
+	}
+
+	/**
+	 * Detects the optional features the materials use, like "FOG", so the kernels only compile in the code
+	 * for those. Call after "updateMaterials". Returns whether the set changed, so the kernels need rebuilding.
+	 *
+	 * @returns {boolean}
+	 */
+	updateFeatures() {
+
+		const { features } = this;
+		const before = features.getUsedFeatures().sort().join();
+		features.reset();
+		this.materials.forEach( material => this.detectFeatures( material, features ) );
+
+		return features.getUsedFeatures().sort().join() !== before;
+
+	}
+
+	/**
+	 * Marks the features a material uses with "features.setUsed". The base model supports none.
+	 */
+	detectFeatures( /* material, features */ ) {
 
 	}
 

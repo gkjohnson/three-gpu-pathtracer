@@ -17,6 +17,7 @@ import { LIGHT_FAR_DISTANCE } from '../../nodes/lights.wgsl.js';
 import { scatterRecordStruct } from '../../nodes/structs.wgsl.js';
 import { rayDataStruct, intersectionResultStruct, shadowTraceResultStruct, NO_PIXEL } from './structs.js';
 import { getMediumSegmentWeightFn } from '../../nodes/medium.wgsl.js';
+import { ifFeature } from '../../nodes/features.js';
 import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 
 // Path logic over the persistent slot pool: resolves the previous frame's shadow and bounce trace
@@ -174,10 +175,13 @@ export class LogicKernel extends ComputeKernel {
 					// the segment's medium weight. In fog it scatters at its sampled distance unless a surface is nearer, a
 					// vertex staged like a surface hit
 					throughputColor *= ${ getMediumSegmentWeightFn }( input.medium, throughputColor, input.scatterDist, surfaceDist );
-					let isFogScatter = input.scatterDist > 0.0 && input.scatterDist < surfaceDist;
-					let segmentDist = select( surfaceDist, input.scatterDist, isFogScatter );
-
-					let didHit = didHitSurface || isFogScatter;
+					var segmentDist = surfaceDist;
+					var didHit = didHitSurface;
+					${ ifFeature( 'FOG' )/* wgsl */`
+						let isFogScatter = input.scatterDist > 0.0 && input.scatterDist < surfaceDist;
+						segmentDist = select( surfaceDist, input.scatterDist, isFogScatter );
+						didHit = didHitSurface || isFogScatter;
+					` }
 
 					// MIS weights against the light sampling at the vertex this segment left. Camera segments have none,
 					// and neither do scatter events in a subsurface walk
@@ -196,18 +200,22 @@ export class LogicKernel extends ComputeKernel {
 						rayDataStorage[ index ].hit.side = hitResult.side;
 						rayDataStorage[ index ].hit.indices = hitResult.indices.xyz;
 						rayDataStorage[ index ].hit.dist = hitResult.dist;
-						rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
+						${ ifFeature( 'FOG' )/* wgsl */`
+							rayDataStorage[ index ].fogScatter = select( 0u, 1u, isFogScatter );
+						` }
 
 						// a fog scatter has no object, and is staged at "origin". Any non-negative index keeps the slot from
 						// being respawned, and MaterialKernel handles the scatter before reading the object
 						var position = hitResult.position;
 						rayDataStorage[ index ].hit.objectIndex = max( hitResult.objectIndex, 0 );
-						if ( isFogScatter ) {
+						${ ifFeature( 'FOG' )/* wgsl */`
+							if ( isFogScatter ) {
 
-							position = input.origin + input.direction * ( input.rayStart + input.scatterDist );
-							rayDataStorage[ index ].origin = position;
+								position = input.origin + input.direction * ( input.rayStart + input.scatterDist );
+								rayDataStorage[ index ].origin = position;
 
-						}
+							}
+						` }
 
 						// the MIS weight of the hit's emission against sampling it as a light from the previous vertex
 						var emissionWeight = 1.0;

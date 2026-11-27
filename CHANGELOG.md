@@ -31,15 +31,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer: The megakernel renders several samples per "renderSample" call when the whole frame fits in "frameBudget".
 - WebGPUPathTracer: The megakernel indexes each pixel's random sequence by its own sample count, as the wavefront does.
 - WebGPUPathTracer: The megakernel measures its sample counts on the GPU, as the wavefront does.
+- WebGPUPathTracer: Random samples only compute the Sobol dimensions they use, so the megakernel renders up to 5% faster.
+- WebGPUPathTracer: The fog code is only compiled into the kernels when a material uses fog, so scenes without fog render faster.
+- WebGPUPathTracer: Dispersion samples its wavelengths over 380 to 780 nm in proportion to their visible brightness, as Cycles does, reducing color noise.
 
 ### Removed
 - WebGPUPathTracer: "setSceneAsync". Use "setScene", which uses the workers when they're set.
 - WebGPUPathTracer: "lowResScale" and "adaptiveDynamicRes". The low res preview is always sized to the pixels a frame of "frameBudget" can render.
 - WebGPUPathTracer: "asyncCompile". The kernels always compile asynchronously, so nothing new renders while "compiling" is true.
 - WebGPUPathTracer: "target". Use "renderTo" to draw the render into a render target.
+- WebGLPathTracer, along with "PathTracingRenderer", "QuiltPathTracingRenderer", "PathTracingSceneGenerator", "PhysicalPathTracingMaterial", "BlurredEnvMapGenerator", "DenoiseMaterial" and "AmbientOcclusionMaterial" from "three-gpu-pathtracer". Use "WebGPUPathTracer" and "BlurredEnvMapGenerator" from "three-gpu-pathtracer/webgpu".
+- The "xatlas-web" peer dependency.
 
 ### Fixed
 - WebGPUPathTracer: Setting an ArrayCamera throwing an error.
+- WebGPUPathTracer: Changing "transmissiveBackground" not restarting a finished render.
 - WebGPUPathTracer: "getRenderTime" and "samplesPerSecond" counting the time spent paused, finished, with the page hidden or between "renderSample" calls, such as after "maxSamples" is reached and then raised.
 - WebGPUPathTracer: Renders with "stableNoise" disabled reusing nearly the same random sequence after each reset.
 - WebGPUPathTracer: Rays parallel to an axis missing bounds they lie on the face of.
@@ -49,6 +55,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - WebGPUPathTracer, WebGLPathTracer: Materials without a "color" field, such as NodeMaterial and ShaderMaterial, throwing an error.
 - WebGPUPathTracer: "sheenRoughnessMap" being read from the red channel instead of alpha.
 - WebGPUPathTracer: Dark background and clear colors rendering darker than set, quantized to 8 bits.
+- WebGPUPathTracer: Fireflies around small bright areas of the environment map, which is now importance sampled with the bilinear filtering it's read with.
 - WebGPUPathTracer: Pixels staying flagged as active after a smaller frame budget drops their path.
 - WebGPUPathTracer: The triangles of a BatchedMesh's geometries being mixed together.
 - WebGPUPathTracer: "stableNoise" not always rendering the same noise.

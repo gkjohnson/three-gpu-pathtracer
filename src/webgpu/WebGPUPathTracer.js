@@ -447,6 +447,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 			this._transmissiveBackground = v;
 			this._pathTracer.setTransmissiveBackground( v );
+			this.reset();
 
 		}
 
@@ -1130,6 +1131,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		// the materials are written first since the bvh data writes their indices with the transforms
 		const { _shadingModel: shadingModel } = this;
 		shadingModel.updateMaterials( scene );
+		shadingModel.updateFeatures();
 
 		// Build TLAS and compute functions
 		const bvhData = new PathtracerBVHComputeData( scene, shadingModel );
@@ -1187,6 +1189,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		if ( _bvhData ) {
 
 			shadingModel.updateMaterials( scene );
+			shadingModel.updateFeatures();
 			shadingModel.updateTextures( _renderer );
 			_bvhData.setShadingModel( shadingModel );
 			this._updateEmissiveTriangles();
@@ -1290,8 +1293,11 @@ export class WebGPUPathTracer extends EventDispatcher {
 		_bvhData.updateMaterialIndices();
 		this._updateEmissiveTriangles();
 
-		// the kernels size the texture info when they're built, so a new texture count needs a rebuild
-		if ( _shadingModel.updateTextures( _renderer ) ) {
+		// the kernels size the texture info and compile in the used features when they're built, so a new texture
+		// count or feature set needs a rebuild
+		const featuresChanged = _shadingModel.updateFeatures();
+		const texturesChanged = _shadingModel.updateTextures( _renderer );
+		if ( featuresChanged || texturesChanged ) {
 
 			this._pathTracer.rebuild();
 

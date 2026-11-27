@@ -14,8 +14,9 @@ import {
 import { proxy, proxyFn, contextProxy, contextProxyFn, wgslTagFn, rayStruct } from 'three-mesh-bvh/webgpu';
 import { clampPathContributionFunc, isTerminatingScatterFunc, offsetRayOriginFunc } from '../nodes/utils.wgsl.js';
 import { lightRecordStruct, hitRecordStruct, scatterRecordStruct } from '../nodes/structs.wgsl.js';
+import { ifFeature } from '../nodes/features.js';
 import { LIGHT_FAR_DISTANCE, getShadowRayFn } from '../nodes/lights.wgsl.js';
-import { dispersionColorWeightFunc, DISPERSION_MIN_WAVELENGTH, DISPERSION_MAX_WAVELENGTH } from '../nodes/material.wgsl.js';
+import { dispersionColorWeightFunc, sampleDispersionWavelengthFunc } from '../nodes/material.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
 
 export class PathTracerMegaKernel extends ComputeKernel {
@@ -214,7 +215,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 				var traceOrigin = ray.origin;
 
 				// negative until the first dispersive hit applies its weight
-				var dispersionWavelength = - mix( ${ DISPERSION_MIN_WAVELENGTH }.0, ${ DISPERSION_MAX_WAVELENGTH }.0, ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
+				var dispersionWavelength = - ${ sampleDispersionWavelengthFunc }( ${ rand1 }( ${ RNG_INDEX_DISPERSION_WAVELENGTH } ) );
 
 				// scatter events in subsurface walks and fog, counted apart from bounces
 				var subsurfaceBounces = 0u;
@@ -255,7 +256,9 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var scatterDist = 0.0;
 					if ( medium.subsurface == 0u ) {
 
-						scatterDist = ${ sampleFogDistanceFn }( medium, throughputColor, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+						${ ifFeature( 'FOG' )/* wgsl */`
+							scatterDist = ${ sampleFogDistanceFn }( medium, throughputColor, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DISTANCE } ) );
+						` }
 						traceRay.maxDist = select( maxDist, select( scatterDist, min( maxDist, scatterDist ), maxDist > 0.0 ), scatterDist > 0.0 );
 						didHitSurface = ${ raycastFirstHitFn }( traceRay, &hitResult );
 
@@ -312,10 +315,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 					// the segment's medium weight. In fog it scatters at its sampled distance unless a surface is nearer
 					throughputColor *= ${ getMediumSegmentWeightFn }( medium, throughputColor, scatterDist, surfaceDist );
-					let isFogScatter = scatterDist > 0.0 && scatterDist < surfaceDist;
-					let segmentDist = select( surfaceDist, scatterDist, isFogScatter );
-
-					let didHit = didHitSurface || isFogScatter;
+					var segmentDist = surfaceDist;
+					var didHit = didHitSurface;
+					${ ifFeature( 'FOG' )/* wgsl */`
+						let isFogScatter = scatterDist > 0.0 && scatterDist < surfaceDist;
+						segmentDist = select( surfaceDist, scatterDist, isFogScatter );
+						didHit = didHitSurface || isFogScatter;
+					` }
 
 					// MIS against the light sampling at the previous vertex. None for camera segments or subsurface scatters
 					let isMISWeighted = misEnabled != 0u && bounce > 0u && ! mediumScattered;
@@ -328,11 +334,13 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					// next event estimation. The vertex below evaluates the bsdf or phase function toward the light. A fog
 					// scatter has no surface, its position is measured along the ray from the origin
 					var position = traceOrigin + ray.direction * segmentDist;
-					if ( isFogScatter ) {
+					${ ifFeature( 'FOG' )/* wgsl */`
+						if ( isFogScatter ) {
 
-						position = ray.origin + ray.direction * ( rayStart + scatterDist );
+							position = ray.origin + ray.direction * ( rayStart + scatterDist );
 
-					}
+						}
+					` }
 
 					// the MIS weight of the hit's emission against sampling it as a light from the previous vertex
 					var emissionWeight = 1.0;
@@ -450,19 +458,22 @@ export class PathTracerMegaKernel extends ComputeKernel {
 					var hit = ${ hitRecordStruct }();
 					hit.bounce = bounce;
 
-					if ( isFogScatter ) {
+					// without fog the surface branch below is a plain block
+					${ ifFeature( 'FOG' )/* wgsl */`
+						if ( isFogScatter ) {
 
-						// a fog scatter. The phase function is its own pdf. Out of fog bounces the path ends here
-						lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
-						lightEvalColor = vec3f( lightEvalPdf );
-						scatterRec.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
-						scatterRec.pdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, scatterRec.direction ), medium.anisotropy );
-						scatterRec.color = vec3f( scatterRec.pdf );
-						isTerminated = fogBounces >= maxFogBounces;
-						isFullyTransmissive = false;
-						fogBounces ++;
+							// a fog scatter. The phase function is its own pdf. Out of fog bounces the path ends here
+							lightEvalPdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, lightRec.direction ), medium.anisotropy );
+							lightEvalColor = vec3f( lightEvalPdf );
+							scatterRec.direction = ${ sampleHenyeyGreensteinFn }( ray.direction, medium.anisotropy, ${ rand2 }( ${ RNG_INDEX_MEDIUM_DIRECTION } ) );
+							scatterRec.pdf = ${ henyeyGreensteinPdfFn }( dot( ray.direction, scatterRec.direction ), medium.anisotropy );
+							scatterRec.color = vec3f( scatterRec.pdf );
+							isTerminated = fogBounces >= maxFogBounces;
+							isFullyTransmissive = false;
+							fogBounces ++;
 
-					} else {
+						} else
+					` } {
 
 						hit.barycoord = hitResult.barycoord;
 						hit.objectIndex = i32( hitResult.objectIndex );
@@ -499,8 +510,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						// pass through partially transparent surfaces by chance, and fog boundaries always, advancing the
 						// alpha depth but not the bounce
-						let isFogBoundary = materialMedium.fogVolume;
-						let passesThrough = isFogBoundary || ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
+						let passesThrough = ${ ifFeature( 'FOG' )/* wgsl */`materialMedium.fogVolume ||` } ${ rand1 }( ${ RNG_INDEX_ALPHA_TEST } ) > surface.opacity;
 						if ( passesThrough ) {
 
 							// out of transparent bounces
@@ -510,22 +520,24 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 							}
 
-							if ( isFogBoundary ) {
+							${ ifFeature( 'FOG' )/* wgsl */`
+								if ( materialMedium.fogVolume ) {
 
-								var stack = medium.stack;
-								if ( hit.side > 0.0 ) {
+									var stack = medium.stack;
+									if ( hit.side > 0.0 ) {
 
-									${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
+										${ addToMediumStackFn }( &stack, objectInfo.materialIndex );
 
-								} else {
+									} else {
 
-									${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
+										${ removeFromMediumStackFn }( &stack, objectInfo.materialIndex );
+
+									}
+
+									medium = ${ getCombinedMediumFn }( stack );
 
 								}
-
-								medium = ${ getCombinedMediumFn }( stack );
-
-							}
+							` }
 
 							// restart the traversal past the surface. The ray keeps its origin
 							traceOrigin = ${ offsetRayOriginFunc }( vertexData.position.xyz, ray.direction, hit.normal );

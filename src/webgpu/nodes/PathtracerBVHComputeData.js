@@ -3,6 +3,7 @@ import { BVHComputeData, intersectRayTriangle, bvhNodeBoundsStruct, bvhNodeStruc
 import { float, uint } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH, NOT_INTERSECTED, INTERSECTED, STOP_TRAVERSAL, OrientedBox } from 'three-mesh-bvh';
 import { getFogShadowDistanceFn } from './medium.wgsl.js';
+import { ifFeature } from './features.js';
 /** @import { Box3, Mesh } from 'three/webgpu' */
 
 const _colorVec = new Vector4();
@@ -476,14 +477,16 @@ export class PathtracerBVHComputeData extends BVHComputeData {
 
 							// pass fog volume boundaries, in any order: entering adds the fog's optical depth back from
 							// the fog shadow distance, and leaving takes it away
-							let medium = ${ getMaterialMedium }( object.materialIndex );
-							if ( medium.fogVolume ) {
+							${ ifFeature( 'FOG' )/* wgsl */`
+								let medium = ${ getMaterialMedium }( object.materialIndex );
+								if ( medium.fogVolume ) {
 
-								let depth = medium.extinction * ( ${ getFogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
-								result.fogDepth += select( - depth, depth, triResult.side > 0.0 );
-								continue;
+									let depth = medium.extinction * ( ${ getFogShadowDistanceFn }( ray.maxDist ) - triResult.dist );
+									result.fogDepth += select( - depth, depth, triResult.side > 0.0 );
+									continue;
 
-							}
+								}
+							` }
 
 							// faces on either side block the light, past fully transparent and alpha tested surfaces
 							let opacity = ${ getHitOpacity }( object.materialIndex, object.color.a, indices, attributesOffset, triResult.barycoord, 0.0 );
