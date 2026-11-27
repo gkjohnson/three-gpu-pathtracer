@@ -37,6 +37,9 @@ export class LightTreeBVH extends BVH {
 			// pbrt's surface area orientation heuristic over buckets of power, bounds and normal cones
 			strategy: CENTER,
 			targetLeafSize: 1,
+
+			// every leaf must hold exactly one triangle, which "packNodesBuffer" relies on
+			// TODO: switch to the public option once three-mesh-bvh adds one for a strict leaf size
 			_strictLeafSize: 1,
 			maxDepth: Infinity,
 			verbose: false,

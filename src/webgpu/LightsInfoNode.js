@@ -205,9 +205,9 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 		// Chooses a light in proportion to the estimated weights. Returns the light's index, the light count for the
 		// environment, or the light count plus one for the emissive triangles. The pdf is zero when nothing can light the
-		// position. "r" is rescaled so it can be reused to pick an emissive triangle.
+		// position.
 		this.selectLight = wgslTagFn/* wgsl */`
-			fn selectLight( position: vec3f, r: ptr<function, f32>, selectionPdf: ptr<function, f32> ) -> u32 {
+			fn selectLight( position: vec3f, r: f32, selectionPdf: ptr<function, f32> ) -> u32 {
 
 				let count = ${ countNode };
 				let envWeight = ${ envInfo.getWeight }();
@@ -220,12 +220,11 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				}
 
 				// choose the emissive triangles
-				let targetWeight = *r * totalWeight;
+				let targetWeight = r * totalWeight;
 				let emissiveWeight = ${ emissiveTriangles.getWeight }( position );
 				if ( targetWeight < emissiveWeight ) {
 
 					*selectionPdf = emissiveWeight / totalWeight;
-					*r = *r / *selectionPdf;
 					return count + 1u;
 
 				}
@@ -346,14 +345,14 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 		`;
 
 		// Picks one light, the environment or the emissive triangles by their estimated contribution at the position,
-		// and samples a direction to it. The record's pdf includes the selection's, and is zero when nothing is picked
+		// and samples a direction to it. "random.x" picks the light, "random.y" the emissive triangle and "random.zw"
+		// the point on it. The record's pdf includes the selection's, and is zero when nothing is picked
 		this.sampleLight = wgslTagFn/* wgsl */`
-			fn sampleLight( position: vec3f, ruv: vec3f ) -> ${ lightRecordStruct } {
+			fn sampleLight( position: vec3f, random: vec4f ) -> ${ lightRecordStruct } {
 
 				var lightRec: ${ lightRecordStruct };
-				var r = ruv.x;
 				var selectionPdf = 0.0;
-				let lightIndex = ${ this.selectLight }( position, &r, &selectionPdf );
+				let lightIndex = ${ this.selectLight }( position, random.x, &selectionPdf );
 				if ( selectionPdf <= 0.0 ) {
 
 					return lightRec;
@@ -364,12 +363,12 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 				let emissiveTrianglesIndex = ${ countNode } + 1u;
 				if ( lightIndex == emissiveTrianglesIndex ) {
 
-					lightRec = ${ emissiveTriangles.sample }( position, vec3f( r, ruv.yz ) );
+					lightRec = ${ emissiveTriangles.sample }( position, random.yzw );
 
 				} else if ( lightIndex == environmentIndex ) {
 
 					// the environment, sampled from its CDF, as a light of kind ENVIRONMENT
-					let envSample = ${ envInfo.sampleDir }( ruv.yz );
+					let envSample = ${ envInfo.sampleDir }( random.zw );
 					lightRec.direction = envSample.direction;
 					lightRec.emission = envSample.color;
 					lightRec.pdf = envSample.pdf;
@@ -378,7 +377,7 @@ export class LightsInfoNode extends LightsInfoUniformStruct {
 
 				} else {
 
-					lightRec = ${ this.randomLightSample }( lightIndex, position, ruv.yz );
+					lightRec = ${ this.randomLightSample }( lightIndex, position, random.zw );
 
 				}
 

@@ -4,7 +4,7 @@ import { createAuxTarget, createOutputTarget, createSampleCountTarget } from './
 import { loadOutputFn, storeOutputFn } from '../nodes/output.wgsl.js';
 import { texture, sampler, uniform, globalId, textureStore } from 'three/tsl';
 import { blendAuxFn, AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
-import { rngInit, rngNextBounce, rand1, rand2, rand3, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
+import { rngInit, rngNextBounce, rand1, rand2, rand4, RNG_INDEX_RAY_JITTER, RNG_INDEX_BACKGROUND_SAMPLE, RNG_INDEX_DIRECT_LIGHT_SAMPLE, RNG_INDEX_RUSSIAN_ROULETTE, RNG_INDEX_DISPERSION_WAVELENGTH, RNG_INDEX_ALPHA_TEST, RNG_INDEX_MEDIUM_DISTANCE, RNG_INDEX_MEDIUM_DIRECTION } from '../nodes/random.wgsl.js';
 import { misHeuristicFn, weightedAlphaBlendFn, sampleHenyeyGreensteinFn, henyeyGreensteinPdfFn } from '../nodes/sampling.wgsl.js';
 import {
 	mediumStackStruct, addToMediumStackFn, removeFromMediumStackFn, getCombinedMediumFn, getSubsurfaceMediumFn, isSubsurfaceMaterialFn,
@@ -355,7 +355,7 @@ export class PathTracerMegaKernel extends ComputeKernel {
 
 						if ( misEnabled != 0u ) {
 
-							lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							lightRec = ${ sampleLightFn }( position, ${ rand4 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 
 						}
 

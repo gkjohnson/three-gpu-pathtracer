@@ -9,7 +9,7 @@ import { misHeuristicFn, weightedAlphaBlendFn } from '../../nodes/sampling.wgsl.
 import { clampPathContributionFunc, isTerminatingScatterFunc } from '../../nodes/utils.wgsl.js';
 import { TRANSMISSIVE_BACKGROUND_ENVIRONMENT, TRANSMISSIVE_BACKGROUND_OVERLAY, TRANSMISSIVE_BACKGROUND_TRANSPARENT } from '../../constants.js';
 import {
-	rngInit, rand2, rand3,
+	rngInit, rand2, rand4,
 	RNG_INDEX_BACKGROUND_SAMPLE,
 	RNG_INDEX_DIRECT_LIGHT_SAMPLE,
 } from '../../nodes/random.wgsl.js';
@@ -233,7 +233,7 @@ export class LogicKernel extends ComputeKernel {
 						var lightPdf = 0.0;
 						if ( misEnabled != 0u ) {
 
-							let lightRec = ${ sampleLightFn }( position, ${ rand3 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
+							let lightRec = ${ sampleLightFn }( position, ${ rand4 }( ${ RNG_INDEX_DIRECT_LIGHT_SAMPLE } ) );
 							if ( lightRec.pdf > 0.0 ) {
 
 								lightPdf = lightRec.pdf;
