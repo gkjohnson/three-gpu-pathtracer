@@ -1,24 +1,32 @@
-import { StructTypeNode } from 'three/webgpu';
-import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, wgslTagCode, contextProxy } from 'three-mesh-bvh/webgpu';
 import { hitRecordStruct } from '../nodes/structs.wgsl.js';
-import { GRAPH_INPUTS, MaterialGraphFunctionNode } from './MaterialGraphBuilder.js';
+import { getMaterialGraphFn } from './MaterialGraphBuilder.js';
 
 const attributesStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.attributes' );
 const surfaceRecordStruct = /* @__PURE__ */ contextProxy( 'shadingModel.structs.surfaceRecord' );
 const objectsStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.objects' );
 const materialsStorage = /* @__PURE__ */ contextProxy( 'shadingModel.storage.materials' );
-const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
-const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
-
-const materialGraphInputStruct = new StructTypeNode(
-	Object.fromEntries( GRAPH_INPUTS.map( ( { name, type } ) => [ name, type ] ) ),
-	'MaterialGraphInput',
-);
 
 // Returns the function running the graphs of the hit's material, writing their outputs to "surf"
+// TODO: see if the inputs can be passed as pointers, which needs "getSurfaceRecord" to take pointers too
+// TODO: pass the ray state, like the pixel and bounce, for graphs that read them. May just be the ray input
 export function getEvaluateMaterialGraphFn( graphs ) {
 
-	const runFn = getRunMaterialGraphFn( graphs );
+	// a switch case per material, setting each field it has a graph for
+	const cases = [];
+	graphs.forEach( ( { material, outputs }, index ) => {
+
+		cases.push( `case ${ index }: {\n` );
+		outputs.forEach( ( { field, type, node } ) => {
+
+			const graphFn = getMaterialGraphFn( `materialGraph${ index }_${ field }`, material, node, type );
+			cases.push( `surf.${ field } = `, graphFn, '( hit, vertexData, objectInfo, view, surf.normal );\n' );
+
+		} );
+		cases.push( '}\n' );
+
+	} );
+
 	return wgslTagFn/* wgsl */`
 		fn evaluateMaterialGraph(
 			hit: ${ hitRecordStruct },
@@ -28,70 +36,24 @@ export function getEvaluateMaterialGraphFn( graphs ) {
 		) -> void {
 
 			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
-			let graph = ${ materialsStorage }[ objectInfo.materialIndex ].graphIndex;
-			if ( graph == - 1 ) {
+			switch ( ${ materialsStorage }[ objectInfo.materialIndex ].graphIndex ) {
 
-				return;
+				${ joinTagCode( cases ) }
+				default: {}
 
 			}
-
-			var input: ${ materialGraphInputStruct };
-			input.matrixWorld = objectInfo.matrixWorld;
-			input.matrixWorldInverse = objectInfo.inverseMatrixWorld;
-			input.shadingNormal = surf.normal;
-			input.faceNormal = hit.normal;
-			input.viewDirection = view;
-			input.frontFacing = hit.side == 1.0;
-			input.indices = hit.indices;
-			input.attributesOffset = objectInfo.attributesOffset;
-
-			input.position = ( objectInfo.inverseMatrixWorld * vec4f( vertexData.position.xyz, 1.0 ) ).xyz;
-			input.normal = normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( vertexData.normal.xyz, 0.0 ) ).xyz );
-			input.tangent = vec4f( ( objectInfo.inverseMatrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
-			input.uv = ${ getUvFromChannel }( vertexData, 0 );
-			input.uv1 = ${ getUvFromChannel }( vertexData, 1 << 23 );
-			input.color = ${ getColor }( vertexData );
-
-			${ runFn }( graph, input, surf );
 
 		}
 	`;
 
 }
 
-// a switch with a case per material, calling the function of each of its outputs
-function getRunMaterialGraphFn( graphs ) {
-
-	const args = GRAPH_INPUTS.map( ( { name } ) => `input.${ name }` ).join( ', ' );
-	const parts = [
-		'fn runMaterialGraph( graph: i32, input: ', materialGraphInputStruct,
-		', surf: ptr<function, ', surfaceRecordStruct, '> ) -> void {\n\nswitch ( graph ) {\n\n',
-	];
-
-	graphs.forEach( ( { material, outputs }, graph ) => {
-
-		parts.push( `case ${ graph }: {\n\n` );
-		outputs.forEach( ( { field, type, node } ) => {
-
-			const fn = new MaterialGraphFunctionNode( `materialGraph${ graph }_${ field }`, material, node, type );
-			parts.push( `surf.${ field } = `, fn, `( ${ args } );\n` );
-
-		} );
-		parts.push( '\n}\n\n' );
-
-	} );
-
-	parts.push( 'default: {}\n\n}\n\n}\n' );
-	return joinTagFn( parts );
-
-}
-
-// joins strings and nodes into a "wgslTagFn"
-function joinTagFn( parts ) {
+// joins strings and nodes into a "wgslTagCode"
+function joinTagCode( parts ) {
 
 	const tokens = [ '' ];
 	const args = [];
-	for ( const part of parts ) {
+	parts.forEach( part => {
 
 		if ( typeof part === 'string' ) {
 
@@ -104,8 +66,8 @@ function joinTagFn( parts ) {
 
 		}
 
-	}
+	} );
 
-	return wgslTagFn( tokens, ...args );
+	return wgslTagCode( tokens, ...args );
 
 }

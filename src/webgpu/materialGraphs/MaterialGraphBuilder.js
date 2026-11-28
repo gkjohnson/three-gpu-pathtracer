@@ -1,38 +1,16 @@
-import { BufferAttribute, BufferGeometry, CodeNode, PerspectiveCamera, WGSLNodeBuilder } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, Node, PerspectiveCamera, WGSLNodeBuilder } from 'three/webgpu';
 import {
-	overrideNodes, nodeObject, parameter, float, mat3, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
+	overrideNodes, expression, float, mat3, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
 	modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, modelPosition, modelScale, modelDirection, modelViewPosition,
 	cameraViewMatrix, cameraWorldMatrix, cameraNormalMatrix, cameraPosition, cameraProjectionMatrix,
 	cameraProjectionMatrixInverse, cameraNear, cameraFar,
 } from 'three/tsl';
-import { wgslTagFn, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { getBasisFromNormalFunc } from '../nodes/utils.wgsl.js';
+import { hitRecordStruct } from '../nodes/structs.wgsl.js';
 
-// the geometry attributes at the hit, in local space
-const GRAPH_ATTRIBUTES = [
-	{ name: 'position', type: 'vec3' },
-	{ name: 'normal', type: 'vec3' },
-	{ name: 'tangent', type: 'vec4' },
-	{ name: 'uv', type: 'vec2' },
-	{ name: 'uv1', type: 'vec2' },
-	{ name: 'color', type: 'vec4' },
-];
-
-// the hit values three.js otherwise reads from the object and rasterizer, in world space
-const GRAPH_HIT_VALUES = [
-	{ name: 'matrixWorld', type: 'mat4' },
-	{ name: 'matrixWorldInverse', type: 'mat4' },
-	{ name: 'shadingNormal', type: 'vec3' },
-	{ name: 'faceNormal', type: 'vec3' },
-	{ name: 'viewDirection', type: 'vec3' },
-	{ name: 'frontFacing', type: 'bool' },
-	{ name: 'indices', type: 'uvec3' },
-	{ name: 'attributesOffset', type: 'uint' },
-];
-
-// the graph function parameters, which three.js derives every other value from
-export const GRAPH_INPUTS = [ ...GRAPH_ATTRIBUTES, ...GRAPH_HIT_VALUES ];
-
+const attributesStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.attributes' );
+const objectRecordStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.objectRecord' );
 const getVertex = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getVertex' );
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
 
@@ -69,19 +47,58 @@ const getGraphTangent = wgslTagFn/* wgsl */`
 `;
 
 // stand-in geometry and camera, which three.js reads while building
-const ITEM_SIZES = { vec2: 2, vec3: 3, vec4: 4 };
 const graphGeometry = /* @__PURE__ */ new BufferGeometry();
-GRAPH_ATTRIBUTES.forEach( ( { name, type } ) => {
+Object.entries( { position: 3, normal: 3, tangent: 4, uv: 2, uv1: 2, color: 4 } ).forEach( ( [ name, itemSize ] ) => {
 
-	const itemSize = ITEM_SIZES[ type ];
 	graphGeometry.setAttribute( name, new BufferAttribute( new Float32Array( itemSize ), itemSize ) );
 
 } );
 
 const graphCamera = /* @__PURE__ */ new PerspectiveCamera();
 
-// Builds a material graph into a WGSL function, as three.js builds a fragment shader. Bindings and helper functions are
-// declared in the kernel's builder
+// Returns the WGSL function evaluating "node", one graph of "material", as "type"
+export function getMaterialGraphFn( name, material, node, type ) {
+
+	return wgslTagFn/* wgsl */`
+		fn ${ name }(
+			hit: ${ hitRecordStruct },
+			vertexData: ${ attributesStruct },
+			objectInfo: ${ objectRecordStruct },
+			view: vec3f,
+			shadingNormal: vec3f,
+		) -> ${ builder => builder.getType( type ) } {
+
+			${ new MaterialGraphBodyNode( material, node, type ) }
+
+		}
+	`;
+
+}
+
+// The body of a graph's function, built with "MaterialGraphBuilder" when the kernel builds
+class MaterialGraphBodyNode extends Node {
+
+	constructor( material, node, type ) {
+
+		super();
+		this.material = material;
+		this.graphType = type;
+
+		// private so the kernel doesn't build it as a child node
+		this._graphNode = node;
+
+	}
+
+	build( builder ) {
+
+		return new MaterialGraphBuilder( builder, this.material ).buildGraph( this._graphNode, this.graphType );
+
+	}
+
+}
+
+// Builds a material graph as three.js builds a fragment shader. Bindings and helper functions are declared in the
+// kernel's builder
 class MaterialGraphBuilder extends WGSLNodeBuilder {
 
 	constructor( kernelBuilder, material ) {
@@ -137,16 +154,29 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 
 	}
 
-	// returns the WGSL function "name" returning "node", with "GRAPH_INPUTS" as parameters
-	buildGraphFunction( name, node, type ) {
+	// returns the body of a function returning "node", reading the parameters of "getMaterialGraphFn"
+	buildGraph( node, type ) {
 
 		const { kernelBuilder, material } = this;
-		const inputs = {};
-		GRAPH_INPUTS.forEach( input => inputs[ input.name ] = nodeObject( parameter( input.type, input.name ) ) );
+		const { camera, bvhData } = kernelBuilder.getContext();
+		const { fns } = bvhData;
+
+		// the hit's values, read from the parameters when a graph uses them
+		const vertexData = expression( 'vertexData', bvhData.structs.attributes.name );
+		const matrixWorld = expression( 'objectInfo.matrixWorld', 'mat4' );
+		const matrixWorldInverse = expression( 'objectInfo.inverseMatrixWorld', 'mat4' );
+		const normal = expression( 'normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( vertexData.normal.xyz, 0.0 ) ).xyz )', 'vec3' ).toVar();
+		const tangent = expression( 'vec4f( ( objectInfo.inverseMatrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w )', 'vec4' );
+		const attributes = {
+			position: expression( '( objectInfo.inverseMatrixWorld * vec4f( vertexData.position.xyz, 1.0 ) ).xyz', 'vec3' ).toVar(),
+			normal,
+			tangent: getGraphTangent( tangent, normal, expression( 'hit.indices', 'uvec3' ), expression( 'objectInfo.attributesOffset', 'uint' ) ).toVar(),
+			uv: fns.getUvFromChannel( vertexData, 0 ),
+			uv1: fns.getUvFromChannel( vertexData, 1 << 23 ),
+			color: fns.getColor( vertexData ),
+		};
 
 		// replace the object, camera and rasterizer values with the hit's
-		const { camera } = kernelBuilder.getContext();
-		const { matrixWorld, matrixWorldInverse } = inputs;
 		const { viewMatrix } = camera;
 		const objectPosition = matrixWorld.element( 3 ).xyz;
 		const overrides = [
@@ -165,20 +195,17 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 			[ modelScale, vec3( matrixWorld.element( 0 ).xyz.length(), matrixWorld.element( 1 ).xyz.length(), matrixWorld.element( 2 ).xyz.length() ) ],
 			[ modelDirection, matrixWorld.element( 2 ).xyz.normalize() ],
 			[ modelViewPosition, viewMatrix.mul( vec4( objectPosition, 1 ) ).xyz ],
-			[ frontFacing, inputs.frontFacing ],
-			[ normalFlat, inputs.faceNormal.transformDirection( viewMatrix ) ],
+			[ frontFacing, expression( 'hit.side == 1.0', 'bool' ) ],
+			[ normalFlat, expression( 'hit.normal', 'vec3' ).transformDirection( viewMatrix ) ],
 
 			// the ray direction, which is only toward the camera for camera rays
-			[ positionViewDirection, inputs.viewDirection.transformDirection( viewMatrix ) ],
+			[ positionViewDirection, expression( 'view', 'vec3' ).transformDirection( viewMatrix ) ],
 		];
-
-		const attributes = Object.fromEntries( GRAPH_ATTRIBUTES.map( ( { name } ) => [ name, inputs[ name ] ] ) );
-		attributes.tangent = getGraphTangent( inputs.tangent, inputs.normal, inputs.indices, inputs.attributesOffset );
 
 		this.context = {
 			...kernelBuilder.getContext(),
 			getAttribute: name => attributes[ name ] ?? null,
-			setupNormal: () => inputs.shadingNormal.transformDirection( viewMatrix ),
+			setupNormal: () => expression( 'shadingNormal', 'vec3' ).transformDirection( viewMatrix ),
 			setupPositionView: () => material.setupPositionView( this ),
 			inlineVaryings: true,
 		};
@@ -190,39 +217,7 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 		this.nodes.forEach( node => kernelBuilder.addNode( node ) );
 		this.sequentialNodes.forEach( node => kernelBuilder.addSequentialNode( node ) );
 
-		const parameters = GRAPH_INPUTS.map( input => `${ input.name }: ${ this.getType( input.type ) }` );
-		return `fn ${ name }( ${ parameters.join( ', ' ) } ) -> ${ this.getType( type ) } {\n${ flow.vars }\n${ flow.code }\n\treturn ${ flow.result };\n\n}\n`;
-
-	}
-
-}
-
-// A graph's WGSL function, built with "MaterialGraphBuilder" when the kernel builds
-export class MaterialGraphFunctionNode extends CodeNode {
-
-	constructor( name, material, graphNode, type ) {
-
-		super();
-		this.functionName = name;
-		this.material = material;
-		this.graphType = type;
-
-		// private so the kernel doesn't build it as a child node
-		this._graphNode = graphNode;
-
-	}
-
-	generate( builder ) {
-
-		const nodeCode = builder.getCodeFromNode( this, this.getNodeType( builder ) );
-		if ( nodeCode.code === '' ) {
-
-			const graphBuilder = new MaterialGraphBuilder( builder, this.material );
-			nodeCode.code = graphBuilder.buildGraphFunction( this.functionName, this._graphNode, this.graphType );
-
-		}
-
-		return this.functionName;
+		return `${ flow.vars }\n${ flow.code }\n\treturn ${ flow.result };`;
 
 	}
 
