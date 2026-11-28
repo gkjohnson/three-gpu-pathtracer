@@ -1,7 +1,7 @@
 /** @import { Camera, Material, StorageBufferNode, UniformNode } from 'three/webgpu' */
 import { BufferAttribute, BufferGeometry, Matrix3, Matrix4, Node, PerspectiveCamera, StructTypeNode, Vector3, VaryingNode } from 'three/webgpu';
 import {
-	Fn, context, expression, overrideNodes, float, mat3, uniform, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
+	Fn, context, expression, overrideNodes, float, int, mat3, uniform, vec2, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
 	modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, modelPosition, modelScale, modelDirection, modelViewPosition,
 	cameraViewMatrix, cameraWorldMatrix, cameraNormalMatrix, cameraPosition, cameraProjectionMatrix,
 	cameraProjectionMatrixInverse, cameraNear, cameraFar,
@@ -239,27 +239,29 @@ export const materialGraphResultStruct = new StructTypeNode(
  * Returns the WGSL function running the graphs of one material, writing the outputs it has graphs for to "result":
  * `fn runMaterialGraph( graph: i32, input: MaterialGraphInput, result: ptr<function, MaterialGraphResult> )`
  *
- * "graphs" holds each "material" and its "outputs", each a "GRAPH_OUTPUTS" entry with its graph's "node". Graph "i"
- * is the material at index "i". Each graph is built into its own function by three.js, reading the camera from the
- * uniforms of "createCameraUniforms".
+ * "graphs" holds each "material", its "outputs", each a "GRAPH_OUTPUTS" entry with its graph's "node", and
+ * "textures", the descriptor each texture node is sampled with from the atlas by "sampleTexel". Graph "i" is the
+ * material at index "i". Each graph is built into its own function by three.js, reading the camera from the uniforms
+ * of "createCameraUniforms".
  *
- * @param {Array<{material:Material,outputs:Array<Object>}>} graphs
+ * @param {Array<{material:Material,outputs:Array<Object>,textures:Map<Node,number>}>} graphs
  * @param {Map<Node,UniformNode>} cameraUniforms
+ * @param {Function} sampleTexel
  * @returns {Function}
  */
-export function getRunMaterialGraphFn( graphs, cameraUniforms ) {
+export function getRunMaterialGraphFn( graphs, cameraUniforms, sampleTexel ) {
 
 	const parts = [
 		'fn runMaterialGraph( graph: i32, input: ', materialGraphInputStruct,
 		', result: ptr<function, ', materialGraphResultStruct, '> ) -> void {\n\nswitch ( graph ) {\n\n',
 	];
 
-	graphs.forEach( ( { material, outputs }, graph ) => {
+	graphs.forEach( ( { material, outputs, textures }, graph ) => {
 
 		parts.push( `case ${ graph }: {\n\n` );
 		outputs.forEach( ( { name, type, node } ) => {
 
-			const call = buildGraphCall( material, node, type, cameraUniforms, `materialGraph${ graph }_${ name }` );
+			const call = buildGraphCall( material, node, type, { textures, cameraUniforms, sampleTexel }, `materialGraph${ graph }_${ name }` );
 			parts.push( `result.${ name } = `, call, ';\n' );
 
 		} );
@@ -344,8 +346,9 @@ export const noMaterialGraphFn = /* @__PURE__ */ wgslTagFn/* wgsl */`
 `;
 
 // Returns a call of a TSL function evaluating "node", a graph of "material", as "type" from the "input" struct. three.js
-// builds it as when rasterizing the material, with the hit's values in place of the vertex stage, object and camera
-function buildGraphCall( material, node, type, cameraUniforms, name ) {
+// builds it as when rasterizing the material, with the hit's values in place of the vertex stage, object and camera,
+// and the texture nodes in "textures" sampled from the atlas with their descriptors
+function buildGraphCall( material, node, type, { textures, cameraUniforms, sampleTexel }, name ) {
 
 	const fn = Fn( ( params, builder ) => {
 
@@ -374,6 +377,12 @@ function buildGraphCall( material, node, type, cameraUniforms, name ) {
 			[ positionViewDirection, inputs.viewDirection.transformDirection( viewMatrix ) ],
 		];
 
+		textures.forEach( ( descriptor, textureNode ) => {
+
+			overrides.push( [ textureNode, sampleTexel( getTextureUV( textureNode ), int( descriptor ), float( 0 ) ) ] );
+
+		} );
+
 		const attributes = Object.fromEntries( GRAPH_ATTRIBUTES.map( ( { name } ) => [ name, inputs[ name ] ] ) );
 		attributes.tangent = getGraphTangent( inputs.tangent, inputs.normal, inputs.indices, inputs.attributesOffset );
 
@@ -393,6 +402,14 @@ function buildGraphCall( material, node, type, cameraUniforms, name ) {
 	} );
 
 	return fn( ...GRAPH_INPUTS.map( ( { name, type } ) => expression( `input.${ name }`, type ) ) );
+
+}
+
+// the uv a texture node samples at, with its texture's transform, as three.js' TextureNode sets it up
+function getTextureUV( textureNode ) {
+
+	const uvNode = textureNode.uvNode ?? textureNode.getDefaultUV();
+	return textureNode.updateMatrix ? textureNode.getTransformedUV( uvNode ) : vec2( uvNode );
 
 }
 

@@ -360,29 +360,38 @@ export class ShadingModel {
 
 		if ( key in material && material[ key ] ) {
 
-			const { textures, texturesMap } = this;
-			const texture = material[ key ];
-			const hash = getTextureHash( texture );
-
-			if ( ! texturesMap.has( hash ) ) {
-
-				texturesMap.set( hash, textures.length );
-				textures.push( texture );
-
-			}
-
-			const idx = texturesMap.get( hash );							// 23 bits
-			const channel = texture.channel & 7;							// 3 bits
-			const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
-			const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
-			const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
-			return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
+			return this.addTexture( material[ key ] );
 
 		} else {
 
 			return - 1;
 
 		}
+
+	}
+
+	/**
+	 * Adds a texture to "textures" by its shareable source, returning the descriptor "fns.sampleTexel" samples it
+	 * with. For use in "writeMaterialsBuffer".
+	 */
+	addTexture( texture ) {
+
+		const { textures, texturesMap } = this;
+		const hash = getTextureHash( texture );
+
+		if ( ! texturesMap.has( hash ) ) {
+
+			texturesMap.set( hash, textures.length );
+			textures.push( texture );
+
+		}
+
+		const idx = texturesMap.get( hash );							// 23 bits
+		const channel = texture.channel & 7;							// 3 bits
+		const wrapS = encodeTextureWrap( texture.wrapS );				// 2 bits
+		const wrapT = encodeTextureWrap( texture.wrapT );				// 2 bits
+		const nearest = texture.magFilter === NearestFilter ? 1 : 0;	// 1 bit
+		return ( nearest << 30 ) | ( wrapT << 28 ) | ( wrapS << 26 ) | ( channel << 23 ) | ( idx & 0x7fffff );
 
 	}
 
@@ -525,7 +534,10 @@ export class ShadingModel {
 		let applyMaterialGraph = noMaterialGraphFn;
 		if ( materialGraphs ) {
 
-			materialGraphs.update( materials );
+			materialGraphs.update( materials, {
+				addTexture: texture => this.addTexture( texture ),
+				sampleTexel: fns.sampleTexel,
+			} );
 			applyMaterialGraph = materialGraphs.getApplyFn();
 
 		}
