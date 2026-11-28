@@ -207,6 +207,8 @@ export class WebGPUPathTracer extends EventDispatcher<WebGPUPathTracerEventMap> 
 	maxSubsurfaceBounces: number;
 	maxFogBounces: number;
 	maxSamples: number;
+	adaptiveThreshold: number;
+	adaptiveMinSamples: number;
 	transmissiveBackground: TransmissiveBackgroundMode;
 	filterGlossyFactor: number;
 	multipleImportanceSampling: boolean;

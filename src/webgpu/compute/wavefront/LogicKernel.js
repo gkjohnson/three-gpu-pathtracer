@@ -1,6 +1,6 @@
 import { StorageBufferAttribute } from 'three/webgpu';
 import { ComputeKernel } from '../ComputeKernel.js';
-import { createAuxTarget, createOutputTarget, createSampleCountTarget } from '../targets.js';
+import { createAuxTarget, createOutputTarget, createSampleCountTarget, OUTPUT_LUMINANCE_LAYER, OUTPUT_LUMINANCE_SQUARED_LAYER } from '../targets.js';
 import { loadOutputFn, storeOutputFn } from '../../nodes/output.wgsl.js';
 import { blendAuxFn, AUX_LAYERS } from '../../nodes/auxiliary.wgsl.js';
 import { uniform, storage, textureStore, globalId } from 'three/tsl';
@@ -355,6 +355,14 @@ export class LogicKernel extends ComputeKernel {
 					let blendedColor = ${ weightedAlphaBlendFn }( prevColor, resultColor, 1.0 / f32( sampleCount ) );
 					textureStore( ${ params.sampleCountTarget }, indexUV, vec4( ${ SAMPLE_DISPATCHED_FLAG }u | sampleCount ) );
 					${ storeOutputFn }( ${ params.outputTarget }, colorIndex, blendedColor );
+
+					// the running luminance moments adaptive sampling measures the pixel's noise with
+					let sampleWeight = 1.0 / f32( sampleCount );
+					let luminance = dot( resultColor.rgb, vec3f( 0.2126, 0.7152, 0.0722 ) );
+					let prevLuminance = textureLoad( ${ params.outputTarget }, colorIndex, ${ OUTPUT_LUMINANCE_LAYER } ).r;
+					let prevLuminanceSquared = textureLoad( ${ params.outputTarget }, colorIndex, ${ OUTPUT_LUMINANCE_SQUARED_LAYER } ).r;
+					textureStore( ${ params.outputTarget }, colorIndex, ${ OUTPUT_LUMINANCE_LAYER }, vec4f( mix( prevLuminance, luminance, sampleWeight ) ) );
+					textureStore( ${ params.outputTarget }, colorIndex, ${ OUTPUT_LUMINANCE_SQUARED_LAYER }, vec4f( mix( prevLuminanceSquared, luminance * luminance, sampleWeight ) ) );
 
 					// the auxiliary images are blended the same way, in the same row order
 					if ( accumulateAux != 0u ) {
