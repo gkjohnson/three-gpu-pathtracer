@@ -54,6 +54,14 @@ export class GLTFShadingModel extends ShadingModel {
 		this.iridescentFresnel = iridescentFresnel;
 		this.transmissionFresnel = transmissionFresnelFunc( iridescentFresnel );
 
+		this.materialGraphOutputs = [
+			{ property: 'colorNode', field: 'color', type: 'vec3' },
+			{ property: 'opacityNode', field: 'opacity', type: 'float' },
+			{ property: 'roughnessNode', field: 'roughness', type: 'float' },
+			{ property: 'metalnessNode', field: 'metalness', type: 'float' },
+			{ property: 'emissiveNode', field: 'emission', type: 'vec3' },
+		];
+
 	}
 
 	init( renderer ) {

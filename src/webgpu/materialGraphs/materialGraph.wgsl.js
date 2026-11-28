@@ -10,15 +10,6 @@ const objectsStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.objects' )
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
 const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
 
-// The surface record fields a graph can set: the node material's property, the field it writes and its type
-export const GRAPH_OUTPUTS = [
-	{ key: 'colorNode', name: 'color', type: 'vec3' },
-	{ key: 'opacityNode', name: 'opacity', type: 'float' },
-	{ key: 'roughnessNode', name: 'roughness', type: 'float' },
-	{ key: 'metalnessNode', name: 'metalness', type: 'float' },
-	{ key: 'emissiveNode', name: 'emission', type: 'vec3' },
-];
-
 const materialGraphInputStruct = new StructTypeNode(
 	Object.fromEntries( GRAPH_INPUTS.map( ( { name, type } ) => [ name, type ] ) ),
 	'MaterialGraphInput',
@@ -28,7 +19,8 @@ const materialGraphInputStruct = new StructTypeNode(
  * Returns the "evaluateMaterialGraph" WGSL function described in "MaterialGraphs", which fills the graph inputs from
  * the hit and runs the graphs of its material.
  *
- * "graphs" holds each "material" and its "outputs", each a "GRAPH_OUTPUTS" entry with its graph's "node".
+ * "graphs" holds each "material" and its "outputs", each the surface record "field" a graph sets, its "type" and the
+ * graph's "node".
  * "graphIndices" holds the index in "graphs" of each material, by its index in the shading model, or -1 without
  * graphs.
  *
@@ -93,10 +85,10 @@ function getRunMaterialGraphFn( graphs ) {
 	graphs.forEach( ( { material, outputs }, graph ) => {
 
 		parts.push( `case ${ graph }: {\n\n` );
-		outputs.forEach( ( { name, type, node } ) => {
+		outputs.forEach( ( { field, type, node } ) => {
 
-			const fn = new MaterialGraphFunctionNode( `materialGraph${ graph }_${ name }`, material, node, type );
-			parts.push( `surf.${ name } = `, fn, `( ${ args } );\n` );
+			const fn = new MaterialGraphFunctionNode( `materialGraph${ graph }_${ field }`, material, node, type );
+			parts.push( `surf.${ field } = `, fn, `( ${ args } );\n` );
 
 		} );
 		parts.push( '\n}\n\n' );

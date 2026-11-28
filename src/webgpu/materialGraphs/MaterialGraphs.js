@@ -1,14 +1,14 @@
 /** @import { Material } from 'three/webgpu' */
 import { StorageBufferAttribute } from 'three/webgpu';
 import { storage } from 'three/tsl';
-import { GRAPH_OUTPUTS, getEvaluateMaterialGraphFn } from './materialGraph.wgsl.js';
+import { getEvaluateMaterialGraphFn } from './materialGraph.wgsl.js';
 
 /**
  * Builds the TSL graphs of node materials into the kernels with three.js. Assigned to a shading model with
- * `setMaterialGraphs`, which passes it the materials with `update`.
+ * `setMaterialGraphs`, which passes it the materials and the graph outputs its surface record supports with `update`.
  *
  * The surface record calls the WGSL function from `getEvaluateFn` at each hit, which replaces the fields of "surf" that
- * the hit's material has graphs for, listed in `GRAPH_OUTPUTS`, and reads its "normal" as the shading normal:
+ * the hit's material has graphs for, and reads its "normal" as the shading normal:
  * `fn evaluateMaterialGraph( hit, vertexData, view: vec3f, surf: ptr<function, SurfaceRecord> )`
  * "view" is the direction the ray came from. The graphs read the camera from the kernel context's "camera".
  */
@@ -16,7 +16,8 @@ export class MaterialGraphs {
 
 	constructor() {
 
-		// each material with graphs and its "outputs", each a "GRAPH_OUTPUTS" entry with its graph's "node"
+		// each material with graphs and its "outputs", each the surface record "field" a graph sets, its "type" and the
+		// graph's "node"
 		this.graphs = [];
 		this.evaluateFn = null;
 
@@ -29,13 +30,16 @@ export class MaterialGraphs {
 	}
 
 	/**
-	 * Collects the graphs of the materials, in the shading model's order. Returns whether they changed, so the
-	 * function from `getEvaluateFn` did and the kernels need rebuilding. Changed uniform values don't need a rebuild.
+	 * Collects the graphs of the materials, in the shading model's order, for the "outputs" its surface record
+	 * supports: each node material "property" with the surface record "field" it sets and its "type". Returns whether
+	 * they changed, so the function from `getEvaluateFn` did and the kernels need rebuilding. Changed uniform values
+	 * don't need a rebuild.
 	 *
 	 * @param {Array<Material>} materials
+	 * @param {Array<{property:string,field:string,type:string}>} outputs
 	 * @returns {boolean}
 	 */
-	update( materials ) {
+	update( materials, outputs ) {
 
 		const graphs = [];
 		const indices = new Int32Array( Math.max( materials.length, 2 ) ).fill( - 1 );
@@ -47,14 +51,14 @@ export class MaterialGraphs {
 
 			}
 
-			const outputs = GRAPH_OUTPUTS
-				.filter( ( { key } ) => material[ key ] )
-				.map( output => ( { ...output, node: material[ output.key ] } ) );
+			const materialOutputs = outputs
+				.filter( ( { property } ) => material[ property ] )
+				.map( ( { property, field, type } ) => ( { field, type, node: material[ property ] } ) );
 
-			if ( outputs.length > 0 ) {
+			if ( materialOutputs.length > 0 ) {
 
 				indices[ i ] = graphs.length;
-				graphs.push( { material, outputs } );
+				graphs.push( { material, outputs: materialOutputs } );
 
 			}
 
@@ -104,7 +108,7 @@ function areGraphsEqual( a, b ) {
 	return a.length === b.length && a.every( ( { material, outputs }, i ) => {
 
 		const other = b[ i ].outputs;
-		return material === b[ i ].material && outputs.length === other.length && outputs.every( ( output, j ) => output.node === other[ j ].node && output.name === other[ j ].name );
+		return material === b[ i ].material && outputs.length === other.length && outputs.every( ( output, j ) => output.node === other[ j ].node && output.field === other[ j ].field && output.type === other[ j ].type );
 
 	} );
 

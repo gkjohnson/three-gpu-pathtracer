@@ -82,6 +82,10 @@ export class ShadingModel {
 		this.texturesMap = new Map();
 		this.materialGraphs = null;
 
+		// the node material properties whose TSL graphs the surface record supports, each with the surface record field
+		// it sets and its type, e.g. { property: 'colorNode', field: 'color', type: 'vec3' }. The base model supports none
+		this.materialGraphOutputs = [];
+
 	}
 
 	/**
@@ -499,7 +503,7 @@ export class ShadingModel {
 		materialsStorage.value.needsUpdate = true;
 
 		const { materialGraphs } = this;
-		return materialGraphs ? materialGraphs.update( materials ) : false;
+		return materialGraphs ? materialGraphs.update( materials, this.materialGraphOutputs ) : false;
 
 		function add( mat ) {
 
