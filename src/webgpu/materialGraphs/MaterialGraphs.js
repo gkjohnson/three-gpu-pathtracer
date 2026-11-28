@@ -2,33 +2,23 @@
 import { getEvaluateMaterialGraphFn } from './materialGraph.wgsl.js';
 
 /**
- * Builds the TSL graphs of node materials into the kernels with three.js. Assigned to a shading model with
- * `setMaterialGraphs`, which passes it the materials and the graph outputs its surface record supports with `update`,
- * and writes each material's "graphIndex" from `getGraphIndex`.
- *
- * The surface record calls the WGSL function from `getEvaluateFn` at each hit, which replaces the fields of "surf" that
- * the hit's material has graphs for, and reads its "normal" as the shading normal:
- * `fn evaluateMaterialGraph( hit, vertexData, view: vec3f, surf: ptr<function, SurfaceRecord> )`
- * "view" is the direction the ray came from. The graphs read the camera from the kernel context's "camera".
+ * Builds node materials' TSL graphs into the surface record. Set with `ShadingModel.setMaterialGraphs`.
  */
 export class MaterialGraphs {
 
 	constructor() {
 
-		// each material with graphs and its "outputs", each the surface record "field" a graph sets, its "type" and the
-		// graph's "node"
+		// each material with graphs and its outputs: the surface record "field", its "type" and the graph "node"
 		this.graphs = [];
-		this.evaluateFn = null;
-
-		// the index in "graphs" of each material with graphs
 		this.graphIndices = new Map();
+
+		// fn evaluateMaterialGraph( hit, vertexData, view, surf: ptr<function, SurfaceRecord> )
+		this.evaluateFn = null;
 
 	}
 
 	/**
-	 * Collects the graphs of the materials for the "outputs" the shading model's surface record supports: each node
-	 * material "property" with the surface record "field" it sets and its "type". Returns whether they changed, so the
-	 * function from `getEvaluateFn` did and the kernels need rebuilding. Changed uniform values don't need a rebuild.
+	 * Collects the materials' graphs for the shading model's outputs. Returns true if the kernels need rebuilding.
 	 *
 	 * @param {Array<Material>} materials
 	 * @param {Array<{property:string,field:string,type:string}>} outputs
@@ -50,6 +40,7 @@ export class MaterialGraphs {
 				.filter( ( { property } ) => material[ property ] )
 				.map( ( { property, field, type } ) => ( { field, type, node: material[ property ] } ) );
 
+			// TODO: share graphs that build to the same WGSL. Matching nodes isn't enough since graphs can read the material
 			if ( materialOutputs.length > 0 ) {
 
 				this.graphIndices.set( material, graphs.length );
@@ -72,8 +63,7 @@ export class MaterialGraphs {
 	}
 
 	/**
-	 * Returns the index of the material's graphs, which the shading model writes as the material's "graphIndex", or -1
-	 * without graphs.
+	 * Returns the material's "graphIndex", or -1 without graphs.
 	 *
 	 * @param {Material} material
 	 * @returns {number}
@@ -84,20 +74,8 @@ export class MaterialGraphs {
 
 	}
 
-	/**
-	 * Returns the "evaluateMaterialGraph" WGSL function. Get it again when `update` returns true.
-	 *
-	 * @returns {Function}
-	 */
-	getEvaluateFn() {
-
-		return this.evaluateFn;
-
-	}
-
 }
 
-// whether two lists of graphs have the same materials and outputs, with the same nodes
 function areGraphsEqual( a, b ) {
 
 	return a.length === b.length && a.every( ( { material, outputs }, i ) => {

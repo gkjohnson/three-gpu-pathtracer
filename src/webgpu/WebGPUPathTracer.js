@@ -698,7 +698,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lightsInfo = new LightsInfoNode();
 		this._backgroundInfo = new EquirectBackgroundInfo();
 
-		// the camera's values, which the material graphs read in place of three.js' camera nodes
+		// the camera uniforms the material graphs read
 		this._cameraUniforms = {
 			viewMatrix: uniform( new Matrix4() ),
 			worldMatrix: uniform( new Matrix4() ),
@@ -1308,8 +1308,8 @@ export class WebGPUPathTracer extends EventDispatcher {
 		_bvhData.updateMaterialIndices();
 		this._updateEmissiveTriangles();
 
-		// the kernels size the texture info, compile in the used features and build in the TSL graphs, so a new
-		// texture count, feature set or graph needs a rebuild
+		// the kernels size the texture info and compile in the used features and material graphs, so a change needs a
+		// rebuild
 		const featuresChanged = _shadingModel.updateFeatures();
 		const texturesChanged = _shadingModel.updateTextures( _renderer );
 		if ( featuresChanged || texturesChanged || graphsChanged ) {
@@ -1356,7 +1356,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 	}
 
-	// Copies the camera's values to the uniforms the material graphs read
 	_updateCameraUniforms() {
 
 		const { camera, _cameraUniforms } = this;

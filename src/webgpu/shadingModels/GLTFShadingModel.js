@@ -726,8 +726,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 	}
 
-	// the emissive color and intensity, ignoring the emissive map. Fog boundaries don't emit, and emission graphs are
-	// only found by the rays that hit them
+	// the emissive color and intensity, ignoring the emissive map. Fog boundaries don't emit
 	// TODO: sample emission graphs as lights
 	getEmissiveLuminance( material ) {
 

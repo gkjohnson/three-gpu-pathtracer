@@ -452,7 +452,7 @@ export const getSurfaceRecordFunc = ( {
 		surf.opacity = albedo.a;
 		surf.roughness = roughness;
 
-		// a node material's TSL graphs replace the surface inputs they have outputs for
+		// node material graphs replace the surface values
 		${ ifFeature( 'MATERIAL_GRAPHS' )/* wgsl */`${ evaluateMaterialGraph }( hit, vertexData, view, &surf );` }
 
 		surf.opacity = select( 1.0, surf.opacity, material.transparent != 0 );

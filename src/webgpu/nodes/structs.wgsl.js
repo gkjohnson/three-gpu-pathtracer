@@ -180,7 +180,7 @@ export const materialStruct = new StructTypeNode( {
 	scatterAnisotropy: 'float',
 
 	// offset 293 floats
-	// the material's index in "MaterialGraphs", or -1 without graphs
+	// -1 without material graphs
 	graphIndex: 'int',
 	// total size = 296
 }, 'Material' );

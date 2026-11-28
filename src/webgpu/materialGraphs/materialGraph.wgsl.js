@@ -1,4 +1,3 @@
-/** @import { Material } from 'three/webgpu' */
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { hitRecordStruct } from '../nodes/structs.wgsl.js';
@@ -16,16 +15,7 @@ const materialGraphInputStruct = new StructTypeNode(
 	'MaterialGraphInput',
 );
 
-/**
- * Returns the "evaluateMaterialGraph" WGSL function described in "MaterialGraphs", which fills the graph inputs from
- * the hit and runs the graphs of its material, found by the material's "graphIndex".
- *
- * "graphs" holds each "material" and its "outputs", each the surface record "field" a graph sets, its "type" and the
- * graph's "node".
- *
- * @param {Array<{material:Material,outputs:Array<Object>}>} graphs
- * @returns {Function}
- */
+// Returns the function running the graphs of the hit's material, writing their outputs to "surf"
 export function getEvaluateMaterialGraphFn( graphs ) {
 
 	const runFn = getRunMaterialGraphFn( graphs );
@@ -69,9 +59,7 @@ export function getEvaluateMaterialGraphFn( graphs ) {
 
 }
 
-// Returns the function running graph "graph" of "graphs", a switch with a case per material calling the function of
-// each of its outputs:
-// `fn runMaterialGraph( graph: i32, input: MaterialGraphInput, surf: ptr<function, SurfaceRecord> )`
+// a switch with a case per material, calling the function of each of its outputs
 function getRunMaterialGraphFn( graphs ) {
 
 	const args = GRAPH_INPUTS.map( ( { name } ) => `input.${ name }` ).join( ', ' );
@@ -98,7 +86,7 @@ function getRunMaterialGraphFn( graphs ) {
 
 }
 
-// joins code strings and nodes into a "wgslTagFn", for code with a varying number of nodes
+// joins strings and nodes into a "wgslTagFn"
 function joinTagFn( parts ) {
 
 	const tokens = [ '' ];

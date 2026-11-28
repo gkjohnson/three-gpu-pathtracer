@@ -82,8 +82,7 @@ export class ShadingModel {
 		this.texturesMap = new Map();
 		this.materialGraphs = null;
 
-		// the node material properties whose TSL graphs the surface record supports, each with the surface record field
-		// it sets and its type, e.g. { property: 'colorNode', field: 'color', type: 'vec3' }. The base model supports none
+		// the graph outputs the surface record supports, e.g. { property: 'colorNode', field: 'color', type: 'vec3' }
 		this.materialGraphOutputs = [];
 
 	}
@@ -304,8 +303,7 @@ export class ShadingModel {
 	}
 
 	/**
-	 * Sets the "MaterialGraphs" building the node materials' TSL graphs into the surface record, or null to leave the
-	 * materials' surface inputs as they are. Call "WebGPUPathTracer.updateMaterials" after, which rebuilds the kernels.
+	 * Sets the "MaterialGraphs" to use, or null. Call "WebGPUPathTracer.updateMaterials" after.
 	 *
 	 * @param {MaterialGraphs|null} materialGraphs
 	 */
@@ -438,8 +436,7 @@ export class ShadingModel {
 
 	}
 
-	// collects and writes the materials under "root". Returns whether the material graphs changed, so the kernels need
-	// rebuilding
+	// collects and writes the materials under "root". Returns true if the material graphs changed
 	updateMaterials( root ) {
 
 		const { materials, materialsMap, textures, texturesMap, structs } = this;
@@ -488,7 +485,7 @@ export class ShadingModel {
 
 		}
 
-		// the graphs are collected first so the materials can be written with their graph indices
+		// collected first so the materials are written with their graph indices
 		const { materialGraphs } = this;
 		const graphsChanged = materialGraphs ? materialGraphs.update( materials, this.materialGraphOutputs ) : false;
 

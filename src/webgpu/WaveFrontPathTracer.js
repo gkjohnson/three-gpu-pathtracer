@@ -169,7 +169,6 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	setCameraUniforms( cameraUniforms ) {
 
-		// the kernels with the shading model's surface record
 		this.logicKernel.context.camera = cameraUniforms;
 		this.materialKernel.context.camera = cameraUniforms;
 		this.traceRayKernel.context.camera = cameraUniforms;
