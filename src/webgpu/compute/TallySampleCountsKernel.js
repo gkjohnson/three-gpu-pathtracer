@@ -2,7 +2,7 @@ import { StorageBufferAttribute, StorageTexture, StructTypeNode } from 'three/we
 import { storage, textureStore, globalId, uniform } from 'three/tsl';
 import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { ComputeKernel } from './ComputeKernel.js';
-import { SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
+import { SAMPLE_CONVERGED_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../constants.js';
 
 // field order of the sample counter buffer, matching the struct below
 export const SAMPLE_COUNTER_MIN = 0;
@@ -94,7 +94,9 @@ export class TallySampleCountsKernel extends ComputeKernel {
 				atomicMax( &${ params.counters }[ 0 ].maxSamples, samples );
 				atomicAdd( &${ params.counters }[ 0 ].pixelCount, 1u );
 
-				if ( maxSamples != 0u && samples >= maxSamples ) {
+				// a pixel adaptive sampling stopped is done too, without the sample cap
+				let isConverged = ( combinedField & ${ SAMPLE_CONVERGED_FLAG }u ) != 0u;
+				if ( ( maxSamples != 0u && samples >= maxSamples ) || isConverged ) {
 
 					atomicAdd( &${ params.counters }[ 0 ].finishedCount, 1u );
 

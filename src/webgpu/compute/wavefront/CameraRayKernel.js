@@ -6,7 +6,7 @@ import { uniform, storage, textureStore, globalId } from 'three/tsl';
 import { contextProxyFn, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { rngInit, rand1, rand2, RNG_INDEX_RAY_JITTER, RNG_INDEX_DISPERSION_WAVELENGTH } from '../../nodes/random.wgsl.js';
 import { rayDataStruct, pixelQueueInfoStruct, NO_PIXEL } from './structs.js';
-import { SAMPLE_ACTIVE_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
+import { SAMPLE_ACTIVE_FLAG, SAMPLE_CONVERGED_FLAG, SAMPLE_COUNT_MASK, SAMPLE_DISPATCHED_FLAG } from '../../constants.js';
 import { sampleDispersionWavelengthFunc } from '../../nodes/material.wgsl.js';
 
 // queue entries a free slot tries before waiting for the next round
@@ -94,10 +94,10 @@ export class CameraRayKernel extends ComputeKernel {
 					pixelIndex = pixelQueue[ queueIndex ];
 					indexUV = vec2u( pixelIndex >> 16, pixelIndex & 0xFFFF );
 
-					// skip the pixel if it has hit the sample limit
+					// skip the pixel if it has hit the sample limit or converged
 					let combinedField = textureLoad( ${ params.sampleCountTarget }, indexUV ).r;
 					samples = ( ${ SAMPLE_COUNT_MASK }u & combinedField );
-					if ( maxSamples != 0u && samples >= maxSamples ) {
+					if ( ( maxSamples != 0u && samples >= maxSamples ) || ( combinedField & ${ SAMPLE_CONVERGED_FLAG }u ) != 0u ) {
 
 						continue;
 

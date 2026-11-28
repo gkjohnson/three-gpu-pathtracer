@@ -537,7 +537,10 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 				rebuildPixelQueueKernel.pixelQueue = this.pixelQueue;
 				rebuildPixelQueueKernel.sampleCountTarget = this.sampleCountTarget;
+				rebuildPixelQueueKernel.outputTarget = this.outputTarget;
 				rebuildPixelQueueKernel.maxSamples = this.maxSamples;
+				rebuildPixelQueueKernel.adaptiveThreshold = this.adaptiveThreshold;
+				rebuildPixelQueueKernel.adaptiveMinSamples = this.adaptiveMinSamples;
 				rebuildPixelQueueKernel.targetDimensions.copy( targetDimensions );
 				this.dispatch( rebuildPixelQueueKernel, pixelQueueRebuildDispatchKernel.outputDispatch );
 

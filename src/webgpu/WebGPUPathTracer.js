@@ -390,6 +390,59 @@ export class WebGPUPathTracer extends EventDispatcher {
 	}
 
 	/**
+	 * Noise level at which a pixel stops taking samples, so the paths go to the pixels that still
+	 * need them. Measured as the standard error of the pixel's mean luminance relative to the square
+	 * root of the luminance, over the noisiest pixel of its 3x3 neighborhood. Lower values give a
+	 * cleaner image and take longer. Around `0.01` is a good starting point. Pixels that stop count
+	 * as finished, so a render can complete with `maxSamples` set to `0`. Only applied by the default
+	 * wavefront backend.
+	 * @type {number}
+	 * @default 0
+	 * @note `0` disables adaptive sampling.
+	 */
+	get adaptiveThreshold() {
+
+		return this._pathTracer.adaptiveThreshold;
+
+	}
+
+	set adaptiveThreshold( v ) {
+
+		if ( this._pathTracer.adaptiveThreshold !== v ) {
+
+			// pixels already stopped against the old threshold would stay stopped, so start over
+			this._pathTracer.adaptiveThreshold = v;
+			this.reset();
+
+		}
+
+	}
+
+	/**
+	 * Samples every pixel takes before adaptive sampling may stop it. Higher values make the noise
+	 * estimate more reliable on paths that rarely find light, at the cost of time spent on pixels that
+	 * are already clean.
+	 * @type {number}
+	 * @default 16
+	 */
+	get adaptiveMinSamples() {
+
+		return this._pathTracer.adaptiveMinSamples;
+
+	}
+
+	set adaptiveMinSamples( v ) {
+
+		if ( this._pathTracer.adaptiveMinSamples !== v ) {
+
+			this._pathTracer.adaptiveMinSamples = v;
+			this.reset();
+
+		}
+
+	}
+
+	/**
 	 * Whether every pixel has reached {@link WebGPUPathTracer#maxSamples} and an attached denoiser
 	 * has finished, as of the last measurement. Always false while rendering indefinitely.
 	 * @type {boolean}
@@ -614,11 +667,13 @@ export class WebGPUPathTracer extends EventDispatcher {
 	 */
 	useMegakernel( value ) {
 
-		const maxSamples = this._pathTracer.maxSamples;
+		const { maxSamples, adaptiveThreshold, adaptiveMinSamples } = this._pathTracer;
 
 		this._pathTracer.dispose();
 		this._pathTracer = value ? new MegaKernelPathTracer( this._renderer ) : new WaveFrontPathTracer( this._renderer );
 		this._pathTracer.maxSamples = maxSamples;
+		this._pathTracer.adaptiveThreshold = adaptiveThreshold;
+		this._pathTracer.adaptiveMinSamples = adaptiveMinSamples;
 		this._timingCount = 0;
 		this._pathTracer.setBVHData( this._bvhData );
 		this._pathTracer.setLightsInfo( this._lightsInfo );

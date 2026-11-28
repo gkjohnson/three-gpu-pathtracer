@@ -47,6 +47,11 @@ export class PathTracerBackend {
 		// stop taking samples once a pixel reaches this count. zero means no limit.
 		this.maxSamples = 0;
 
+		// stop taking samples once a pixel's relative noise drops below this, after at least
+		// "adaptiveMinSamples". zero disables adaptive sampling. Only the wavefront backend applies it.
+		this.adaptiveThreshold = 0;
+		this.adaptiveMinSamples = 16;
+
 		// whether the kernels are compiling, during which nothing renders
 		this.compiling = false;
 

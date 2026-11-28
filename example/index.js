@@ -170,6 +170,11 @@ const params = {
 	pause: false,
 	maxSamples: 16,
 
+	// stop sampling pixels once they are clean, so the time goes to the noisy ones. Takes effect once
+	// "maxSamples" is above "adaptiveMinSamples"
+	adaptiveThreshold: 0.02,
+	adaptiveMinSamples: 16,
+
 	denoise: true,
 	auxView: 'none',
 
@@ -266,6 +271,8 @@ async function init() {
 	pathTracer.setBVHWorker( GenerateMeshBVHWorker );
 	pathTracer.frameBudget = params.frameBudget;
 	pathTracer.maxSamples = params.maxSamples;
+	pathTracer.adaptiveThreshold = params.adaptiveThreshold;
+	pathTracer.adaptiveMinSamples = params.adaptiveMinSamples;
 
 	pathTracer.addEventListener( 'progress', ( { stage, progress, samples } ) => {
 
@@ -640,6 +647,16 @@ function buildGui() {
 	pathTracingFolder.add( params, 'maxSamples', 1, 100, 1 ).onChange( v => {
 
 		pathTracer.maxSamples = v;
+
+	} );
+	pathTracingFolder.add( params, 'adaptiveThreshold', 0, 0.1, 0.001 ).onChange( v => {
+
+		pathTracer.adaptiveThreshold = v;
+
+	} );
+	pathTracingFolder.add( params, 'adaptiveMinSamples', 2, 64, 1 ).onChange( v => {
+
+		pathTracer.adaptiveMinSamples = v;
 
 	} );
 	pathTracingFolder.add( params, 'randomStrategy', Object.keys( RANDOM_STRATEGIES ) ).onChange( v => {

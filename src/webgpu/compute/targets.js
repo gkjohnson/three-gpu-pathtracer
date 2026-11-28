@@ -5,11 +5,16 @@ import { AUX_LAYERS } from '../nodes/auxiliary.wgsl.js';
 // The storage textures the backends accumulate into. The kernels are created with these too, so
 // their pipelines are compiled against the formats they are dispatched with.
 
+// the layers of the output target holding the running means of the sample luminance and its square,
+// which adaptive sampling estimates each pixel's noise from
+export const OUTPUT_LUMINANCE_LAYER = 4;
+export const OUTPUT_LUMINANCE_SQUARED_LAYER = 5;
+
 // the color accumulation in the working color space, a channel per layer since only single channel storage
-// textures are read write everywhere
+// textures are read write everywhere. The rgba channels are followed by the luminance moments.
 export function createOutputTarget( name = '' ) {
 
-	const target = new StorageArrayTexture( 1, 1, 4 );
+	const target = new StorageArrayTexture( 1, 1, OUTPUT_LUMINANCE_SQUARED_LAYER + 1 );
 	target.format = RedFormat;
 	target.type = FloatType;
 	target.colorSpace = ColorManagement.workingColorSpace;

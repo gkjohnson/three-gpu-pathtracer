@@ -51,7 +51,7 @@ export const TRANSMISSIVE_BACKGROUND_OVERLAY = 1;
  */
 export const TRANSMISSIVE_BACKGROUND_TRANSPARENT = 2;
 
-// Layout of the r32uint "sample count" target: two flag bits then a 30 bit count.
+// Layout of the r32uint "sample count" target: three flag bits then a 29 bit count.
 
 // this pixel already has a ray on the queue
 export const SAMPLE_ACTIVE_FLAG = 0x80000000;
@@ -59,4 +59,7 @@ export const SAMPLE_ACTIVE_FLAG = 0x80000000;
 // this pixel has had a camera ray at least once
 export const SAMPLE_DISPATCHED_FLAG = 0x40000000;
 
-export const SAMPLE_COUNT_MASK = 0x3FFFFFFF;
+// adaptive sampling found this pixel's noise below the threshold, so it takes no more samples
+export const SAMPLE_CONVERGED_FLAG = 0x20000000;
+
+export const SAMPLE_COUNT_MASK = 0x1FFFFFFF;
