@@ -471,12 +471,6 @@ export const getSurfaceRecordFunc = ( {
 		surf.roughness = clamp( roughness, minRoughness, 1.0 );
 		surf.anisotropy = anisotropyStrength;
 
-		${ ifFeature( 'CLEARCOAT' )/* wgsl */`
-			surf.clearcoatNormal = clearcoatNormal;
-			surf.clearcoat = clearcoat;
-			surf.clearcoatRoughness = clamp( clearcoatRoughness, minRoughness, 1.0 );
-		` }
-
 		${ ifFeature( 'SHEEN' )/* wgsl */`
 			surf.sheen = material.sheen;
 			surf.sheenColor = sheenColor;
@@ -502,6 +496,9 @@ export const getSurfaceRecordFunc = ( {
 		surf.normalInvBasis = ${ inverseMat3x3Func }( surf.normalBasis );
 
 		${ ifFeature( 'CLEARCOAT' )/* wgsl */`
+			surf.clearcoatNormal = clearcoatNormal;
+			surf.clearcoat = clearcoat;
+			surf.clearcoatRoughness = clamp( clearcoatRoughness, minRoughness, 1.0 );
 			surf.clearcoatBasis = ${ getBasisFromNormalFunc }( surf.clearcoatNormal );
 			surf.clearcoatInvBasis = ${ inverseMat3x3Func }( surf.clearcoatBasis );
 		` }
