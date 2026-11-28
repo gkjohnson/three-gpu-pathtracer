@@ -1,10 +1,9 @@
-/** @import { Camera, Material, StorageBufferNode, UniformNode } from 'three/webgpu' */
-import { BufferAttribute, BufferGeometry, Matrix3, Matrix4, Node, PerspectiveCamera, StructTypeNode, Vector3, VaryingNode } from 'three/webgpu';
+/** @import { Material, StorageBufferNode, UniformNode } from 'three/webgpu' */
+import { BufferAttribute, BufferGeometry, Node, PerspectiveCamera, StructTypeNode, VaryingNode } from 'three/webgpu';
 import {
-	Fn, context, expression, overrideNodes, float, mat3, uniform, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
+	Fn, context, expression, overrideNodes, float, mat3, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
 	modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, modelPosition, modelScale, modelDirection, modelViewPosition,
-	cameraViewMatrix, cameraWorldMatrix, cameraNormalMatrix, cameraPosition, cameraProjectionMatrix,
-	cameraProjectionMatrixInverse, cameraNear, cameraFar,
+	cameraViewMatrix,
 } from 'three/tsl';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { getBasisFromNormalFunc } from '../nodes/utils.wgsl.js';
@@ -133,7 +132,7 @@ GRAPH_ATTRIBUTES.forEach( ( { name, type } ) => {
 } );
 
 // The camera the graphs are built with. three.js' camera nodes read it to find their types, and are replaced by the
-// uniforms of "createCameraUniforms"
+// camera uniforms of "MaterialGraphs"
 const graphCamera = /* @__PURE__ */ new PerspectiveCamera();
 
 // Builds "node" with the builder's material, geometry and camera set, since three.js' nodes read them while building,
@@ -177,45 +176,6 @@ class MaterialGraphBuildNode extends Node {
 
 }
 
-/**
- * Returns the uniforms for three.js' camera nodes the graphs read, by node. Set them with "updateCameraUniforms".
- *
- * @returns {Map<Node,UniformNode>}
- */
-export function createCameraUniforms() {
-
-	return new Map( [
-		[ cameraViewMatrix, uniform( new Matrix4() ) ],
-		[ cameraWorldMatrix, uniform( new Matrix4() ) ],
-		[ cameraNormalMatrix, uniform( new Matrix3() ) ],
-		[ cameraPosition, uniform( new Vector3() ) ],
-		[ cameraProjectionMatrix, uniform( new Matrix4() ) ],
-		[ cameraProjectionMatrixInverse, uniform( new Matrix4() ) ],
-		[ cameraNear, uniform( 0 ) ],
-		[ cameraFar, uniform( 0 ) ],
-	] );
-
-}
-
-/**
- * Sets the uniforms from "createCameraUniforms" to the camera's values.
- *
- * @param {Map<Node,UniformNode>} cameraUniforms
- * @param {Camera} camera
- */
-export function updateCameraUniforms( cameraUniforms, camera ) {
-
-	cameraUniforms.get( cameraViewMatrix ).value.copy( camera.matrixWorldInverse );
-	cameraUniforms.get( cameraWorldMatrix ).value.copy( camera.matrixWorld );
-	cameraUniforms.get( cameraNormalMatrix ).value.getNormalMatrix( camera.matrixWorldInverse );
-	cameraUniforms.get( cameraPosition ).value.setFromMatrixPosition( camera.matrixWorld );
-	cameraUniforms.get( cameraProjectionMatrix ).value.copy( camera.projectionMatrix );
-	cameraUniforms.get( cameraProjectionMatrixInverse ).value.copy( camera.projectionMatrixInverse );
-	cameraUniforms.get( cameraNear ).value = camera.near ?? 0;
-	cameraUniforms.get( cameraFar ).value = camera.far ?? 0;
-
-}
-
 // The surface inputs a graph can set: the node material's property, the field of the result it writes and its type
 export const GRAPH_OUTPUTS = [
 	{ key: 'colorNode', name: 'color', type: 'vec3' },
@@ -225,7 +185,7 @@ export const GRAPH_OUTPUTS = [
 	{ key: 'emissiveNode', name: 'emission', type: 'vec3' },
 ];
 
-export const materialGraphInputStruct = new StructTypeNode(
+const materialGraphInputStruct = new StructTypeNode(
 	Object.fromEntries( GRAPH_INPUTS.map( ( { name, type } ) => [ name, type ] ) ),
 	'MaterialGraphInput',
 );
@@ -236,61 +196,25 @@ export const materialGraphResultStruct = new StructTypeNode(
 );
 
 /**
- * Returns the WGSL function running the graphs of one material, writing the outputs it has graphs for to "result":
- * `fn runMaterialGraph( graph: i32, input: MaterialGraphInput, result: ptr<function, MaterialGraphResult> )`
+ * Returns the "evaluateMaterialGraph" WGSL function described in "MaterialGraphs", which fills the graph inputs from
+ * the hit and runs the graphs of its material.
  *
- * "graphs" holds each "material" and its "outputs", each a "GRAPH_OUTPUTS" entry with its graph's "node". Graph "i"
- * is the material at index "i". Each graph is built into its own function by three.js, reading the camera from the
- * uniforms of "createCameraUniforms".
+ * "graphs" holds each "material" and its "outputs", each a "GRAPH_OUTPUTS" entry with its graph's "node".
+ * "graphIndices" holds the index in "graphs" of each material, by its index in the shading model, or -1 without
+ * graphs. "cameraUniforms" replace three.js' camera nodes, by node.
  *
  * @param {Array<{material:Material,outputs:Array<Object>}>} graphs
+ * @param {StorageBufferNode} graphIndices
  * @param {Map<Node,UniformNode>} cameraUniforms
  * @returns {Function}
  */
-export function getRunMaterialGraphFn( graphs, cameraUniforms ) {
+export function getEvaluateMaterialGraphFn( graphs, graphIndices, cameraUniforms ) {
 
-	const parts = [
-		'fn runMaterialGraph( graph: i32, input: ', materialGraphInputStruct,
-		', result: ptr<function, ', materialGraphResultStruct, '> ) -> void {\n\nswitch ( graph ) {\n\n',
-	];
-
-	graphs.forEach( ( { material, outputs }, graph ) => {
-
-		parts.push( `case ${ graph }: {\n\n` );
-		outputs.forEach( ( { name, type, node } ) => {
-
-			const call = buildGraphCall( material, node, type, cameraUniforms, `materialGraph${ graph }_${ name }` );
-			parts.push( `result.${ name } = `, call, ';\n' );
-
-		} );
-		parts.push( '\n}\n\n' );
-
-	} );
-
-	parts.push( 'default: {}\n\n}\n\n}\n' );
-	return joinTagFn( parts );
-
-}
-
-/**
- * Returns the WGSL function a surface record calls to apply the TSL graphs of the hit's material, which run with
- * "runFn" from "getRunMaterialGraphFn" and are found by the material's index in "graphIndices":
- * `fn applyMaterialGraph( hit, vertexData, normal: vec3f, shadingNormal: vec3f, view: vec3f, result: ptr<function, MaterialGraphResult> )`
- *
- * "result" holds the surface inputs from the material, which the graphs replace. "normal" is the interpolated normal
- * and "shadingNormal" the normal on the side hit after the material's normal maps.
- *
- * @param {Function} runFn
- * @param {StorageBufferNode} graphIndices
- * @returns {Function}
- */
-export function getApplyMaterialGraphFn( runFn, graphIndices ) {
-
+	const runFn = getRunMaterialGraphFn( graphs, cameraUniforms );
 	return wgslTagFn/* wgsl */`
-		fn applyMaterialGraph(
+		fn evaluateMaterialGraph(
 			hit: ${ hitRecordStruct },
 			vertexData: ${ attributesStruct },
-			normal: vec3f,
 			shadingNormal: vec3f,
 			view: vec3f,
 			result: ptr<function, ${ materialGraphResultStruct }>,
@@ -315,7 +239,7 @@ export function getApplyMaterialGraphFn( runFn, graphIndices ) {
 			input.attributesOffset = objectInfo.attributesOffset;
 
 			input.position = ( objectInfo.inverseMatrixWorld * vec4f( vertexData.position.xyz, 1.0 ) ).xyz;
-			input.normal = normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( normal, 0.0 ) ).xyz );
+			input.normal = normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( vertexData.normal.xyz, 0.0 ) ).xyz );
 			input.tangent = vec4f( ( objectInfo.inverseMatrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 			input.uv = ${ getUvFromChannel }( vertexData, 0 );
 			input.uv1 = ${ getUvFromChannel }( vertexData, 1 << 23 );
@@ -328,20 +252,33 @@ export function getApplyMaterialGraphFn( runFn, graphIndices ) {
 
 }
 
-/**
- * The "applyMaterialGraph" function of a shading model without material graphs, which leaves the surface inputs as
- * they are.
- */
-export const noMaterialGraphFn = /* @__PURE__ */ wgslTagFn/* wgsl */`
-	fn applyMaterialGraph(
-		hit: ${ hitRecordStruct },
-		vertexData: ${ attributesStruct },
-		normal: vec3f,
-		shadingNormal: vec3f,
-		view: vec3f,
-		result: ptr<function, ${ materialGraphResultStruct }>,
-	) -> void {}
-`;
+// Returns the function running graph "graph" of "graphs", a switch with a case per material calling the functions
+// three.js builds for its outputs:
+// `fn runMaterialGraph( graph: i32, input: MaterialGraphInput, result: ptr<function, MaterialGraphResult> )`
+function getRunMaterialGraphFn( graphs, cameraUniforms ) {
+
+	const parts = [
+		'fn runMaterialGraph( graph: i32, input: ', materialGraphInputStruct,
+		', result: ptr<function, ', materialGraphResultStruct, '> ) -> void {\n\nswitch ( graph ) {\n\n',
+	];
+
+	graphs.forEach( ( { material, outputs }, graph ) => {
+
+		parts.push( `case ${ graph }: {\n\n` );
+		outputs.forEach( ( { name, type, node } ) => {
+
+			const call = buildGraphCall( material, node, type, cameraUniforms, `materialGraph${ graph }_${ name }` );
+			parts.push( `result.${ name } = `, call, ';\n' );
+
+		} );
+		parts.push( '\n}\n\n' );
+
+	} );
+
+	parts.push( 'default: {}\n\n}\n\n}\n' );
+	return joinTagFn( parts );
+
+}
 
 // Returns a call of a TSL function evaluating "node", a graph of "material", as "type" from the "input" struct. three.js
 // builds it as when rasterizing the material, with the hit's values in place of the vertex stage, object and camera

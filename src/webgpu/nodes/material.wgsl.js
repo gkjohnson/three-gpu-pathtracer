@@ -24,6 +24,9 @@ import {
 import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { materialGraphResultStruct } from '../materialGraphs/materialGraph.wgsl.js';
+import { ifFeature } from './features.js';
+
+const evaluateMaterialGraph = /* @__PURE__ */ contextProxyFn( 'shadingModel.materialGraphs.evaluateFn' );
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
 // the normal towards the geometry normal such that the perfect reflection ray is just above the
@@ -145,7 +148,6 @@ export const getSurfaceRecordFunc = ( {
 	getTextureSize,
 	getUvFromChannel,
 	getColor,
-	applyMaterialGraph,
 } ) => wgslTagFn/* wgsl */`
 	${ [ constants ] }
 	fn getSurfaceRecord(
@@ -419,18 +421,20 @@ export const getSurfaceRecordFunc = ( {
 		}
 
 		// a node material's TSL graphs replace the inputs they have outputs for
-		var graph: ${ materialGraphResultStruct };
-		graph.color = albedo.rgb;
-		graph.opacity = albedo.a;
-		graph.roughness = roughness;
-		graph.metalness = metalness;
-		graph.emission = emission;
-		${ applyMaterialGraph }( hit, vertexData, baseNormal, normal, view, &graph );
+		${ ifFeature( 'MATERIAL_GRAPHS' )/* wgsl */`
+			var graph: ${ materialGraphResultStruct };
+			graph.color = albedo.rgb;
+			graph.opacity = albedo.a;
+			graph.roughness = roughness;
+			graph.metalness = metalness;
+			graph.emission = emission;
+			${ evaluateMaterialGraph }( hit, vertexData, normal, view, &graph );
 
-		albedo = vec4f( graph.color, graph.opacity );
-		roughness = graph.roughness;
-		metalness = graph.metalness;
-		emission = graph.emission;
+			albedo = vec4f( graph.color, graph.opacity );
+			roughness = graph.roughness;
+			metalness = graph.metalness;
+			emission = graph.emission;
+		` }
 
 		// adjust the surface basis to be oriented along the anisotropic vector
 		let anisotropyStrength = length( anisotropyDirVec );

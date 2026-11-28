@@ -1196,12 +1196,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		if ( this.camera ) {
-
-			shadingModel.updateCamera( this.camera );
-
-		}
-
+		this._updateMaterialGraphsCamera();
 		this._pathTracer.setShadingModel( shadingModel );
 		this.reset();
 
@@ -1282,7 +1277,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
-		this._shadingModel.updateCamera( camera );
+		this._updateMaterialGraphsCamera();
 		this._updateCameraInVolume();
 		this._pathTracer.rebuild();
 		this.reset();
@@ -1310,6 +1305,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._updateMaterialGraphsCamera();
 		this._updateCameraInVolume();
 		this.reset();
 
@@ -1342,9 +1338,21 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		this._shadingModel.updateCamera( this.camera );
+		this._updateMaterialGraphsCamera();
 		this._updateCameraInVolume();
 		this.reset();
+
+	}
+
+	// Passes the camera to the shading model's material graphs, which read it in place of three.js' camera nodes
+	_updateMaterialGraphsCamera() {
+
+		const { materialGraphs } = this._shadingModel;
+		if ( materialGraphs && this.camera ) {
+
+			materialGraphs.updateCamera( this.camera );
+
+		}
 
 	}
 

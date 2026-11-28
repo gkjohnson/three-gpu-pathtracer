@@ -1,28 +1,47 @@
 /** @import { Camera, Material } from 'three/webgpu' */
-import { StorageBufferAttribute } from 'three/webgpu';
-import { storage } from 'three/tsl';
+import { Matrix3, Matrix4, StorageBufferAttribute, Vector3 } from 'three/webgpu';
 import {
-	GRAPH_OUTPUTS, createCameraUniforms, getApplyMaterialGraphFn, getRunMaterialGraphFn, updateCameraUniforms,
-} from './materialGraph.wgsl.js';
+	storage, uniform, cameraViewMatrix, cameraWorldMatrix, cameraNormalMatrix, cameraPosition, cameraProjectionMatrix,
+	cameraProjectionMatrixInverse, cameraNear, cameraFar,
+} from 'three/tsl';
+import { GRAPH_OUTPUTS, getEvaluateMaterialGraphFn } from './materialGraph.wgsl.js';
 
 /**
- * The TSL graphs of node materials, built into the kernels by three.js. Assigned to a shading model with
- * `setMaterialGraphs`, whose surface record calls the WGSL function from `getApplyFn` to replace the surface inputs a
- * material has graphs for in `GRAPH_OUTPUTS`.
+ * Builds the TSL graphs of node materials into the kernels with three.js. Assigned to a shading model with
+ * `setMaterialGraphs`, which passes it the materials with `update`. The path tracer passes it the camera with
+ * `updateCamera`.
+ *
+ * The surface record calls the WGSL function from `getEvaluateFn` at each hit, which replaces the surface inputs in
+ * "result" that the hit's material has graphs for, listed in `GRAPH_OUTPUTS`:
+ * `fn evaluateMaterialGraph( hit, vertexData, shadingNormal: vec3f, view: vec3f, result: ptr<function, MaterialGraphResult> )`
+ * "shadingNormal" is the normal on the side hit after the material's normal maps, and "view" the direction the ray
+ * came from.
  */
 export class MaterialGraphs {
 
 	constructor() {
 
+		// each material with graphs and its "outputs", each a "GRAPH_OUTPUTS" entry with its graph's "node"
 		this.graphs = [];
-		this.cameraUniforms = createCameraUniforms();
+		this.evaluateFn = null;
 
-		// the graph index of each material by its index in the shading model, or -1 without graphs. At least two long
-		// so TSL doesn't make it a scalar
+		// the uniforms replacing three.js' camera nodes, by node
+		this.cameraUniforms = new Map( [
+			[ cameraViewMatrix, uniform( new Matrix4() ) ],
+			[ cameraWorldMatrix, uniform( new Matrix4() ) ],
+			[ cameraNormalMatrix, uniform( new Matrix3() ) ],
+			[ cameraPosition, uniform( new Vector3() ) ],
+			[ cameraProjectionMatrix, uniform( new Matrix4() ) ],
+			[ cameraProjectionMatrixInverse, uniform( new Matrix4() ) ],
+			[ cameraNear, uniform( 0 ) ],
+			[ cameraFar, uniform( 0 ) ],
+		] );
+
+		// the index in "graphs" of each material by its index in the shading model, or -1 without graphs. At least
+		// two long so TSL doesn't make it a scalar
 		this.graphIndices = storage( new StorageBufferAttribute( new Int32Array( 2 ).fill( - 1 ), 1 ), 'int' )
 			.toReadOnly()
 			.setName( 'materialGraphIndices' );
-		this.applyFn = getApplyMaterialGraphFn( getRunMaterialGraphFn( [], this.cameraUniforms ), this.graphIndices );
 
 	}
 
@@ -33,13 +52,21 @@ export class MaterialGraphs {
 	 */
 	updateCamera( camera ) {
 
-		updateCameraUniforms( this.cameraUniforms, camera );
+		const { cameraUniforms } = this;
+		cameraUniforms.get( cameraViewMatrix ).value.copy( camera.matrixWorldInverse );
+		cameraUniforms.get( cameraWorldMatrix ).value.copy( camera.matrixWorld );
+		cameraUniforms.get( cameraNormalMatrix ).value.getNormalMatrix( camera.matrixWorldInverse );
+		cameraUniforms.get( cameraPosition ).value.setFromMatrixPosition( camera.matrixWorld );
+		cameraUniforms.get( cameraProjectionMatrix ).value.copy( camera.projectionMatrix );
+		cameraUniforms.get( cameraProjectionMatrixInverse ).value.copy( camera.projectionMatrixInverse );
+		cameraUniforms.get( cameraNear ).value = camera.near ?? 0;
+		cameraUniforms.get( cameraFar ).value = camera.far ?? 0;
 
 	}
 
 	/**
-	 * Collects the graphs of the materials, in the shading model's order. Returns whether they changed, so the function
-	 * from `getApplyFn` did and the kernels need rebuilding. Changed uniform values don't need a rebuild.
+	 * Collects the graphs of the materials, in the shading model's order. Returns whether they changed, so the
+	 * function from `getEvaluateFn` did and the kernels need rebuilding. Changed uniform values don't need a rebuild.
 	 *
 	 * @param {Array<Material>} materials
 	 * @returns {boolean}
@@ -82,11 +109,11 @@ export class MaterialGraphs {
 
 		}
 
-		const changed = ! areGraphsEqual( graphs, this.graphs );
+		const changed = this.evaluateFn === null || ! areGraphsEqual( graphs, this.graphs );
 		this.graphs = graphs;
 		if ( changed ) {
 
-			this.applyFn = getApplyMaterialGraphFn( getRunMaterialGraphFn( graphs, this.cameraUniforms ), this.graphIndices );
+			this.evaluateFn = getEvaluateMaterialGraphFn( graphs, this.graphIndices, this.cameraUniforms );
 
 		}
 
@@ -95,13 +122,13 @@ export class MaterialGraphs {
 	}
 
 	/**
-	 * Returns the WGSL function applying a hit's material graphs. Get it again when `update` returns true.
+	 * Returns the "evaluateMaterialGraph" WGSL function. Get it again when `update` returns true.
 	 *
 	 * @returns {Function}
 	 */
-	getApplyFn() {
+	getEvaluateFn() {
 
-		return this.applyFn;
+		return this.evaluateFn;
 
 	}
 

@@ -87,7 +87,6 @@ export class GLTFShadingModel extends ShadingModel {
 			getTextureSize: fns.getTextureSize,
 			getUvFromChannel: contextProxyFn( 'bvhData.fns.getUvFromChannel' ),
 			getColor: contextProxyFn( 'bvhData.fns.getColor' ),
-			applyMaterialGraph: contextProxyFn( 'shadingModel.fns.applyMaterialGraph' ),
 		} );
 
 		const surfaceRecordStruct = structs.surfaceRecord;
