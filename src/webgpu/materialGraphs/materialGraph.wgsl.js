@@ -13,17 +13,22 @@ const materialsStorage = /* @__PURE__ */ contextProxy( 'shadingModel.storage.mat
 export function getEvaluateMaterialGraphFn( graphs ) {
 
 	// a switch case per material, setting each field it has a graph for
-	const cases = [];
-	graphs.forEach( ( { material, outputs }, index ) => {
+	const cases = graphs.map( ( { material, outputs }, index ) => {
 
-		cases.push( `case ${ index }: {\n` );
-		outputs.forEach( ( { field, type, node } ) => {
+		const assignments = outputs.map( ( { field, type, node } ) => {
 
 			const graphFn = getMaterialGraphFn( `materialGraph${ index }_${ field }`, material, node, type );
-			cases.push( `surf.${ field } = `, graphFn, '( hit, vertexData, objectInfo, view, surf.normal );\n' );
+			return wgslTagCode/* wgsl */`surf.${ field } = ${ graphFn }( hit, vertexData, objectInfo, view, surf.normal );`;
 
 		} );
-		cases.push( '}\n' );
+
+		return wgslTagCode/* wgsl */`
+			case ${ index }: {
+
+				${ joinCode( assignments ) }
+
+			}
+		`;
 
 	} );
 
@@ -38,7 +43,7 @@ export function getEvaluateMaterialGraphFn( graphs ) {
 			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
 			switch ( ${ materialsStorage }[ objectInfo.materialIndex ].graphIndex ) {
 
-				${ joinTagCode( cases ) }
+				${ joinCode( cases ) }
 				default: {}
 
 			}
@@ -48,26 +53,9 @@ export function getEvaluateMaterialGraphFn( graphs ) {
 
 }
 
-// joins strings and nodes into a "wgslTagCode"
-function joinTagCode( parts ) {
+// joins "wgslTagCode" snippets into one
+function joinCode( codes ) {
 
-	const tokens = [ '' ];
-	const args = [];
-	parts.forEach( part => {
-
-		if ( typeof part === 'string' ) {
-
-			tokens[ tokens.length - 1 ] += part;
-
-		} else {
-
-			args.push( part );
-			tokens.push( '' );
-
-		}
-
-	} );
-
-	return wgslTagCode( tokens, ...args );
+	return codes.reduce( ( joined, code ) => wgslTagCode/* wgsl */`${ joined }\n${ code }`, '' );
 
 }
