@@ -1,4 +1,4 @@
-/** @import { Camera, Material } from 'three/webgpu' */
+/** @import { Camera, Material, Texture } from 'three/webgpu' */
 import { StorageBufferAttribute } from 'three/webgpu';
 import { storage } from 'three/tsl';
 import {
@@ -15,6 +15,7 @@ export class MaterialGraphs {
 	constructor() {
 
 		this.graphs = [];
+		this.sampleTexel = null;
 		this.cameraUniforms = createCameraUniforms();
 
 		// the graph index of each material by its index in the shading model, or -1 without graphs. At least two long
@@ -22,7 +23,7 @@ export class MaterialGraphs {
 		this.graphIndices = storage( new StorageBufferAttribute( new Int32Array( 2 ).fill( - 1 ), 1 ), 'int' )
 			.toReadOnly()
 			.setName( 'materialGraphIndices' );
-		this.applyFn = getApplyMaterialGraphFn( getRunMaterialGraphFn( [], this.cameraUniforms ), this.graphIndices );
+		this.applyFn = this.getApplyMaterialGraphFn();
 
 	}
 
@@ -39,12 +40,16 @@ export class MaterialGraphs {
 
 	/**
 	 * Collects the graphs of the materials, in the shading model's order. Returns whether they changed, so the function
-	 * from `getApplyFn` did and the kernels need rebuilding. Changed uniform values don't need a rebuild.
+	 * from `getApplyFn` did and the kernels need rebuilding. Changed uniform values don't need a rebuild. "addTexture"
+	 * adds a texture a graph samples to the texture atlas, returning the descriptor "sampleTexel" samples it with.
 	 *
 	 * @param {Array<Material>} materials
+	 * @param {Object} textures
+	 * @param {function(Texture):number} textures.addTexture
+	 * @param {Function} textures.sampleTexel
 	 * @returns {boolean}
 	 */
-	update( materials ) {
+	update( materials, { addTexture, sampleTexel } ) {
 
 		const graphs = [];
 		const indices = new Int32Array( Math.max( materials.length, 2 ) ).fill( - 1 );
@@ -62,8 +67,12 @@ export class MaterialGraphs {
 
 			if ( outputs.length > 0 ) {
 
+				// the descriptor each texture node is sampled with from the atlas
+				const textures = new Map();
+				getTextureNodes( outputs ).forEach( node => textures.set( node, addTexture( node.value ) ) );
+
 				indices[ i ] = graphs.length;
-				graphs.push( { material, outputs } );
+				graphs.push( { material, outputs, textures } );
 
 			}
 
@@ -82,11 +91,12 @@ export class MaterialGraphs {
 
 		}
 
-		const changed = ! areGraphsEqual( graphs, this.graphs );
+		const changed = sampleTexel !== this.sampleTexel || ! areGraphsEqual( graphs, this.graphs );
 		this.graphs = graphs;
+		this.sampleTexel = sampleTexel;
 		if ( changed ) {
 
-			this.applyFn = getApplyMaterialGraphFn( getRunMaterialGraphFn( graphs, this.cameraUniforms ), this.graphIndices );
+			this.applyFn = this.getApplyMaterialGraphFn();
 
 		}
 
@@ -105,16 +115,70 @@ export class MaterialGraphs {
 
 	}
 
+	// builds the function applying the current graphs
+	getApplyMaterialGraphFn() {
+
+		const runFn = getRunMaterialGraphFn( this.graphs, this.cameraUniforms, this.sampleTexel );
+		return getApplyMaterialGraphFn( runFn, this.graphIndices );
+
+	}
+
 }
 
-// whether two lists of graphs have the same materials and outputs, with the same nodes
+// whether two lists of graphs have the same materials and outputs, with the same nodes, and sample the same textures
+// with the same descriptors
 function areGraphsEqual( a, b ) {
 
-	return a.length === b.length && a.every( ( { material, outputs }, i ) => {
+	return a.length === b.length && a.every( ( graph, i ) => {
 
-		const other = b[ i ].outputs;
-		return material === b[ i ].material && outputs.length === other.length && outputs.every( ( output, j ) => output.node === other[ j ].node && output.name === other[ j ].name );
+		const other = b[ i ];
+		const sameOutputs = graph.outputs.length === other.outputs.length && graph.outputs.every( ( output, j ) => {
+
+			return output.node === other.outputs[ j ].node && output.name === other.outputs[ j ].name;
+
+		} );
+
+		const sameTextures = graph.textures.size === other.textures.size && [ ...graph.textures ].every( ( [ node, descriptor ] ) => {
+
+			return other.textures.get( node ) === descriptor;
+
+		} );
+
+		return graph.material === other.material && sameOutputs && sameTextures;
 
 	} );
+
+}
+
+// the texture nodes the outputs' graphs read, not counting those only created inside TSL function bodies
+function getTextureNodes( outputs ) {
+
+	const textures = new Set();
+	const seen = new Set();
+	const traverse = node => {
+
+		if ( ! node || ! node.isNode || seen.has( node ) ) {
+
+			return;
+
+		}
+
+		seen.add( node );
+		if ( node.isTextureNode ) {
+
+			textures.add( node );
+
+		}
+
+		for ( const child of node.getChildren() ) {
+
+			traverse( child );
+
+		}
+
+	};
+
+	outputs.forEach( ( { node } ) => traverse( node ) );
+	return textures;
 
 }
