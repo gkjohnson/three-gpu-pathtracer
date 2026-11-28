@@ -320,6 +320,23 @@ export const wrapTexelIndexFunc = wgslFn( /* wgsl */ `
 
 ` );
 
+// Decodes an sRGB encoded texel to linear, leaving alpha as is. The exact piecewise transfer, matching the
+// decode of the sRGB texture formats
+export const srgbTexelToLinearFunc = wgslFn( /* wgsl */ `
+
+	fn srgbTexelToLinear( c: vec4f ) -> vec4f {
+
+		let rgb = select(
+			pow( ( c.rgb + vec3f( 0.055 ) ) / 1.055, vec3f( 2.4 ) ),
+			c.rgb / 12.92,
+			c.rgb <= vec3f( 0.04045 ),
+		);
+		return vec4f( rgb, c.a );
+
+	}
+
+` );
+
 // Builds getTextureSize, the size in texels of the texture a "*Map" descriptor refers to, from the same
 // textureInfo uniform sampleTexel reads
 export const getTextureSizeFunc = textureInfoUniform => wgslTagFn/* wgsl */ `
@@ -352,6 +369,9 @@ export const sampleTexelFunc = ( textureInfoUniform, atlas, name = 'sampleTexel'
 		let size   = vec2f( vec2u( info.y & 0xFFFFu, info.y >> 16u ) );
 		let page   = i32( info.z & 0xFFFFu );
 
+		// textures stored sRGB encoded are decoded per tap so they filter in linear, see "ATLAS_SRGB_FLAG"
+		let isSRGB = ( info.w & 1u ) != 0u;
+
 		// wrap is applied on the logical uv first, then remapped into the tile
 		let wrappedUv = vec2f(
 			${ applyWrapFunc }( uv.x, wrapS ),
@@ -361,7 +381,8 @@ export const sampleTexelFunc = ( textureInfoUniform, atlas, name = 'sampleTexel'
 		if ( nearest == 1 ) {
 
 			let tileTexel = clamp( vec2i( wrappedUv * size ), vec2i( 0 ), vec2i( size ) - vec2i( 1 ) );
-			return textureLoad( ${ atlas }, vec2i( offset ) + tileTexel, page, 0 );
+			let texel = textureLoad( ${ atlas }, vec2i( offset ) + tileTexel, page, 0 );
+			return select( texel, ${ srgbTexelToLinearFunc }( texel ), isSRGB );
 
 		} else {
 
@@ -380,10 +401,18 @@ export const sampleTexelFunc = ( textureInfoUniform, atlas, name = 'sampleTexel'
 			let y1 = ${ wrapTexelIndexFunc }( base.y + 1, intSize.y, wrapT );
 
 			let tile = vec2i( offset );
-			let c00 = textureLoad( ${ atlas }, tile + vec2i( x0, y0 ), page, 0 );
-			let c10 = textureLoad( ${ atlas }, tile + vec2i( x1, y0 ), page, 0 );
-			let c01 = textureLoad( ${ atlas }, tile + vec2i( x0, y1 ), page, 0 );
-			let c11 = textureLoad( ${ atlas }, tile + vec2i( x1, y1 ), page, 0 );
+			var c00 = textureLoad( ${ atlas }, tile + vec2i( x0, y0 ), page, 0 );
+			var c10 = textureLoad( ${ atlas }, tile + vec2i( x1, y0 ), page, 0 );
+			var c01 = textureLoad( ${ atlas }, tile + vec2i( x0, y1 ), page, 0 );
+			var c11 = textureLoad( ${ atlas }, tile + vec2i( x1, y1 ), page, 0 );
+			if ( isSRGB ) {
+
+				c00 = ${ srgbTexelToLinearFunc }( c00 );
+				c10 = ${ srgbTexelToLinearFunc }( c10 );
+				c01 = ${ srgbTexelToLinearFunc }( c01 );
+				c11 = ${ srgbTexelToLinearFunc }( c11 );
+
+			}
 
 			return mix(
 				mix( c00, c10, f.x ),

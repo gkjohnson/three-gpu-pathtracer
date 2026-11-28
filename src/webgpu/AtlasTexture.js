@@ -7,6 +7,11 @@ import {
 	Color,
 	Vector4,
 	Matrix3,
+	ColorManagement,
+	LinearSRGBColorSpace,
+	NoColorSpace,
+	SRGBColorSpace,
+	UnsignedByteType,
 } from 'three/webgpu';
 
 const _prevClearColor = new Color();
@@ -14,9 +19,12 @@ const _prevMatrix = new Matrix3();
 
 function getTextureHash( texture ) {
 
-	return `${ texture.source.uuid }:${ texture.source.version }`;
+	return `${ texture.source.uuid }:${ texture.source.version }:${ texture.colorSpace }`;
 
 }
+
+// the "textureInfo" flag marking a texture stored sRGB encoded, which the sampler decodes per tap
+export const ATLAS_SRGB_FLAG = 1;
 
 // TODO: consider adding a "waste map"
 // TODO: consider using "best fit"
@@ -321,6 +329,20 @@ export class AtlasTexture {
 
 	}
 
+	// Whether a texture is copied into the atlas as its raw sRGB encoded bytes rather than decoded to linear.
+	// Eight bits of linear values keep only a handful of the darkest sRGB levels, banding dark colors, while the
+	// encoded bytes are an exact copy of the source. The sampler decodes them back to linear. Only applies to an
+	// eight bit atlas, since a float atlas holds linear values precisely, and to a linear sRGB working color
+	// space, the only one the sampler decodes to.
+	_isStoredEncoded( texture ) {
+
+		return ! texture.isRenderTargetTexture
+			&& texture.colorSpace === SRGBColorSpace
+			&& this.texture.type === UnsignedByteType
+			&& ColorManagement.workingColorSpace === LinearSRGBColorSpace;
+
+	}
+
 	_packTextures( textures, width, height ) {
 
 		// use each texture's native size, clamped so it can physically fit a page
@@ -372,7 +394,8 @@ export class AtlasTexture {
 
 			}
 
-			placements[ item.index ] = { x: placed.x, y: placed.y, w: item.w, h: item.h, page };
+			const srgb = this._isStoredEncoded( textures[ item.index ] );
+			placements[ item.index ] = { x: placed.x, y: placed.y, w: item.w, h: item.h, page, srgb };
 
 		}
 
@@ -389,13 +412,13 @@ export class AtlasTexture {
 			// offsetX and Y in pixels (16 bits + 16 bits)
 			// width and height in pixels (16 bit + 16 bits)
 			// page + reserved (16 bits)
-			// reserved
-			const { x, y, w, h, page } = placements[ i ];
+			// flags, see ATLAS_SRGB_FLAG
+			const { x, y, w, h, page, srgb } = placements[ i ];
 			const v = new Vector4();
 			v.x = ( x & 0xFFFF ) | ( ( y & 0xFFFF ) << 16 );
 			v.y = ( w & 0xFFFF ) | ( ( h & 0xFFFF ) << 16 );
 			v.z = page & 0xFFFF;
-			v.w = 0;
+			v.w = srgb ? ATLAS_SRGB_FLAG : 0;
 			info.push( v );
 
 		}
@@ -462,10 +485,16 @@ export class AtlasTexture {
 
 			} else {
 
-				// Clone the source so we get an independent texture handle
+				// Clone the source so we get an independent texture handle. A texture stored encoded is read
+				// without its color space, so its bytes pass through to the atlas unchanged
 				const clone = texture.clone();
 				clone.matrixAutoUpdate = false;
 				clone.matrix.identity();
+				if ( placements[ i ].srgb ) {
+
+					clone.colorSpace = NoColorSpace;
+
+				}
 
 				quadMesh.material.map = clone;
 				quadMesh.render( renderer );
