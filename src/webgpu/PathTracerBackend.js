@@ -122,6 +122,11 @@ export class PathTracerBackend {
 
 	}
 
+	// the camera's uniforms, which the material graphs read in place of three.js' camera nodes
+	setCameraUniforms( cameraUniforms ) {
+
+	}
+
 	setFilterGlossy( value ) {
 
 	}

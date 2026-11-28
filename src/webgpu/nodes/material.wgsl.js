@@ -23,7 +23,6 @@ import {
 } from './ggx.wgsl.js';
 import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
-import { materialGraphResultStruct } from '../materialGraphs/materialGraph.wgsl.js';
 import { ifFeature } from './features.js';
 
 const evaluateMaterialGraph = /* @__PURE__ */ contextProxyFn( 'shadingModel.materialGraphs.evaluateFn' );
@@ -420,22 +419,6 @@ export const getSurfaceRecordFunc = ( {
 
 		}
 
-		// a node material's TSL graphs replace the inputs they have outputs for
-		${ ifFeature( 'MATERIAL_GRAPHS' )/* wgsl */`
-			var graph: ${ materialGraphResultStruct };
-			graph.color = albedo.rgb;
-			graph.opacity = albedo.a;
-			graph.roughness = roughness;
-			graph.metalness = metalness;
-			graph.emission = emission;
-			${ evaluateMaterialGraph }( hit, vertexData, normal, view, &graph );
-
-			albedo = vec4f( graph.color, graph.opacity );
-			roughness = graph.roughness;
-			metalness = graph.metalness;
-			emission = graph.emission;
-		` }
-
 		// adjust the surface basis to be oriented along the anisotropic vector
 		let anisotropyStrength = length( anisotropyDirVec );
 		var surfaceBasis = ${ getBasisFromNormalFunc }( normal );
@@ -466,8 +449,13 @@ export const getSurfaceRecordFunc = ( {
 		surf.diffuseRoughness = material.diffuseRoughness;
 		surf.color = albedo.rgb;
 		surf.emission = emission;
+		surf.opacity = albedo.a;
+		surf.roughness = roughness;
 
-		surf.opacity = select( 1.0, albedo.a, material.transparent != 0 );
+		// a node material's TSL graphs replace the surface inputs they have outputs for
+		${ ifFeature( 'MATERIAL_GRAPHS' )/* wgsl */`${ evaluateMaterialGraph }( hit, vertexData, view, &surf );` }
+
+		surf.opacity = select( 1.0, surf.opacity, material.transparent != 0 );
 		surf.matte = material.matte != 0;
 
 		surf.ior = material.ior;
@@ -489,7 +477,7 @@ export const getSurfaceRecordFunc = ( {
 		surf.sheenColor = sheenColor;
 
 		let minRoughness = max( MIN_ROUGHNESS, blurRoughness );
-		surf.roughness = clamp( roughness, minRoughness, 1.0 );
+		surf.roughness = clamp( surf.roughness, minRoughness, 1.0 );
 		surf.clearcoatRoughness = clamp( clearcoatRoughness, minRoughness, 1.0 );
 		surf.sheenRoughness = clamp( sheenRoughness, minRoughness, 1.0 );
 		surf.anisotropy = anisotropyStrength;

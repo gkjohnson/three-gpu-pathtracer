@@ -1,9 +1,10 @@
-/** @import { Material, StorageBufferNode, UniformNode } from 'three/webgpu' */
+/** @import { Material, StorageBufferNode } from 'three/webgpu' */
 import { BufferAttribute, BufferGeometry, Node, PerspectiveCamera, StructTypeNode, VaryingNode } from 'three/webgpu';
 import {
 	Fn, context, expression, overrideNodes, float, mat3, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
 	modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, modelPosition, modelScale, modelDirection, modelViewPosition,
-	cameraViewMatrix,
+	cameraViewMatrix, cameraWorldMatrix, cameraNormalMatrix, cameraPosition, cameraProjectionMatrix,
+	cameraProjectionMatrixInverse, cameraNear, cameraFar,
 } from 'three/tsl';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { getBasisFromNormalFunc } from '../nodes/utils.wgsl.js';
@@ -83,6 +84,7 @@ const GRAPH_HIT_VALUES = [
 const GRAPH_INPUTS = [ ...GRAPH_ATTRIBUTES, ...GRAPH_HIT_VALUES ];
 
 const attributesStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.attributes' );
+const surfaceRecordStruct = /* @__PURE__ */ contextProxy( 'shadingModel.structs.surfaceRecord' );
 const objectsStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.objects' );
 const getVertex = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getVertex' );
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
@@ -132,7 +134,7 @@ GRAPH_ATTRIBUTES.forEach( ( { name, type } ) => {
 } );
 
 // The camera the graphs are built with. three.js' camera nodes read it to find their types, and are replaced by the
-// camera uniforms of "MaterialGraphs"
+// camera uniforms of the kernel context
 const graphCamera = /* @__PURE__ */ new PerspectiveCamera();
 
 // Builds "node" with the builder's material, geometry and camera set, since three.js' nodes read them while building,
@@ -176,7 +178,7 @@ class MaterialGraphBuildNode extends Node {
 
 }
 
-// The surface inputs a graph can set: the node material's property, the field of the result it writes and its type
+// The surface record fields a graph can set: the node material's property, the field it writes and its type
 export const GRAPH_OUTPUTS = [
 	{ key: 'colorNode', name: 'color', type: 'vec3' },
 	{ key: 'opacityNode', name: 'opacity', type: 'float' },
@@ -190,34 +192,27 @@ const materialGraphInputStruct = new StructTypeNode(
 	'MaterialGraphInput',
 );
 
-export const materialGraphResultStruct = new StructTypeNode(
-	Object.fromEntries( GRAPH_OUTPUTS.map( ( { name, type } ) => [ name, type ] ) ),
-	'MaterialGraphResult',
-);
-
 /**
  * Returns the "evaluateMaterialGraph" WGSL function described in "MaterialGraphs", which fills the graph inputs from
  * the hit and runs the graphs of its material.
  *
  * "graphs" holds each "material" and its "outputs", each a "GRAPH_OUTPUTS" entry with its graph's "node".
  * "graphIndices" holds the index in "graphs" of each material, by its index in the shading model, or -1 without
- * graphs. "cameraUniforms" replace three.js' camera nodes, by node.
+ * graphs.
  *
  * @param {Array<{material:Material,outputs:Array<Object>}>} graphs
  * @param {StorageBufferNode} graphIndices
- * @param {Map<Node,UniformNode>} cameraUniforms
  * @returns {Function}
  */
-export function getEvaluateMaterialGraphFn( graphs, graphIndices, cameraUniforms ) {
+export function getEvaluateMaterialGraphFn( graphs, graphIndices ) {
 
-	const runFn = getRunMaterialGraphFn( graphs, cameraUniforms );
+	const runFn = getRunMaterialGraphFn( graphs );
 	return wgslTagFn/* wgsl */`
 		fn evaluateMaterialGraph(
 			hit: ${ hitRecordStruct },
 			vertexData: ${ attributesStruct },
-			shadingNormal: vec3f,
 			view: vec3f,
-			result: ptr<function, ${ materialGraphResultStruct }>,
+			surf: ptr<function, ${ surfaceRecordStruct }>,
 		) -> void {
 
 			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
@@ -231,7 +226,7 @@ export function getEvaluateMaterialGraphFn( graphs, graphIndices, cameraUniforms
 			var input: ${ materialGraphInputStruct };
 			input.matrixWorld = objectInfo.matrixWorld;
 			input.matrixWorldInverse = objectInfo.inverseMatrixWorld;
-			input.shadingNormal = shadingNormal;
+			input.shadingNormal = surf.normal;
 			input.faceNormal = hit.normal;
 			input.viewDirection = view;
 			input.frontFacing = hit.side == 1.0;
@@ -245,7 +240,7 @@ export function getEvaluateMaterialGraphFn( graphs, graphIndices, cameraUniforms
 			input.uv1 = ${ getUvFromChannel }( vertexData, 1 << 23 );
 			input.color = ${ getColor }( vertexData );
 
-			${ runFn }( graph, input, result );
+			${ runFn }( graph, input, surf );
 
 		}
 	`;
@@ -254,12 +249,12 @@ export function getEvaluateMaterialGraphFn( graphs, graphIndices, cameraUniforms
 
 // Returns the function running graph "graph" of "graphs", a switch with a case per material calling the functions
 // three.js builds for its outputs:
-// `fn runMaterialGraph( graph: i32, input: MaterialGraphInput, result: ptr<function, MaterialGraphResult> )`
-function getRunMaterialGraphFn( graphs, cameraUniforms ) {
+// `fn runMaterialGraph( graph: i32, input: MaterialGraphInput, surf: ptr<function, SurfaceRecord> )`
+function getRunMaterialGraphFn( graphs ) {
 
 	const parts = [
 		'fn runMaterialGraph( graph: i32, input: ', materialGraphInputStruct,
-		', result: ptr<function, ', materialGraphResultStruct, '> ) -> void {\n\nswitch ( graph ) {\n\n',
+		', surf: ptr<function, ', surfaceRecordStruct, '> ) -> void {\n\nswitch ( graph ) {\n\n',
 	];
 
 	graphs.forEach( ( { material, outputs }, graph ) => {
@@ -267,8 +262,8 @@ function getRunMaterialGraphFn( graphs, cameraUniforms ) {
 		parts.push( `case ${ graph }: {\n\n` );
 		outputs.forEach( ( { name, type, node } ) => {
 
-			const call = buildGraphCall( material, node, type, cameraUniforms, `materialGraph${ graph }_${ name }` );
-			parts.push( `result.${ name } = `, call, ';\n' );
+			const call = buildGraphCall( material, node, type, `materialGraph${ graph }_${ name }` );
+			parts.push( `surf.${ name } = `, call, ';\n' );
 
 		} );
 		parts.push( '\n}\n\n' );
@@ -281,8 +276,9 @@ function getRunMaterialGraphFn( graphs, cameraUniforms ) {
 }
 
 // Returns a call of a TSL function evaluating "node", a graph of "material", as "type" from the "input" struct. three.js
-// builds it as when rasterizing the material, with the hit's values in place of the vertex stage, object and camera
-function buildGraphCall( material, node, type, cameraUniforms, name ) {
+// builds it as when rasterizing the material, with the hit's values in place of the vertex stage, object and camera.
+// The camera's uniforms come from the kernel context's "camera"
+function buildGraphCall( material, node, type, name ) {
 
 	const fn = Fn( ( params, builder ) => {
 
@@ -292,11 +288,19 @@ function buildGraphCall( material, node, type, cameraUniforms, name ) {
 		GRAPH_INPUTS.forEach( ( input, i ) => inputs[ input.name ] = values[ i ] );
 
 		// the values three.js sets per object drawn, and reads from the rasterizer
+		const { camera } = builder.getContext();
 		const { matrixWorld } = inputs;
 		const objectPosition = matrixWorld.element( 3 ).xyz;
-		const viewMatrix = cameraUniforms.get( cameraViewMatrix );
+		const { viewMatrix } = camera;
 		const overrides = [
-			...cameraUniforms,
+			[ cameraViewMatrix, viewMatrix ],
+			[ cameraWorldMatrix, camera.worldMatrix ],
+			[ cameraNormalMatrix, camera.normalMatrix ],
+			[ cameraPosition, camera.position ],
+			[ cameraProjectionMatrix, camera.projectionMatrix ],
+			[ cameraProjectionMatrixInverse, camera.projectionMatrixInverse ],
+			[ cameraNear, camera.near ],
+			[ cameraFar, camera.far ],
 			[ modelWorldMatrix, matrixWorld ],
 			[ modelWorldMatrixInverse, inputs.matrixWorldInverse ],
 			[ modelNormalMatrix, mat3( inputs.matrixWorldInverse ).transpose() ],

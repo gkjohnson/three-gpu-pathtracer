@@ -167,6 +167,19 @@ export class WaveFrontPathTracer extends PathTracerBackend {
 
 	}
 
+	setCameraUniforms( cameraUniforms ) {
+
+		// the kernels with the shading model's surface record
+		this.logicKernel.context.camera = cameraUniforms;
+		this.materialKernel.context.camera = cameraUniforms;
+		this.traceRayKernel.context.camera = cameraUniforms;
+		this.traceShadowRayKernel.context.camera = cameraUniforms;
+		this.subsurfaceKernel.context.camera = cameraUniforms;
+		this.cameraMediumKernel.context.camera = cameraUniforms;
+		this.rebuild();
+
+	}
+
 	setFilterGlossy( value ) {
 
 		// the kernel takes the inverted threshold, mirroring Cycles

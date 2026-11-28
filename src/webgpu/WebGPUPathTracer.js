@@ -1,4 +1,4 @@
-import { Box3, DataTexture, RGBAFormat, EventDispatcher, LinearFilter, RepeatWrapping, ClampToEdgeWrapping, MathUtils, Vector2, Scene, PerspectiveCamera, Color, NoToneMapping, HalfFloatType, Timer, MeshBasicNodeMaterial, Matrix4, WebGPUCoordinateSystem, RenderTarget, NormalBlending, NoBlending } from 'three/webgpu';
+import { Box3, DataTexture, RGBAFormat, EventDispatcher, LinearFilter, RepeatWrapping, ClampToEdgeWrapping, MathUtils, Vector2, Vector3, Scene, PerspectiveCamera, Color, NoToneMapping, HalfFloatType, Timer, MeshBasicNodeMaterial, Matrix3, Matrix4, WebGPUCoordinateSystem, RenderTarget, NormalBlending, NoBlending } from 'three/webgpu';
 import { uv, uniform, varying } from 'three/tsl';
 import { SkinnedMeshBVH, MeshBVH, SAH } from 'three-mesh-bvh';
 import { ndcToCameraRay, rayStruct, wgslTagFn } from 'three-mesh-bvh/webgpu';
@@ -624,6 +624,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._pathTracer.setLightsInfo( this._lightsInfo );
 		this._pathTracer.setBackgroundInfo( this._backgroundInfo );
 		this._pathTracer.setShadingModel( this._shadingModel );
+		this._pathTracer.setCameraUniforms( this._cameraUniforms );
 		this._pathTracer.setRandom( this._random );
 		this._pathTracer.setMultipleImportanceSampling( this.multipleImportanceSampling );
 		this._pathTracer.setTransmissiveBackground( this._transmissiveBackground );
@@ -697,9 +698,22 @@ export class WebGPUPathTracer extends EventDispatcher {
 		this._lightsInfo = new LightsInfoNode();
 		this._backgroundInfo = new EquirectBackgroundInfo();
 
+		// the camera's values, which the material graphs read in place of three.js' camera nodes
+		this._cameraUniforms = {
+			viewMatrix: uniform( new Matrix4() ),
+			worldMatrix: uniform( new Matrix4() ),
+			normalMatrix: uniform( new Matrix3() ),
+			position: uniform( new Vector3() ),
+			projectionMatrix: uniform( new Matrix4() ),
+			projectionMatrixInverse: uniform( new Matrix4() ),
+			near: uniform( 0 ),
+			far: uniform( 0 ),
+		};
+
 		this._pathTracer = new WaveFrontPathTracer( renderer );
 		this._pathTracer.setLightsInfo( this._lightsInfo );
 		this._pathTracer.setBackgroundInfo( this._backgroundInfo );
+		this._pathTracer.setCameraUniforms( this._cameraUniforms );
 
 		// optional post passes, attached with "setDenoiser" / "setUpscaler"
 		this._denoiser = null;
@@ -1196,7 +1210,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		this._updateMaterialGraphsCamera();
 		this._pathTracer.setShadingModel( shadingModel );
 		this.reset();
 
@@ -1277,7 +1290,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
-		this._updateMaterialGraphsCamera();
+		this._updateCameraUniforms();
 		this._updateCameraInVolume();
 		this._pathTracer.rebuild();
 		this.reset();
@@ -1305,7 +1318,6 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		this._updateMaterialGraphsCamera();
 		this._updateCameraInVolume();
 		this.reset();
 
@@ -1338,21 +1350,24 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
-		this._updateMaterialGraphsCamera();
+		this._updateCameraUniforms();
 		this._updateCameraInVolume();
 		this.reset();
 
 	}
 
-	// Passes the camera to the shading model's material graphs, which read it in place of three.js' camera nodes
-	_updateMaterialGraphsCamera() {
+	// Copies the camera's values to the uniforms the material graphs read
+	_updateCameraUniforms() {
 
-		const { materialGraphs } = this._shadingModel;
-		if ( materialGraphs && this.camera ) {
-
-			materialGraphs.updateCamera( this.camera );
-
-		}
+		const { camera, _cameraUniforms } = this;
+		_cameraUniforms.viewMatrix.value.copy( camera.matrixWorldInverse );
+		_cameraUniforms.worldMatrix.value.copy( camera.matrixWorld );
+		_cameraUniforms.normalMatrix.value.getNormalMatrix( camera.matrixWorldInverse );
+		_cameraUniforms.position.value.setFromMatrixPosition( camera.matrixWorld );
+		_cameraUniforms.projectionMatrix.value.copy( camera.projectionMatrix );
+		_cameraUniforms.projectionMatrixInverse.value.copy( camera.projectionMatrixInverse );
+		_cameraUniforms.near.value = camera.near ?? 0;
+		_cameraUniforms.far.value = camera.far ?? 0;
 
 	}
 

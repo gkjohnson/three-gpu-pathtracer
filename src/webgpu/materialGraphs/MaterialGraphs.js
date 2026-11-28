@@ -1,21 +1,16 @@
-/** @import { Camera, Material } from 'three/webgpu' */
-import { Matrix3, Matrix4, StorageBufferAttribute, Vector3 } from 'three/webgpu';
-import {
-	storage, uniform, cameraViewMatrix, cameraWorldMatrix, cameraNormalMatrix, cameraPosition, cameraProjectionMatrix,
-	cameraProjectionMatrixInverse, cameraNear, cameraFar,
-} from 'three/tsl';
+/** @import { Material } from 'three/webgpu' */
+import { StorageBufferAttribute } from 'three/webgpu';
+import { storage } from 'three/tsl';
 import { GRAPH_OUTPUTS, getEvaluateMaterialGraphFn } from './materialGraph.wgsl.js';
 
 /**
  * Builds the TSL graphs of node materials into the kernels with three.js. Assigned to a shading model with
- * `setMaterialGraphs`, which passes it the materials with `update`. The path tracer passes it the camera with
- * `updateCamera`.
+ * `setMaterialGraphs`, which passes it the materials with `update`.
  *
- * The surface record calls the WGSL function from `getEvaluateFn` at each hit, which replaces the surface inputs in
- * "result" that the hit's material has graphs for, listed in `GRAPH_OUTPUTS`:
- * `fn evaluateMaterialGraph( hit, vertexData, shadingNormal: vec3f, view: vec3f, result: ptr<function, MaterialGraphResult> )`
- * "shadingNormal" is the normal on the side hit after the material's normal maps, and "view" the direction the ray
- * came from.
+ * The surface record calls the WGSL function from `getEvaluateFn` at each hit, which replaces the fields of "surf" that
+ * the hit's material has graphs for, listed in `GRAPH_OUTPUTS`, and reads its "normal" as the shading normal:
+ * `fn evaluateMaterialGraph( hit, vertexData, view: vec3f, surf: ptr<function, SurfaceRecord> )`
+ * "view" is the direction the ray came from. The graphs read the camera from the kernel context's "camera".
  */
 export class MaterialGraphs {
 
@@ -25,42 +20,11 @@ export class MaterialGraphs {
 		this.graphs = [];
 		this.evaluateFn = null;
 
-		// the uniforms replacing three.js' camera nodes, by node
-		this.cameraUniforms = new Map( [
-			[ cameraViewMatrix, uniform( new Matrix4() ) ],
-			[ cameraWorldMatrix, uniform( new Matrix4() ) ],
-			[ cameraNormalMatrix, uniform( new Matrix3() ) ],
-			[ cameraPosition, uniform( new Vector3() ) ],
-			[ cameraProjectionMatrix, uniform( new Matrix4() ) ],
-			[ cameraProjectionMatrixInverse, uniform( new Matrix4() ) ],
-			[ cameraNear, uniform( 0 ) ],
-			[ cameraFar, uniform( 0 ) ],
-		] );
-
 		// the index in "graphs" of each material by its index in the shading model, or -1 without graphs. At least
 		// two long so TSL doesn't make it a scalar
 		this.graphIndices = storage( new StorageBufferAttribute( new Int32Array( 2 ).fill( - 1 ), 1 ), 'int' )
 			.toReadOnly()
 			.setName( 'materialGraphIndices' );
-
-	}
-
-	/**
-	 * Sets the camera the graphs read, like three.js' "cameraPosition". Changing it doesn't need a rebuild.
-	 *
-	 * @param {Camera} camera
-	 */
-	updateCamera( camera ) {
-
-		const { cameraUniforms } = this;
-		cameraUniforms.get( cameraViewMatrix ).value.copy( camera.matrixWorldInverse );
-		cameraUniforms.get( cameraWorldMatrix ).value.copy( camera.matrixWorld );
-		cameraUniforms.get( cameraNormalMatrix ).value.getNormalMatrix( camera.matrixWorldInverse );
-		cameraUniforms.get( cameraPosition ).value.setFromMatrixPosition( camera.matrixWorld );
-		cameraUniforms.get( cameraProjectionMatrix ).value.copy( camera.projectionMatrix );
-		cameraUniforms.get( cameraProjectionMatrixInverse ).value.copy( camera.projectionMatrixInverse );
-		cameraUniforms.get( cameraNear ).value = camera.near ?? 0;
-		cameraUniforms.get( cameraFar ).value = camera.far ?? 0;
 
 	}
 
@@ -113,7 +77,7 @@ export class MaterialGraphs {
 		this.graphs = graphs;
 		if ( changed ) {
 
-			this.evaluateFn = getEvaluateMaterialGraphFn( graphs, this.graphIndices, this.cameraUniforms );
+			this.evaluateFn = getEvaluateMaterialGraphFn( graphs, this.graphIndices );
 
 		}
 
