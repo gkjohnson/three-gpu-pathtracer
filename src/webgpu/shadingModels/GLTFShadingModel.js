@@ -2,7 +2,6 @@ import { BackSide, FrontSide, DoubleSide, ColorManagement, Vector3 } from 'three
 import { float } from 'three/tsl';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { ShadingModel } from './ShadingModel.js';
-import { MaterialGraphs } from '../materialGraphs/MaterialGraphs.js';
 import { specularBrdfFunc, specularBtdfFunc, fresnelMixFunc, conductorFresnelFunc, fresnelCoatFunc, iridescentFresnelFunc, isMatchedIorFunc, thinWallTransmissionRoughnessFunc, transmissionFresnelFunc, getSurfaceRecordFunc, applyDispersionFunc, getHitOpacityFunc, getHitEmissionFunc } from '../nodes/material.wgsl.js';
 import { getMaterialExtinctionFn } from '../nodes/medium.wgsl.js';
 import { isAuxSurfaceFn } from '../nodes/auxiliary.wgsl.js';
@@ -54,7 +53,6 @@ export class GLTFShadingModel extends ShadingModel {
 		this.fresnelCoat = fresnelCoat;
 		this.iridescentFresnel = iridescentFresnel;
 		this.transmissionFresnel = transmissionFresnelFunc( iridescentFresnel );
-		this.materialGraphs = new MaterialGraphs();
 
 	}
 
@@ -68,12 +66,6 @@ export class GLTFShadingModel extends ShadingModel {
 
 		super.dispose();
 		this.turquinTexture.dispose();
-
-	}
-
-	updateCamera( camera ) {
-
-		this.materialGraphs.updateCamera( camera );
 
 	}
 
@@ -95,9 +87,8 @@ export class GLTFShadingModel extends ShadingModel {
 			getTextureSize: fns.getTextureSize,
 			getUvFromChannel: contextProxyFn( 'bvhData.fns.getUvFromChannel' ),
 			getColor: contextProxyFn( 'bvhData.fns.getColor' ),
-			runMaterialGraph: contextProxyFn( 'shadingModel.fns.runMaterialGraph' ),
+			applyMaterialGraph: contextProxyFn( 'shadingModel.fns.applyMaterialGraph' ),
 		} );
-		fns.runMaterialGraph = this.materialGraphs.getRunFn();
 
 		const surfaceRecordStruct = structs.surfaceRecord;
 		const bsdfEvalFunc = wgslTagFn/* wgsl */`
@@ -733,7 +724,8 @@ export class GLTFShadingModel extends ShadingModel {
 	// TODO: sample emission graphs as lights
 	getEmissiveLuminance( material ) {
 
-		if ( ! material || ! material.emissive || material.isFogVolumeMaterial || material.emissiveNode ) {
+		const hasEmissionGraph = Boolean( this.materialGraphs && material && material.emissiveNode );
+		if ( ! material || ! material.emissive || material.isFogVolumeMaterial || hasEmissionGraph ) {
 
 			return 0;
 
@@ -745,16 +737,6 @@ export class GLTFShadingModel extends ShadingModel {
 	}
 
 	writeMaterialsBuffer( materials ) {
-
-		// the node materials' TSL graphs, whose index each material stores. A new set of graphs changes the function
-		// that runs them, which the kernels need rebuilding for
-		const { materialGraphs, fns } = this;
-		const graphsChanged = materialGraphs.update( materials );
-		if ( graphsChanged ) {
-
-			fns.runMaterialGraph = materialGraphs.getRunFn();
-
-		}
 
 		let index = 0;
 
@@ -1059,15 +1041,12 @@ export class GLTFShadingModel extends ShadingModel {
 			floatArray[ index ++ ] = this.getField( m, 'scatterStrength', 0.0 );
 			floatArray[ index ++ ] = this.getField( m, 'scatterAnisotropy', 0.0 );
 
-			// TSL graphs - offset 293
-			intArray[ index ++ ] = materialGraphs.getIndex( m );
-
 			// padding to the struct's 16 byte alignment
-			index += 2;
+			index += 3;
 
 		}
 
-		return { materialData: intArray, graphsChanged };
+		return { materialData: intArray };
 
 	}
 

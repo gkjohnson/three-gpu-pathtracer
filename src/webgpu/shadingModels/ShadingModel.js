@@ -1,4 +1,5 @@
 /** @import { Camera, WebGPURenderer } from 'three/webgpu' */
+/** @import { MaterialGraphs } from '../materialGraphs/MaterialGraphs.js' */
 import { RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, texture, uniformArray } from 'three/tsl';
 import { wgslTagFn, proxyFn, contextProxy } from 'three-mesh-bvh/webgpu';
@@ -10,6 +11,7 @@ import { hitRecordStruct, scatterRecordStruct, materialMediumStruct } from '../n
 import { sampleTexelFunc, getTextureSizeFunc, getBasisFromNormalFunc } from '../nodes/utils.wgsl.js';
 import { getTextureHash } from '../../core/utils/sceneUpdateUtils.js';
 import { MaterialFeatures } from '../../uniforms/MaterialsTexture.js';
+import { noMaterialGraphFn } from '../materialGraphs/materialGraph.wgsl.js';
 
 function encodeTextureWrap( wrap ) {
 
@@ -72,6 +74,7 @@ export class ShadingModel {
 			applyDispersion: null,
 			isAuxSurface: null,
 			isMatte: null,
+			applyMaterialGraph: null,
 		}, proxyFn );
 		this.textureAtlas = new AtlasTexture();
 		this.features = new MaterialFeatures();
@@ -79,6 +82,8 @@ export class ShadingModel {
 		this.materialsMap = new Map();
 		this.textures = [];
 		this.texturesMap = new Map();
+		this.materialGraphs = null;
+		this.camera = null;
 
 	}
 
@@ -116,6 +121,9 @@ export class ShadingModel {
 	 * - "fns.isAuxSurface": ( surface, scatter ) -> bool, whether the denoiser's guides show the surface rather than
 	 *   what it reflects or transmits. Defaults to true.
 	 * - "fns.isMatte": ( surface ) -> bool, whether the surface renders transparent to the camera. Defaults to false.
+	 * - "fns.applyMaterialGraph": ( hit, vertexData, normal, shadingNormal, view, ptr<MaterialGraphResult> ), replacing
+	 *   the surface inputs a node material has TSL graphs for, from the "MaterialGraphs" set with "setMaterialGraphs".
+	 *   Set by "updateMaterials", and does nothing without graphs.
 	 */
 	updateFunctions() {
 
@@ -252,6 +260,8 @@ export class ShadingModel {
 
 		`;
 
+		fns.applyMaterialGraph = this.materialGraphs ? this.materialGraphs.getApplyFn() : noMaterialGraphFn;
+
 	}
 
 	/**
@@ -292,11 +302,37 @@ export class ShadingModel {
 	}
 
 	/**
-	 * Reads the camera the rays are generated from, for functions that read it. Called when the camera changes.
+	 * Sets the node materials' TSL graphs "fns.applyMaterialGraph" runs, or null to leave the materials' surface
+	 * inputs as they are. Call "WebGPUPathTracer.updateMaterials" after, which rebuilds the kernels.
+	 *
+	 * @param {MaterialGraphs|null} materialGraphs
+	 */
+	setMaterialGraphs( materialGraphs ) {
+
+		this.materialGraphs = materialGraphs;
+		if ( materialGraphs && this.camera ) {
+
+			materialGraphs.updateCamera( this.camera );
+
+		}
+
+	}
+
+	/**
+	 * Reads the camera the rays are generated from, for the material graphs. Called when the camera changes.
 	 *
 	 * @param {Camera} camera
 	 */
-	updateCamera( /* camera */ ) {}
+	updateCamera( camera ) {
+
+		this.camera = camera;
+		if ( this.materialGraphs ) {
+
+			this.materialGraphs.updateCamera( camera );
+
+		}
+
+	}
 
 	/**
 	 * Packs the materials' textures into the atlas "fns.sampleTexel" reads. Call after "updateMaterials".
@@ -397,8 +433,7 @@ export class ShadingModel {
 	/**
 	 *
 	 * Must write the given materials to an array in the material struct layout, returning
-	 * { materialData, graphsChanged }. The "*Map" fields index the textures added with "getTextureDescriptor", and
-	 * "graphsChanged" is whether the functions running the materials' TSL graphs changed, so the kernels need rebuilding
+	 * { materialData }. The "*Map" fields index the textures added with "getTextureDescriptor"
 	 *
 	 */
 	writeMaterialsBuffer( materials ) {
@@ -425,7 +460,7 @@ export class ShadingModel {
 	// collects and writes the materials under "root". Returns whether the functions running their TSL graphs changed
 	updateMaterials( root ) {
 
-		const { materials, materialsMap, textures, texturesMap, structs } = this;
+		const { materials, materialsMap, textures, texturesMap, structs, fns } = this;
 		materialsMap.clear();
 		materials.length = 0;
 
@@ -471,7 +506,7 @@ export class ShadingModel {
 
 		}
 
-		const { materialData, graphsChanged = false } = this.writeMaterialsBuffer( materials );
+		const { materialData } = this.writeMaterialsBuffer( materials );
 		const materialStruct = structs.material.proxyNode;
 		const materialsStorage = this.storage.materials.proxyNode;
 		const count = materialData.length / materialStruct.getLength();
@@ -485,6 +520,18 @@ export class ShadingModel {
 		materialsStorage.value.array.set( materialData );
 		materialsStorage.value.needsUpdate = true;
 
+		// the function applying the materials' TSL graphs, which changes with the graphs
+		const { materialGraphs } = this;
+		let applyMaterialGraph = noMaterialGraphFn;
+		if ( materialGraphs ) {
+
+			materialGraphs.update( materials );
+			applyMaterialGraph = materialGraphs.getApplyFn();
+
+		}
+
+		const graphsChanged = fns.applyMaterialGraph.proxyNode !== applyMaterialGraph;
+		fns.applyMaterialGraph = applyMaterialGraph;
 		return graphsChanged;
 
 		function add( mat ) {

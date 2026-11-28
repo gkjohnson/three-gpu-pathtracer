@@ -23,7 +23,7 @@ import {
 } from './ggx.wgsl.js';
 import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
-import { materialGraphInputStruct, materialGraphResultStruct } from '../materialGraphs/materialGraph.wgsl.js';
+import { materialGraphResultStruct } from '../materialGraphs/materialGraph.wgsl.js';
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
 // the normal towards the geometry normal such that the perfect reflection ray is just above the
@@ -145,7 +145,7 @@ export const getSurfaceRecordFunc = ( {
 	getTextureSize,
 	getUvFromChannel,
 	getColor,
-	runMaterialGraph,
+	applyMaterialGraph,
 } ) => wgslTagFn/* wgsl */`
 	${ [ constants ] }
 	fn getSurfaceRecord(
@@ -419,40 +419,18 @@ export const getSurfaceRecordFunc = ( {
 		}
 
 		// a node material's TSL graphs replace the inputs they have outputs for
-		if ( material.graph != -1 ) {
+		var graph: ${ materialGraphResultStruct };
+		graph.color = albedo.rgb;
+		graph.opacity = albedo.a;
+		graph.roughness = roughness;
+		graph.metalness = metalness;
+		graph.emission = emission;
+		${ applyMaterialGraph }( hit, vertexData, baseNormal, normal, view, &graph );
 
-			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
-			var input: ${ materialGraphInputStruct };
-			input.matrixWorld = objectInfo.matrixWorld;
-			input.matrixWorldInverse = objectInfo.inverseMatrixWorld;
-			input.shadingNormal = normal;
-			input.faceNormal = faceNormal;
-			input.viewDirection = view;
-			input.frontFacing = side == 1.0;
-			input.indices = hit.indices;
-			input.attributesOffset = objectInfo.attributesOffset;
-
-			input.position = ( objectInfo.inverseMatrixWorld * vec4f( vertexData.position.xyz, 1.0 ) ).xyz;
-			input.normal = normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( baseNormal, 0.0 ) ).xyz );
-			input.tangent = vec4f( ( objectInfo.inverseMatrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
-			input.uv = ${ getUvFromChannel }( vertexData, 0 );
-			input.uv1 = ${ getUvFromChannel }( vertexData, 1 << 23 );
-			input.color = ${ getColor }( vertexData );
-
-			var graph: ${ materialGraphResultStruct };
-			graph.color = albedo.rgb;
-			graph.opacity = albedo.a;
-			graph.roughness = roughness;
-			graph.metalness = metalness;
-			graph.emission = emission;
-			${ runMaterialGraph }( material.graph, input, &graph );
-
-			albedo = vec4f( graph.color, graph.opacity );
-			roughness = graph.roughness;
-			metalness = graph.metalness;
-			emission = graph.emission;
-
-		}
+		albedo = vec4f( graph.color, graph.opacity );
+		roughness = graph.roughness;
+		metalness = graph.metalness;
+		emission = graph.emission;
 
 		// adjust the surface basis to be oriented along the anisotropic vector
 		let anisotropyStrength = length( anisotropyDirVec );

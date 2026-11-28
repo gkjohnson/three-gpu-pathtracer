@@ -113,6 +113,14 @@ export class FSRUpscaler {
 
 }
 
+// node material TSL graphs
+
+export class MaterialGraphs {
+
+	constructor();
+
+}
+
 // denoiser
 
 export interface OIDNDenoiserOptions {

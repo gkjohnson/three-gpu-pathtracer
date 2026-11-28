@@ -1,18 +1,28 @@
 /** @import { Camera, Material } from 'three/webgpu' */
-import { GRAPH_OUTPUTS, createCameraUniforms, getRunMaterialGraphFn, updateCameraUniforms } from './materialGraph.wgsl.js';
+import { StorageBufferAttribute } from 'three/webgpu';
+import { storage } from 'three/tsl';
+import {
+	GRAPH_OUTPUTS, createCameraUniforms, getApplyMaterialGraphFn, getRunMaterialGraphFn, updateCameraUniforms,
+} from './materialGraph.wgsl.js';
 
 /**
- * The TSL graphs of node materials, built into the kernels by three.js as the WGSL function from `getRunFn`. Each
- * material with a graph for a surface input in `GRAPH_OUTPUTS` gets a graph index, stored in its material struct.
+ * The TSL graphs of node materials, built into the kernels by three.js. Assigned to a shading model with
+ * `setMaterialGraphs`, whose surface record calls the WGSL function from `getApplyFn` to replace the surface inputs a
+ * material has graphs for in `GRAPH_OUTPUTS`.
  */
 export class MaterialGraphs {
 
 	constructor() {
 
 		this.graphs = [];
-		this.indices = new Map();
 		this.cameraUniforms = createCameraUniforms();
-		this.runFn = getRunMaterialGraphFn( [], this.cameraUniforms );
+
+		// the graph index of each material by its index in the shading model, or -1 without graphs. At least two long
+		// so TSL doesn't make it a scalar
+		this.graphIndices = storage( new StorageBufferAttribute( new Int32Array( 2 ).fill( - 1 ), 1 ), 'int' )
+			.toReadOnly()
+			.setName( 'materialGraphIndices' );
+		this.applyFn = getApplyMaterialGraphFn( getRunMaterialGraphFn( [], this.cameraUniforms ), this.graphIndices );
 
 	}
 
@@ -28,8 +38,8 @@ export class MaterialGraphs {
 	}
 
 	/**
-	 * Collects the graphs of the materials. Returns whether they changed, so the function from `getRunFn` did and the
-	 * kernels need rebuilding. Changed uniform values don't need a rebuild.
+	 * Collects the graphs of the materials, in the shading model's order. Returns whether they changed, so the function
+	 * from `getApplyFn` did and the kernels need rebuilding. Changed uniform values don't need a rebuild.
 	 *
 	 * @param {Array<Material>} materials
 	 * @returns {boolean}
@@ -37,8 +47,8 @@ export class MaterialGraphs {
 	update( materials ) {
 
 		const graphs = [];
-		const indices = new Map();
-		materials.forEach( material => {
+		const indices = new Int32Array( Math.max( materials.length, 2 ) ).fill( - 1 );
+		materials.forEach( ( material, i ) => {
 
 			if ( ! material.isNodeMaterial ) {
 
@@ -52,19 +62,31 @@ export class MaterialGraphs {
 
 			if ( outputs.length > 0 ) {
 
-				indices.set( material, graphs.length );
+				indices[ i ] = graphs.length;
 				graphs.push( { material, outputs } );
 
 			}
 
 		} );
 
+		const attribute = this.graphIndices.value;
+		if ( attribute.count < indices.length ) {
+
+			attribute.dispose();
+			this.graphIndices.value = new StorageBufferAttribute( indices, 1 );
+
+		} else {
+
+			attribute.array.set( indices );
+			attribute.needsUpdate = true;
+
+		}
+
 		const changed = ! areGraphsEqual( graphs, this.graphs );
 		this.graphs = graphs;
-		this.indices = indices;
 		if ( changed ) {
 
-			this.runFn = getRunMaterialGraphFn( graphs, this.cameraUniforms );
+			this.applyFn = getApplyMaterialGraphFn( getRunMaterialGraphFn( graphs, this.cameraUniforms ), this.graphIndices );
 
 		}
 
@@ -73,25 +95,13 @@ export class MaterialGraphs {
 	}
 
 	/**
-	 * Returns the index of the material's graphs, or -1 without any.
-	 *
-	 * @param {Material} material
-	 * @returns {number}
-	 */
-	getIndex( material ) {
-
-		return this.indices.get( material ) ?? - 1;
-
-	}
-
-	/**
-	 * Returns the WGSL function running a material's graphs. Get it again when `update` returns true.
+	 * Returns the WGSL function applying a hit's material graphs. Get it again when `update` returns true.
 	 *
 	 * @returns {Function}
 	 */
-	getRunFn() {
+	getApplyFn() {
 
-		return this.runFn;
+		return this.applyFn;
 
 	}
 

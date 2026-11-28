@@ -1,4 +1,4 @@
-/** @import { Camera, Material, UniformNode } from 'three/webgpu' */
+/** @import { Camera, Material, StorageBufferNode, UniformNode } from 'three/webgpu' */
 import { BufferAttribute, BufferGeometry, Matrix3, Matrix4, Node, PerspectiveCamera, StructTypeNode, Vector3, VaryingNode } from 'three/webgpu';
 import {
 	Fn, context, expression, overrideNodes, float, mat3, uniform, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
@@ -6,8 +6,9 @@ import {
 	cameraViewMatrix, cameraWorldMatrix, cameraNormalMatrix, cameraPosition, cameraProjectionMatrix,
 	cameraProjectionMatrixInverse, cameraNear, cameraFar,
 } from 'three/tsl';
-import { wgslTagFn, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { getBasisFromNormalFunc } from '../nodes/utils.wgsl.js';
+import { hitRecordStruct } from '../nodes/structs.wgsl.js';
 
 // TODO: three.js only inlines varyings in the fragment stage with "inlineVaryings", so a graph reading a varying like
 // "positionLocal" in a compute shader emits an undeclared variable. Remove this once three.js applies the fragment
@@ -65,8 +66,11 @@ const GRAPH_HIT_VALUES = [
 // position or the view space tangent
 const GRAPH_INPUTS = [ ...GRAPH_ATTRIBUTES, ...GRAPH_HIT_VALUES ];
 
+const attributesStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.attributes' );
+const objectsStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.objects' );
 const getVertex = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getVertex' );
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
+const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
 
 // The tangent in the object's space and its bitangent's handedness: the vertex tangent, or else derived from the
 // triangle's uvs, as three.js derives it from the screen space derivatives. Only graphs reading the tangent run it
@@ -250,6 +254,77 @@ export function getRunMaterialGraphFn( graphs, cameraUniforms ) {
 	return joinTagFn( parts );
 
 }
+
+/**
+ * Returns the WGSL function a surface record calls to apply the TSL graphs of the hit's material, which run with
+ * "runFn" from "getRunMaterialGraphFn" and are found by the material's index in "graphIndices":
+ * `fn applyMaterialGraph( hit, vertexData, normal: vec3f, shadingNormal: vec3f, view: vec3f, result: ptr<function, MaterialGraphResult> )`
+ *
+ * "result" holds the surface inputs from the material, which the graphs replace. "normal" is the interpolated normal
+ * and "shadingNormal" the normal on the side hit after the material's normal maps.
+ *
+ * @param {Function} runFn
+ * @param {StorageBufferNode} graphIndices
+ * @returns {Function}
+ */
+export function getApplyMaterialGraphFn( runFn, graphIndices ) {
+
+	return wgslTagFn/* wgsl */`
+		fn applyMaterialGraph(
+			hit: ${ hitRecordStruct },
+			vertexData: ${ attributesStruct },
+			normal: vec3f,
+			shadingNormal: vec3f,
+			view: vec3f,
+			result: ptr<function, ${ materialGraphResultStruct }>,
+		) -> void {
+
+			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
+			let graph = ${ graphIndices }[ objectInfo.materialIndex ];
+			if ( graph == - 1 ) {
+
+				return;
+
+			}
+
+			var input: ${ materialGraphInputStruct };
+			input.matrixWorld = objectInfo.matrixWorld;
+			input.matrixWorldInverse = objectInfo.inverseMatrixWorld;
+			input.shadingNormal = shadingNormal;
+			input.faceNormal = hit.normal;
+			input.viewDirection = view;
+			input.frontFacing = hit.side == 1.0;
+			input.indices = hit.indices;
+			input.attributesOffset = objectInfo.attributesOffset;
+
+			input.position = ( objectInfo.inverseMatrixWorld * vec4f( vertexData.position.xyz, 1.0 ) ).xyz;
+			input.normal = normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( normal, 0.0 ) ).xyz );
+			input.tangent = vec4f( ( objectInfo.inverseMatrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
+			input.uv = ${ getUvFromChannel }( vertexData, 0 );
+			input.uv1 = ${ getUvFromChannel }( vertexData, 1 << 23 );
+			input.color = ${ getColor }( vertexData );
+
+			${ runFn }( graph, input, result );
+
+		}
+	`;
+
+}
+
+/**
+ * The "applyMaterialGraph" function of a shading model without material graphs, which leaves the surface inputs as
+ * they are.
+ */
+export const noMaterialGraphFn = /* @__PURE__ */ wgslTagFn/* wgsl */`
+	fn applyMaterialGraph(
+		hit: ${ hitRecordStruct },
+		vertexData: ${ attributesStruct },
+		normal: vec3f,
+		shadingNormal: vec3f,
+		view: vec3f,
+		result: ptr<function, ${ materialGraphResultStruct }>,
+	) -> void {}
+`;
 
 // Returns a call of a TSL function evaluating "node", a graph of "material", as "type" from the "input" struct. three.js
 // builds it as when rasterizing the material, with the hit's values in place of the vertex stage, object and camera
