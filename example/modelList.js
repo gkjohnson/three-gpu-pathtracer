@@ -2,7 +2,7 @@ import { BatchedMesh, Box3, BoxGeometry, BufferAttribute, BufferGeometry, Capsul
 import { MeshPhysicalNodeMaterial } from 'three/webgpu';
 import {
 	color, float, vec3, mix, smoothstep, dot, cos, positionLocal, normalView, positionViewDirection, mx_noise_float,
-	mx_fractal_noise_float,
+	mx_fractal_noise_float, mx_fractal_noise_vec3, mx_cell_noise_float,
 } from 'three/tsl';
 import { FogVolumeNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -64,24 +64,38 @@ function getTeapotParts( model ) {
 function createTslMaterials() {
 
 	const position = positionLocal;
+	const unit = value => value.mul( 0.5 ).add( 0.5 );
 
 	// marble: white stone with dark veins where the warped stripes cross zero
 	const marble = new MeshPhysicalNodeMaterial( { roughness: 0.15 } );
 	const veins = mx_fractal_noise_float( position.mul( 1.5 ), 4 ).mul( 3 ).add( position.x.mul( 2 ) ).sin().abs().pow( 0.3 );
 	marble.colorNode = mix( color( 0x30353a ), color( 0xf2eee8 ), veins );
 
-	// lava: dark rock with glowing cracks along the noise's zero crossings
-	const lava = new MeshPhysicalNodeMaterial( { roughness: 0.9 } );
-	const crack = smoothstep( 0.08, 0, mx_noise_float( position.mul( 3 ) ).abs() );
-	lava.colorNode = mix( color( 0x1c1714 ), color( 0x2e2420 ), mx_noise_float( position.mul( 12 ) ).mul( 0.5 ).add( 0.5 ) );
-	lava.emissiveNode = mix( color( 0xff3000 ), color( 0xffb030 ), crack ).mul( crack ).mul( 6 );
+	// lava: black crust islands over molten rock that glows from dark red at the crust's edge to yellow where it's
+	// hottest, after CG Cookie's lava lesson
+	const lava = new MeshPhysicalNodeMaterial( { roughness: 0.85 } );
+	const lavaPosition = position.add( mx_fractal_noise_vec3( position.mul( 1.2 ), 3 ).mul( 0.35 ) );
+	const field = unit( mx_fractal_noise_float( lavaPosition.mul( 1.6 ), 5 ) );
+	const crust = smoothstep( 0.47, 0.53, field );
+	const flow = unit( mx_noise_float( lavaPosition.mul( vec3( 6, 2, 6 ) ) ) );
+	const molten = smoothstep( 0.5, 0.25, field ).mul( flow.mul( 0.4 ).add( 0.6 ) );
+	const hotColor = mix( color( 0xff7010 ), color( 0xffe070 ), smoothstep( 0.6, 1, molten ) );
+	const coolColor = mix( color( 0x400300 ), color( 0xff1e00 ), smoothstep( 0, 0.35, molten ) );
+	lava.emissiveNode = mix( coolColor, hotColor, smoothstep( 0.3, 0.7, molten ) ).mul( molten.pow( 1.5 ).mul( 12 ).add( 0.3 ) ).mul( crust.oneMinus() );
+	lava.colorNode = mix( color( 0x1a0a05 ), mix( color( 0x0c0b0b ), color( 0x2a2624 ), unit( mx_noise_float( position.mul( 18 ) ) ) ), crust );
 
-	// wood: rings around the vertical axis, warped by noise, under a clear coat
-	const wood = new MeshPhysicalNodeMaterial( { clearcoat: 1, clearcoatRoughness: 0.1 } );
-	const rings = position.xz.length().mul( 9 ).add( mx_noise_float( position.mul( 1.5 ) ).mul( 1.5 ) ).fract();
-	const grain = smoothstep( 0.0, 0.6, rings ).mul( smoothstep( 1.0, 0.8, rings ) );
-	wood.colorNode = mix( color( 0x4a2812 ), color( 0xb07040 ), grain );
-	wood.roughnessNode = mix( float( 0.6 ), float( 0.35 ), grain );
+	// wood: after Larsson et al.'s and Cornell's solid wood models. Annual rings around a slightly leaning pith,
+	// irregular from slow growth, each ramping from pale earlywood to darker latewood and dropping back sharply, with
+	// darkness varying ring to ring, faint pores along the fibers and broad color variation, under a clear coat
+	const wood = new MeshPhysicalNodeMaterial( { roughness: 0.5, clearcoat: 1, clearcoatRoughness: 0.08 } );
+	const pith = position.add( vec3( position.y.mul( 0.08 ).add( 0.35 ), 0, position.y.mul( - 0.05 ).add( 0.2 ) ) );
+	const ringPosition = pith.xz.length().add( mx_fractal_noise_float( pith.mul( vec3( 0.9, 0.25, 0.9 ) ), 3 ).mul( 0.12 ) ).mul( 6 );
+	const ring = ringPosition.fract();
+	const latewood = smoothstep( 0.35, 0.95, ring ).pow( 2 ).mul( smoothstep( 1, 0.97, ring ) );
+	const pores = smoothstep( 0.55, 0.9, unit( mx_noise_float( pith.mul( vec3( 90, 4, 90 ) ) ) ) ).mul( 0.08 );
+	const earlywood = mix( color( 0xc89466 ), color( 0xd6a77a ), unit( mx_fractal_noise_float( pith.mul( vec3( 0.6, 0.2, 0.6 ) ), 2 ) ) );
+	const latewoodColor = mix( color( 0x8a5530 ), color( 0x6e3f20 ), mx_cell_noise_float( ringPosition ) );
+	wood.colorNode = mix( earlywood, latewoodColor, latewood.mul( 0.75 ) ).mul( pores.oneMinus() );
 
 	// rusted steel: rust patches, rougher and not metallic, gathering toward the bottom
 	const rusted = new MeshPhysicalNodeMaterial();
