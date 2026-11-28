@@ -1,6 +1,8 @@
 import { wgslFn } from 'three/tsl';
+import { wgslTagFn } from 'three-mesh-bvh/webgpu';
 import { constants, lobeWeightsStruct } from './structs.wgsl.js';
 import { disneyFresnelFunc, iorToF0Func, schlickFresnelFunc } from './utils.wgsl.js';
+import { ifFeature } from './features.js';
 
 /*
 wi     : incident vector or light vector (pointing toward the light)
@@ -40,20 +42,24 @@ export const diffuseDirectionFunc = wgslFn( /* wgsl */ `
 
 `, [ sampleSphereFunc ] );
 
-export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
+export const getLobeWeightsFunc = wgslTagFn/* wgsl */`
 
-	fn getLobeWeights( wo: vec3f, wi: vec3f, woClearcoat: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord ) -> LobeWeights {
+	fn getLobeWeights( wo: vec3f, wi: vec3f, worldWo: vec3f, wh: vec3f, clearcoatIor: f32, surf: SurfaceRecord ) -> ${ lobeWeightsStruct } {
 
-		var weights: LobeWeights;
+		var weights: ${ lobeWeightsStruct };
 		var remaining = 1.0;
 
-		let clearcoatF0 = iorToF0( clearcoatIor );
-		let clearcoatFresnel = schlickFresnel( saturate( woClearcoat.z ), clearcoatF0 );
-		weights.clearcoat = surf.clearcoat * clearcoatFresnel;
-		remaining -= weights.clearcoat;
+		// without clearcoat the weight keeps its zero initial value, so the lobe is never selected
+		${ ifFeature( 'CLEARCOAT' )/* wgsl */`
+			let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
+			let clearcoatF0 = ${ iorToF0Func }( clearcoatIor );
+			let clearcoatFresnel = ${ schlickFresnelFunc }( saturate( woClearcoat.z ), clearcoatF0 );
+			weights.clearcoat = surf.clearcoat * clearcoatFresnel;
+			remaining -= weights.clearcoat;
+		` }
 
 		// this specular lobe only handles the opaque portion of the specular
-		let fEstimate = disneyFresnel( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
+		let fEstimate = ${ disneyFresnelFunc }( wo, wi, wh, surf.f0, surf.eta, surf.metalness );
 		weights.specular = remaining * ( surf.metalness + ( 1.0 - surf.metalness ) * ( 1.0 - surf.transmission ) * fEstimate );
 		remaining -= weights.specular;
 
@@ -67,7 +73,7 @@ export const getLobeWeightsFunc = wgslFn( /* wgsl */ `
 
 	}
 
-`, [ disneyFresnelFunc, schlickFresnelFunc, iorToF0Func, lobeWeightsStruct, constants ] );
+`;
 
 export const equirectDirectionToUvFn = wgslFn( /* wgsl */`
 

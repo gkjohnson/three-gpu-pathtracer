@@ -319,13 +319,12 @@ export class GLTFShadingModel extends ShadingModel {
 				result.pdf = 0.0;
 
 				let wo = normalize( surf.normalInvBasis * worldWo );
-				let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 
 				// TODO: mirror bsdfEval's layer structure - the glass layer should own both its
 				// reflection and refraction halves
 				// lobe selection weights and cumulative bounds in cascade order:
 				// clearcoat, specular, transmission, diffuse
-				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
+				let weights = ${ getLobeWeightsFunc }( wo, wo, worldWo, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 				let cdfClearcoat = weights.clearcoat;
 				let cdfSpecular = cdfClearcoat + weights.specular;
 				let cdfTransmission = cdfSpecular + weights.transmission;
@@ -351,6 +350,7 @@ export class GLTFShadingModel extends ShadingModel {
 					if ( lobeSample <= cdfClearcoat ) {
 
 						// clearcoat
+						let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 						let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 						let whCoat = ${ ggxDirectionFunc }( woClearcoat, vec2( clearcoatAlpha ), directionUV );
 						let wiCoat = - normalize( reflect( woClearcoat, whCoat ) );
@@ -519,7 +519,6 @@ export class GLTFShadingModel extends ShadingModel {
 
 				let wo = normalize( surf.normalInvBasis * worldWo );
 				let wi = normalize( surf.normalInvBasis * worldWi );
-				let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 
 				let isTransmission = wi.z < 0.0;
 				if ( isTransmission && ${ isMatchedIorFunc }( surf.eta ) ) {
@@ -550,7 +549,7 @@ export class GLTFShadingModel extends ShadingModel {
 
 				}
 
-				let weights = ${ getLobeWeightsFunc }( wo, wo, woClearcoat, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
+				let weights = ${ getLobeWeightsFunc }( wo, wo, worldWo, vec3( 0, 0, 1 ), ${ CLEARCOAT_IOR }, surf );
 
 				// TODO: mirror bsdfEval's layer structure - the glass layer should own both its
 				// reflection and refraction halves
@@ -567,6 +566,7 @@ export class GLTFShadingModel extends ShadingModel {
 						if ( wiClearcoat.z > 0.0 ) {
 
 							let whClearcoat = normalize( toClearcoatMat * wh );
+							let woClearcoat = normalize( surf.clearcoatInvBasis * worldWo );
 							let clearcoatAlpha = surf.clearcoatRoughness * surf.clearcoatRoughness;
 							result.pdf += weights.clearcoat * ${ ggxReflectionAdjustedPDFFunc }( woClearcoat, whClearcoat, vec2( clearcoatAlpha ) );
 

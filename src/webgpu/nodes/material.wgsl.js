@@ -501,9 +501,6 @@ export const getSurfaceRecordFunc = ( {
 		surf.normalBasis = surfaceBasis;
 		surf.normalInvBasis = ${ inverseMat3x3Func }( surf.normalBasis );
 
-		// the lobe weights read the clearcoat frame even without clearcoat, so it falls back to the normal frame
-		surf.clearcoatBasis = surf.normalBasis;
-		surf.clearcoatInvBasis = surf.normalInvBasis;
 		${ ifFeature( 'CLEARCOAT' )/* wgsl */`
 			surf.clearcoatBasis = ${ getBasisFromNormalFunc }( surf.clearcoatNormal );
 			surf.clearcoatInvBasis = ${ inverseMat3x3Func }( surf.clearcoatBasis );
