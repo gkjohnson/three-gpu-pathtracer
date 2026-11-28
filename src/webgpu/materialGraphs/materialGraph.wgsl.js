@@ -56,6 +56,6 @@ export function getEvaluateMaterialGraphFn( graphs ) {
 // joins "wgslTagCode" snippets into one
 function joinCode( codes ) {
 
-	return codes.reduce( ( joined, code ) => wgslTagCode/* wgsl */`${ joined }\n${ code }`, '' );
+	return wgslTagCode( [ '', ...codes.map( () => '\n' ) ], ...codes );
 
 }
