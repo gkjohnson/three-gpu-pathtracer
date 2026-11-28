@@ -5,14 +5,42 @@ import {
 	cameraViewMatrix, cameraWorldMatrix, cameraNormalMatrix, cameraPosition, cameraProjectionMatrix,
 	cameraProjectionMatrixInverse, cameraNear, cameraFar,
 } from 'three/tsl';
-import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { wgslTagFn, wgslTagCode, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { getBasisFromNormalFunc } from '../nodes/utils.wgsl.js';
 import { hitRecordStruct } from '../nodes/structs.wgsl.js';
 
 const attributesStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.attributes' );
-const objectRecordStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.objectRecord' );
+const objectsStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.objects' );
 const getVertex = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getVertex' );
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
+
+// the hit being shaded, which the overrides below read so they work in any function a graph builds into
+const graphGlobals = wgslTagCode/* wgsl */`
+	var<private> graphHit: ${ hitRecordStruct };
+	var<private> graphVertexData: ${ attributesStruct };
+	var<private> graphMatrixWorld: mat4x4f;
+	var<private> graphMatrixWorldInverse: mat4x4f;
+	var<private> graphAttributesOffset: u32;
+	var<private> graphView: vec3f;
+	var<private> graphNormal: vec3f;
+`;
+
+// sets the hit the graphs read, with "normal" the shading normal
+export const setMaterialGraphHitFn = wgslTagFn/* wgsl */`
+	fn setMaterialGraphHit( hit: ${ hitRecordStruct }, vertexData: ${ attributesStruct }, view: vec3f, normal: vec3f ) -> void {
+
+		${ [ graphGlobals ] }
+		let objectInfo = &${ objectsStorage }[ hit.objectIndex ];
+		graphHit = hit;
+		graphVertexData = vertexData;
+		graphMatrixWorld = objectInfo.matrixWorld;
+		graphMatrixWorldInverse = objectInfo.inverseMatrixWorld;
+		graphAttributesOffset = objectInfo.attributesOffset;
+		graphView = view;
+		graphNormal = normal;
+
+	}
+`;
 
 // the vertex tangent, or one derived from the triangle's uvs when missing
 const getGraphTangent = wgslTagFn/* wgsl */`
@@ -60,14 +88,9 @@ const graphCamera = /* @__PURE__ */ new PerspectiveCamera();
 export function getMaterialGraphFn( name, material, node, type ) {
 
 	return wgslTagFn/* wgsl */`
-		fn ${ name }(
-			hit: ${ hitRecordStruct },
-			vertexData: ${ attributesStruct },
-			objectInfo: ${ objectRecordStruct },
-			view: vec3f,
-			shadingNormal: vec3f,
-		) -> ${ builder => builder.getType( type ) } {
+		fn ${ name }() -> ${ builder => builder.getType( type ) } {
 
+			${ [ graphGlobals ] }
 			${ new MaterialGraphBodyNode( material, node, type ) }
 
 		}
@@ -154,23 +177,23 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 
 	}
 
-	// returns the body of a function returning "node", reading the parameters of "getMaterialGraphFn"
+	// returns the body of a function returning "node", reading the hit from the globals
 	buildGraph( node, type ) {
 
 		const { kernelBuilder, material } = this;
 		const { camera, bvhData } = kernelBuilder.getContext();
 		const { fns } = bvhData;
 
-		// the hit's values, read from the parameters when a graph uses them
-		const vertexData = expression( 'vertexData', bvhData.structs.attributes.name );
-		const matrixWorld = expression( 'objectInfo.matrixWorld', 'mat4' );
-		const matrixWorldInverse = expression( 'objectInfo.inverseMatrixWorld', 'mat4' );
-		const normal = expression( 'normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( vertexData.normal.xyz, 0.0 ) ).xyz )', 'vec3' ).toVar();
-		const tangent = expression( 'vec4f( ( objectInfo.inverseMatrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w )', 'vec4' );
+		// the hit's values, read when a graph uses them
+		const vertexData = expression( 'graphVertexData', bvhData.structs.attributes.name );
+		const matrixWorld = expression( 'graphMatrixWorld', 'mat4' );
+		const matrixWorldInverse = expression( 'graphMatrixWorldInverse', 'mat4' );
+		const normal = expression( 'normalize( ( transpose( graphMatrixWorld ) * vec4f( graphVertexData.normal.xyz, 0.0 ) ).xyz )', 'vec3' ).toVar();
+		const tangent = expression( 'vec4f( ( graphMatrixWorldInverse * vec4f( graphVertexData.tangent.xyz, 0.0 ) ).xyz, graphVertexData.tangent.w )', 'vec4' );
 		const attributes = {
-			position: expression( '( objectInfo.inverseMatrixWorld * vec4f( vertexData.position.xyz, 1.0 ) ).xyz', 'vec3' ).toVar(),
+			position: expression( '( graphMatrixWorldInverse * vec4f( graphVertexData.position.xyz, 1.0 ) ).xyz', 'vec3' ).toVar(),
 			normal,
-			tangent: getGraphTangent( tangent, normal, expression( 'hit.indices', 'uvec3' ), expression( 'objectInfo.attributesOffset', 'uint' ) ).toVar(),
+			tangent: getGraphTangent( tangent, normal, expression( 'graphHit.indices', 'uvec3' ), expression( 'graphAttributesOffset', 'uint' ) ).toVar(),
 			uv: fns.getUvFromChannel( vertexData, 0 ),
 			uv1: fns.getUvFromChannel( vertexData, 1 << 23 ),
 			color: fns.getColor( vertexData ),
@@ -195,17 +218,17 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 			[ modelScale, vec3( matrixWorld.element( 0 ).xyz.length(), matrixWorld.element( 1 ).xyz.length(), matrixWorld.element( 2 ).xyz.length() ) ],
 			[ modelDirection, matrixWorld.element( 2 ).xyz.normalize() ],
 			[ modelViewPosition, viewMatrix.mul( vec4( objectPosition, 1 ) ).xyz ],
-			[ frontFacing, expression( 'hit.side == 1.0', 'bool' ) ],
-			[ normalFlat, expression( 'hit.normal', 'vec3' ).transformDirection( viewMatrix ) ],
+			[ frontFacing, expression( 'graphHit.side == 1.0', 'bool' ) ],
+			[ normalFlat, expression( 'graphHit.normal', 'vec3' ).transformDirection( viewMatrix ) ],
 
 			// the ray direction, which is only toward the camera for camera rays
-			[ positionViewDirection, expression( 'view', 'vec3' ).transformDirection( viewMatrix ) ],
+			[ positionViewDirection, expression( 'graphView', 'vec3' ).transformDirection( viewMatrix ) ],
 		];
 
 		this.context = {
 			...kernelBuilder.getContext(),
 			getAttribute: name => attributes[ name ] ?? null,
-			setupNormal: () => expression( 'shadingNormal', 'vec3' ).transformDirection( viewMatrix ),
+			setupNormal: () => expression( 'graphNormal', 'vec3' ).transformDirection( viewMatrix ),
 			setupPositionView: () => material.setupPositionView( this ),
 			inlineVaryings: true,
 		};
