@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Node, PerspectiveCamera, WGSLNodeBuilder } from 'three/webgpu';
 import {
-	overrideNodes, expression, float, mat3, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
+	overrideNodes, expression, convert, mat3, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
 	modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, modelPosition, modelScale, modelDirection, modelViewPosition,
 	cameraViewMatrix, cameraWorldMatrix, cameraNormalMatrix, cameraPosition, cameraProjectionMatrix,
 	cameraProjectionMatrixInverse, cameraNear, cameraFar,
@@ -13,6 +13,7 @@ const attributesStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.attribut
 const objectsStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.objects' );
 const getVertex = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getVertex' );
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
+const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
 
 // the hit being shaded, which the overrides below read so they work in any function a graph builds into
 const graphGlobals = wgslTagCode/* wgsl */`
@@ -42,19 +43,69 @@ export const setMaterialGraphHitFn = wgslTagFn/* wgsl */`
 	}
 `;
 
+// the hit's attributes in local space, computed when a graph reads them
+const getGraphPosition = wgslTagFn/* wgsl */`
+	fn getGraphPosition() -> vec3f {
+
+		${ [ graphGlobals ] }
+		return ( graphMatrixWorldInverse * vec4f( graphVertexData.position.xyz, 1.0 ) ).xyz;
+
+	}
+`;
+
+const getGraphNormal = wgslTagFn/* wgsl */`
+	fn getGraphNormal() -> vec3f {
+
+		${ [ graphGlobals ] }
+		return normalize( ( transpose( graphMatrixWorld ) * vec4f( graphVertexData.normal.xyz, 0.0 ) ).xyz );
+
+	}
+`;
+
+const getGraphUv = wgslTagFn/* wgsl */`
+	fn getGraphUv() -> vec2f {
+
+		${ [ graphGlobals ] }
+		return ${ getUvFromChannel }( graphVertexData, 0 );
+
+	}
+`;
+
+const getGraphUv1 = wgslTagFn/* wgsl */`
+	fn getGraphUv1() -> vec2f {
+
+		${ [ graphGlobals ] }
+		return ${ getUvFromChannel }( graphVertexData, 1 << 23 );
+
+	}
+`;
+
+const getGraphColor = wgslTagFn/* wgsl */`
+	fn getGraphColor() -> vec4f {
+
+		${ [ graphGlobals ] }
+		return ${ getColor }( graphVertexData );
+
+	}
+`;
+
 // the vertex tangent, or one derived from the triangle's uvs when missing
 const getGraphTangent = wgslTagFn/* wgsl */`
-	fn getGraphTangent( vertexTangent: vec4f, normal: vec3f, indices: vec3u, attributesOffset: u32 ) -> vec4f {
+	fn getGraphTangent() -> vec4f {
 
+		${ [ graphGlobals ] }
+		let normal = ${ getGraphNormal }();
+		let vertexTangent = vec4f( ( graphMatrixWorldInverse * vec4f( graphVertexData.tangent.xyz, 0.0 ) ).xyz, graphVertexData.tangent.w );
 		if ( length( vertexTangent.xyz ) > 0.0 && vertexTangent.w != 0.0 ) {
 
 			return vertexTangent;
 
 		}
 
-		let v0 = ${ getVertex }( indices.x, attributesOffset );
-		let v1 = ${ getVertex }( indices.y, attributesOffset );
-		let v2 = ${ getVertex }( indices.z, attributesOffset );
+		let indices = graphHit.indices;
+		let v0 = ${ getVertex }( indices.x, graphAttributesOffset );
+		let v1 = ${ getVertex }( indices.y, graphAttributesOffset );
+		let v2 = ${ getVertex }( indices.z, graphAttributesOffset );
 		let edge1 = v1.position.xyz - v0.position.xyz;
 		let edge2 = v2.position.xyz - v0.position.xyz;
 		let uvEdge1 = ${ getUvFromChannel }( v1, 0 ) - ${ getUvFromChannel }( v0, 0 );
@@ -74,23 +125,13 @@ const getGraphTangent = wgslTagFn/* wgsl */`
 	}
 `;
 
-// stand-in geometry and camera, which three.js reads while building
-const graphGeometry = /* @__PURE__ */ new BufferGeometry();
-Object.entries( { position: 3, normal: 3, tangent: 4, uv: 2, uv1: 2, color: 4 } ).forEach( ( [ name, itemSize ] ) => {
-
-	graphGeometry.setAttribute( name, new BufferAttribute( new Float32Array( itemSize ), itemSize ) );
-
-} );
-
-const graphCamera = /* @__PURE__ */ new PerspectiveCamera();
-
 // Returns the WGSL function evaluating "node", one graph of "material", as "type"
 export function getMaterialGraphFn( name, material, node, type ) {
 
 	return wgslTagFn/* wgsl */`
 		fn ${ name }() -> ${ builder => builder.getType( type ) } {
 
-			${ [ graphGlobals ] }
+			${ [ graphGlobals, getGraphPosition, getGraphNormal, getGraphTangent, getGraphUv, getGraphUv1, getGraphColor ] }
 			${ new MaterialGraphBodyNode( material, node, type ) }
 
 		}
@@ -129,8 +170,15 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 		super( kernelBuilder.object, kernelBuilder.renderer );
 		this.kernelBuilder = kernelBuilder;
 		this.material = material;
-		this.geometry = graphGeometry;
-		this.camera = graphCamera;
+
+		// stand-ins three.js reads while building, with the attributes the hit provides
+		this.camera = new PerspectiveCamera();
+		this.geometry = new BufferGeometry();
+		Object.entries( { position: 3, normal: 3, tangent: 4, uv: 2, uv1: 2, color: 4 } ).forEach( ( [ name, itemSize ] ) => {
+
+			this.geometry.setAttribute( name, new BufferAttribute( new Float32Array( itemSize ), itemSize ) );
+
+		} );
 
 		// built as a fragment shader so "inlineVaryings" applies
 		this.setShaderStage( 'fragment' );
@@ -181,25 +229,20 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 	buildGraph( node, type ) {
 
 		const { kernelBuilder, material } = this;
-		const { camera, bvhData } = kernelBuilder.getContext();
-		const { fns } = bvhData;
-
-		// the hit's values, read when a graph uses them
-		const vertexData = expression( 'graphVertexData', bvhData.structs.attributes.name );
-		const matrixWorld = expression( 'graphMatrixWorld', 'mat4' );
-		const matrixWorldInverse = expression( 'graphMatrixWorldInverse', 'mat4' );
-		const normal = expression( 'normalize( ( transpose( graphMatrixWorld ) * vec4f( graphVertexData.normal.xyz, 0.0 ) ).xyz )', 'vec3' ).toVar();
-		const tangent = expression( 'vec4f( ( graphMatrixWorldInverse * vec4f( graphVertexData.tangent.xyz, 0.0 ) ).xyz, graphVertexData.tangent.w )', 'vec4' );
+		const { camera } = kernelBuilder.getContext();
+		// typed expressions, since three reads their types before a function call node is set up
 		const attributes = {
-			position: expression( '( graphMatrixWorldInverse * vec4f( graphVertexData.position.xyz, 1.0 ) ).xyz', 'vec3' ).toVar(),
-			normal,
-			tangent: getGraphTangent( tangent, normal, expression( 'graphHit.indices', 'uvec3' ), expression( 'graphAttributesOffset', 'uint' ) ).toVar(),
-			uv: fns.getUvFromChannel( vertexData, 0 ),
-			uv1: fns.getUvFromChannel( vertexData, 1 << 23 ),
-			color: fns.getColor( vertexData ),
+			position: expression( 'getGraphPosition()', 'vec3' ).toVar(),
+			normal: expression( 'getGraphNormal()', 'vec3' ).toVar(),
+			tangent: expression( 'getGraphTangent()', 'vec4' ).toVar(),
+			uv: expression( 'getGraphUv()', 'vec2' ),
+			uv1: expression( 'getGraphUv1()', 'vec2' ),
+			color: expression( 'getGraphColor()', 'vec4' ),
 		};
 
 		// replace the object, camera and rasterizer values with the hit's
+		const matrixWorld = expression( 'graphMatrixWorld', 'mat4' );
+		const matrixWorldInverse = expression( 'graphMatrixWorldInverse', 'mat4' );
 		const { viewMatrix } = camera;
 		const objectPosition = matrixWorld.element( 3 ).xyz;
 		const overrides = [
@@ -233,7 +276,7 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 			inlineVaryings: true,
 		};
 
-		const value = overrideNodes( overrides, type === 'float' ? float( node ) : vec3( node ) );
+		const value = overrideNodes( overrides, convert( node, type ) );
 		const flow = this.flowStagesNode( value, type );
 
 		// the kernel updates per frame nodes
