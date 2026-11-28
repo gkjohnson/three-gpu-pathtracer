@@ -16,6 +16,8 @@ const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromC
 const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
 
 // the hit being shaded, which the overrides below read so they work in any function a graph builds into
+// TODO: use "toVar" nodes for these, which three declares as private globals, like "bvh_objectIndex" in
+// PathtracerBVHComputeData, instead of hard coded names
 const graphGlobals = wgslTagCode/* wgsl */`
 	var<private> graphHit: ${ hitRecordStruct };
 	var<private> graphVertexData: ${ attributesStruct };
