@@ -122,6 +122,11 @@ export class PathTracerBackend {
 
 	}
 
+	// the camera uniforms the material graphs read
+	setCameraUniforms( cameraUniforms ) {
+
+	}
+
 	setFilterGlossy( value ) {
 
 	}

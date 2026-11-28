@@ -5,6 +5,7 @@ export * from './materials/RenderToScreenMaterial.js';
 export * from './materials/FogVolumeNodeMaterial.js';
 export * from './denoise/OIDNDenoiser.js';
 export * from './upscale/FSRUpscaler.js';
+export * from './materialGraphs/MaterialGraphs.js';
 
 // extend the cameras to avoid adding WebGPU imports to the WebGLPathTracer
 import './shims/EquirectCameraShim.js';

@@ -30,7 +30,7 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { generateRadialFloorTexture } from './src/generateRadialFloorTexture.js';
 import { GradientEquirectTexture, PhysicalCamera } from 'three-gpu-pathtracer';
-import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
+import { WebGPUPathTracer, OIDNDenoiser, FSRUpscaler, MaterialGraphs, RANDOM_PCG, RANDOM_SOBOL, RANDOM_BLUE_DITHER } from 'three-gpu-pathtracer/webgpu';
 import { GenerateMeshBVHWorker } from 'three-mesh-bvh/worker';
 import { initUNetFromURL } from 'oidn-webgpu';
 import { Upscaler } from '@pmndrs/upscaler';
@@ -183,7 +183,7 @@ const params = {
 
 };
 
-let floorPlane, pedestal, pedestalMaterial, backdrop, lightRigs, gui, stats, denoiser, upscaler;
+let floorPlane, pedestal, pedestalMaterial, backdrop, lightRigs, gui, stats, denoiser, upscaler, materialGraphs;
 let pathTracer, renderer, orthoCamera, perspectiveCamera, activeCamera;
 let controls, scene, model;
 let gradientMap;
@@ -291,6 +291,8 @@ async function init() {
 
 	pathTracer.setDenoiser( params.denoise ? denoiser : null );
 	pathTracer.setUpscaler( params.upscale ? upscaler : null );
+
+	materialGraphs = new MaterialGraphs();
 
 	// camera
 	const aspect = window.innerWidth / window.innerHeight;
@@ -954,6 +956,8 @@ async function updateModel() {
 
 	alignBackdropToCamera();
 
+	// node materials' TSL graphs are only built in for the models that use them
+	pathTracer.getShadingModel().setMaterialGraphs( modelInfo.materialGraphs ? materialGraphs : null );
 	await pathTracer.setScene( scene, activeCamera );
 
 	// otherwise the "rendering" progress event hides the loading line

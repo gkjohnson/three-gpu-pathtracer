@@ -47,6 +47,13 @@ export class MegaKernelPathTracer extends PathTracerBackend {
 
 	}
 
+	setCameraUniforms( cameraUniforms ) {
+
+		this.kernel.context.camera = cameraUniforms;
+		this.rebuild();
+
+	}
+
 	setFilterGlossy( value ) {
 
 		// the kernel takes the inverted threshold, mirroring Cycles

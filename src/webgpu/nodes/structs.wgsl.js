@@ -178,6 +178,10 @@ export const materialStruct = new StructTypeNode( {
 	multiscatterColor: 'vec3',
 	scatterStrength: 'float',
 	scatterAnisotropy: 'float',
+
+	// offset 293 floats
+	// -1 without material graphs
+	graphIndex: 'int',
 	// total size = 296
 }, 'Material' );
 

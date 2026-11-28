@@ -54,6 +54,14 @@ export class GLTFShadingModel extends ShadingModel {
 		this.iridescentFresnel = iridescentFresnel;
 		this.transmissionFresnel = transmissionFresnelFunc( iridescentFresnel );
 
+		this.materialGraphOutputs = [
+			{ property: 'colorNode', field: 'color', type: 'vec3' },
+			{ property: 'opacityNode', field: 'opacity', type: 'float' },
+			{ property: 'roughnessNode', field: 'roughness', type: 'float' },
+			{ property: 'metalnessNode', field: 'metalness', type: 'float' },
+			{ property: 'emissiveNode', field: 'emission', type: 'vec3' },
+		];
+
 	}
 
 	init( renderer ) {
@@ -719,9 +727,11 @@ export class GLTFShadingModel extends ShadingModel {
 	}
 
 	// the emissive color and intensity, ignoring the emissive map. Fog boundaries don't emit
+	// TODO: sample emission graphs as lights
 	getEmissiveLuminance( material ) {
 
-		if ( ! material || ! material.emissive || material.isFogVolumeMaterial ) {
+		const hasEmissionGraph = Boolean( this.materialGraphs && material && material.emissiveNode );
+		if ( ! material || ! material.emissive || material.isFogVolumeMaterial || hasEmissionGraph ) {
 
 			return 0;
 
@@ -1037,8 +1047,11 @@ export class GLTFShadingModel extends ShadingModel {
 			floatArray[ index ++ ] = this.getField( m, 'scatterStrength', 0.0 );
 			floatArray[ index ++ ] = this.getField( m, 'scatterAnisotropy', 0.0 );
 
+			// graphIndex - offset 293
+			intArray[ index ++ ] = this.materialGraphs ? this.materialGraphs.getGraphIndex( m ) : - 1;
+
 			// padding to the struct's 16 byte alignment
-			index += 3;
+			index += 2;
 
 		}
 

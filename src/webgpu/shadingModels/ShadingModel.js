@@ -1,4 +1,5 @@
 /** @import { WebGPURenderer } from 'three/webgpu' */
+/** @import { MaterialGraphs } from '../materialGraphs/MaterialGraphs.js' */
 import { RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, texture, uniformArray } from 'three/tsl';
 import { wgslTagFn, proxyFn, contextProxy } from 'three-mesh-bvh/webgpu';
@@ -79,6 +80,10 @@ export class ShadingModel {
 		this.materialsMap = new Map();
 		this.textures = [];
 		this.texturesMap = new Map();
+		this.materialGraphs = null;
+
+		// the graph outputs the surface record supports, e.g. { property: 'colorNode', field: 'color', type: 'vec3' }
+		this.materialGraphOutputs = [];
 
 	}
 
@@ -267,6 +272,12 @@ export class ShadingModel {
 		features.reset();
 		this.materials.forEach( material => this.detectFeatures( material, features ) );
 
+		if ( this.materialGraphs && this.materialGraphs.graphs.length > 0 ) {
+
+			features.setUsed( 'MATERIAL_GRAPHS' );
+
+		}
+
 		return features.getUsedFeatures().sort().join() !== before;
 
 	}
@@ -288,6 +299,17 @@ export class ShadingModel {
 	getEmissiveLuminance( /* material */ ) {
 
 		return 0;
+
+	}
+
+	/**
+	 * Sets the "MaterialGraphs" to use, or null. Call "WebGPUPathTracer.updateMaterials" after.
+	 *
+	 * @param {MaterialGraphs|null} materialGraphs
+	 */
+	setMaterialGraphs( materialGraphs ) {
+
+		this.materialGraphs = materialGraphs;
 
 	}
 
@@ -414,6 +436,7 @@ export class ShadingModel {
 
 	}
 
+	// collects and writes the materials under "root". Returns true if the material graphs changed
 	updateMaterials( root ) {
 
 		const { materials, materialsMap, textures, texturesMap, structs } = this;
@@ -462,6 +485,10 @@ export class ShadingModel {
 
 		}
 
+		// collected first so the materials are written with their graph indices
+		const { materialGraphs } = this;
+		const graphsChanged = materialGraphs ? materialGraphs.update( materials, this.materialGraphOutputs ) : false;
+
 		const { materialData } = this.writeMaterialsBuffer( materials );
 		const materialStruct = structs.material.proxyNode;
 		const materialsStorage = this.storage.materials.proxyNode;
@@ -475,6 +502,8 @@ export class ShadingModel {
 
 		materialsStorage.value.array.set( materialData );
 		materialsStorage.value.needsUpdate = true;
+
+		return graphsChanged;
 
 		function add( mat ) {
 
