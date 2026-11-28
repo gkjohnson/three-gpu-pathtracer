@@ -174,6 +174,8 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 		this.material = material;
 
 		// stand-ins three.js reads while building, with the attributes the hit provides
+		// TODO: build the geometry and the "getAttribute" hook from the bvh data's attributes struct, so they always
+		// match and cover every uv channel (uv2 and up) and any custom attributes once they're packed
 		this.camera = new PerspectiveCamera();
 		this.geometry = new BufferGeometry();
 		Object.entries( { position: 3, normal: 3, tangent: 4, uv: 2, uv1: 2, color: 4 } ).forEach( ( [ name, itemSize ] ) => {
@@ -233,6 +235,7 @@ class MaterialGraphBuilder extends WGSLNodeBuilder {
 		const { kernelBuilder, material } = this;
 		const { camera } = kernelBuilder.getContext();
 		// typed expressions, since three reads their types before a function call node is set up
+		// TODO: call the functions directly once three-mesh-bvh's "WGSLTagFnNode.getNodeFunction" works before setup
 		const attributes = {
 			position: expression( 'getGraphPosition()', 'vec3' ).toVar(),
 			normal: expression( 'getGraphNormal()', 'vec3' ).toVar(),
