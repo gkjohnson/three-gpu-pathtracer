@@ -256,21 +256,23 @@ export class GLTFShadingModel extends ShadingModel {
 
 					// iridescence
 					var filmFresnelMax = 0.0;
-					if ( surf.iridescence > 0.0 ) {
+					${ ifFeature( 'IRIDESCENCE' )/* wgsl */`
+						if ( surf.iridescence > 0.0 ) {
 
-						// the media on either side of the film - air outside and the volume interior
-						// as the base on front faces, swapped on back faces so TIR can take effect
-						let outsideIor = select( surf.ior, 1.0, surf.frontFace );
-						let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
+							// the media on either side of the film - air outside and the volume interior
+							// as the base on front faces, swapped on back faces so TIR can take effect
+							let outsideIor = select( surf.ior, 1.0, surf.frontFace );
+							let filmBaseIor = select( 1.0, surf.ior, surf.frontFace );
 
-						let metallicFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, surf.color, surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-						metallicReflectance = mix( metallicReflectance, metallicFilmFresnel, surf.iridescence );
+							let metallicFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, surf.color, surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
+							metallicReflectance = mix( metallicReflectance, metallicFilmFresnel, surf.iridescence );
 
-						let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
-						dielectricReflectance = mix( dielectricReflectance, dielectricFilmFresnel, surf.iridescence );
-						filmFresnelMax = max( max( dielectricFilmFresnel.r, dielectricFilmFresnel.g ), dielectricFilmFresnel.b );
+							let dielectricFilmFresnel = ${ this.iridescentFresnel }( ctx.VdotH, vec3f( ${ iorToF0Func }( filmBaseIor ) ), surf.iridescenceIor, outsideIor, surf.iridescenceThickness );
+							dielectricReflectance = mix( dielectricReflectance, dielectricFilmFresnel, surf.iridescence );
+							filmFresnelMax = max( max( dielectricFilmFresnel.r, dielectricFilmFresnel.g ), dielectricFilmFresnel.b );
 
-					}
+						}
+					` }
 
 					let metallic = metallicSpecular * metallicReflectance;
 					let dielectric = dielectricSpecular * dielectricReflectance;
@@ -713,6 +715,12 @@ export class GLTFShadingModel extends ShadingModel {
 		if ( this.getField( material, 'clearcoat', 0.0 ) > 0.0 ) {
 
 			features.setUsed( 'CLEARCOAT' );
+
+		}
+
+		if ( this.getField( material, 'iridescence', 0.0 ) > 0.0 ) {
+
+			features.setUsed( 'IRIDESCENCE' );
 
 		}
 
