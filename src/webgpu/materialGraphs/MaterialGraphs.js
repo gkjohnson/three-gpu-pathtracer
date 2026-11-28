@@ -1,11 +1,10 @@
 /** @import { Material } from 'three/webgpu' */
-import { StorageBufferAttribute } from 'three/webgpu';
-import { storage } from 'three/tsl';
 import { getEvaluateMaterialGraphFn } from './materialGraph.wgsl.js';
 
 /**
  * Builds the TSL graphs of node materials into the kernels with three.js. Assigned to a shading model with
- * `setMaterialGraphs`, which passes it the materials and the graph outputs its surface record supports with `update`.
+ * `setMaterialGraphs`, which passes it the materials and the graph outputs its surface record supports with `update`,
+ * and writes each material's "graphIndex" from `getGraphIndex`.
  *
  * The surface record calls the WGSL function from `getEvaluateFn` at each hit, which replaces the fields of "surf" that
  * the hit's material has graphs for, and reads its "normal" as the shading normal:
@@ -21,19 +20,15 @@ export class MaterialGraphs {
 		this.graphs = [];
 		this.evaluateFn = null;
 
-		// the index in "graphs" of each material by its index in the shading model, or -1 without graphs. At least
-		// two long so TSL doesn't make it a scalar
-		this.graphIndices = storage( new StorageBufferAttribute( new Int32Array( 2 ).fill( - 1 ), 1 ), 'int' )
-			.toReadOnly()
-			.setName( 'materialGraphIndices' );
+		// the index in "graphs" of each material with graphs
+		this.graphIndices = new Map();
 
 	}
 
 	/**
-	 * Collects the graphs of the materials, in the shading model's order, for the "outputs" its surface record
-	 * supports: each node material "property" with the surface record "field" it sets and its "type". Returns whether
-	 * they changed, so the function from `getEvaluateFn` did and the kernels need rebuilding. Changed uniform values
-	 * don't need a rebuild.
+	 * Collects the graphs of the materials for the "outputs" the shading model's surface record supports: each node
+	 * material "property" with the surface record "field" it sets and its "type". Returns whether they changed, so the
+	 * function from `getEvaluateFn` did and the kernels need rebuilding. Changed uniform values don't need a rebuild.
 	 *
 	 * @param {Array<Material>} materials
 	 * @param {Array<{property:string,field:string,type:string}>} outputs
@@ -42,8 +37,8 @@ export class MaterialGraphs {
 	update( materials, outputs ) {
 
 		const graphs = [];
-		const indices = new Int32Array( Math.max( materials.length, 2 ) ).fill( - 1 );
-		materials.forEach( ( material, i ) => {
+		this.graphIndices.clear();
+		materials.forEach( material => {
 
 			if ( ! material.isNodeMaterial ) {
 
@@ -57,35 +52,35 @@ export class MaterialGraphs {
 
 			if ( materialOutputs.length > 0 ) {
 
-				indices[ i ] = graphs.length;
+				this.graphIndices.set( material, graphs.length );
 				graphs.push( { material, outputs: materialOutputs } );
 
 			}
 
 		} );
 
-		const attribute = this.graphIndices.value;
-		if ( attribute.count < indices.length ) {
-
-			attribute.dispose();
-			this.graphIndices.value = new StorageBufferAttribute( indices, 1 );
-
-		} else {
-
-			attribute.array.set( indices );
-			attribute.needsUpdate = true;
-
-		}
-
 		const changed = this.evaluateFn === null || ! areGraphsEqual( graphs, this.graphs );
 		this.graphs = graphs;
 		if ( changed ) {
 
-			this.evaluateFn = getEvaluateMaterialGraphFn( graphs, this.graphIndices );
+			this.evaluateFn = getEvaluateMaterialGraphFn( graphs );
 
 		}
 
 		return changed;
+
+	}
+
+	/**
+	 * Returns the index of the material's graphs, which the shading model writes as the material's "graphIndex", or -1
+	 * without graphs.
+	 *
+	 * @param {Material} material
+	 * @returns {number}
+	 */
+	getGraphIndex( material ) {
+
+		return this.graphIndices.get( material ) ?? - 1;
 
 	}
 

@@ -1,4 +1,4 @@
-/** @import { Material, StorageBufferNode } from 'three/webgpu' */
+/** @import { Material } from 'three/webgpu' */
 import { StructTypeNode } from 'three/webgpu';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
 import { hitRecordStruct } from '../nodes/structs.wgsl.js';
@@ -7,6 +7,7 @@ import { GRAPH_INPUTS, MaterialGraphFunctionNode } from './MaterialGraphBuilder.
 const attributesStruct = /* @__PURE__ */ contextProxy( 'bvhData.structs.attributes' );
 const surfaceRecordStruct = /* @__PURE__ */ contextProxy( 'shadingModel.structs.surfaceRecord' );
 const objectsStorage = /* @__PURE__ */ contextProxy( 'bvhData.storage.objects' );
+const materialsStorage = /* @__PURE__ */ contextProxy( 'shadingModel.storage.materials' );
 const getUvFromChannel = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getUvFromChannel' );
 const getColor = /* @__PURE__ */ contextProxyFn( 'bvhData.fns.getColor' );
 
@@ -17,18 +18,15 @@ const materialGraphInputStruct = new StructTypeNode(
 
 /**
  * Returns the "evaluateMaterialGraph" WGSL function described in "MaterialGraphs", which fills the graph inputs from
- * the hit and runs the graphs of its material.
+ * the hit and runs the graphs of its material, found by the material's "graphIndex".
  *
  * "graphs" holds each "material" and its "outputs", each the surface record "field" a graph sets, its "type" and the
  * graph's "node".
- * "graphIndices" holds the index in "graphs" of each material, by its index in the shading model, or -1 without
- * graphs.
  *
  * @param {Array<{material:Material,outputs:Array<Object>}>} graphs
- * @param {StorageBufferNode} graphIndices
  * @returns {Function}
  */
-export function getEvaluateMaterialGraphFn( graphs, graphIndices ) {
+export function getEvaluateMaterialGraphFn( graphs ) {
 
 	const runFn = getRunMaterialGraphFn( graphs );
 	return wgslTagFn/* wgsl */`
@@ -40,7 +38,7 @@ export function getEvaluateMaterialGraphFn( graphs, graphIndices ) {
 		) -> void {
 
 			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
-			let graph = ${ graphIndices }[ objectInfo.materialIndex ];
+			let graph = ${ materialsStorage }[ objectInfo.materialIndex ].graphIndex;
 			if ( graph == - 1 ) {
 
 				return;

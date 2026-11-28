@@ -1048,8 +1048,11 @@ export class GLTFShadingModel extends ShadingModel {
 			floatArray[ index ++ ] = this.getField( m, 'scatterStrength', 0.0 );
 			floatArray[ index ++ ] = this.getField( m, 'scatterAnisotropy', 0.0 );
 
+			// graphIndex - offset 293
+			intArray[ index ++ ] = this.materialGraphs ? this.materialGraphs.getGraphIndex( m ) : - 1;
+
 			// padding to the struct's 16 byte alignment
-			index += 3;
+			index += 2;
 
 		}
 

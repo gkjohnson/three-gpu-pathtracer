@@ -488,6 +488,10 @@ export class ShadingModel {
 
 		}
 
+		// the graphs are collected first so the materials can be written with their graph indices
+		const { materialGraphs } = this;
+		const graphsChanged = materialGraphs ? materialGraphs.update( materials, this.materialGraphOutputs ) : false;
+
 		const { materialData } = this.writeMaterialsBuffer( materials );
 		const materialStruct = structs.material.proxyNode;
 		const materialsStorage = this.storage.materials.proxyNode;
@@ -502,8 +506,7 @@ export class ShadingModel {
 		materialsStorage.value.array.set( materialData );
 		materialsStorage.value.needsUpdate = true;
 
-		const { materialGraphs } = this;
-		return materialGraphs ? materialGraphs.update( materials, this.materialGraphOutputs ) : false;
+		return graphsChanged;
 
 		function add( mat ) {
 
