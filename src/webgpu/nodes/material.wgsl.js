@@ -423,12 +423,20 @@ export const getSurfaceRecordFunc = ( {
 
 			let objectInfo = ${ objectsStorage }[ hit.objectIndex ];
 			var input: ${ materialGraphInputStruct };
+			input.matrixWorld = objectInfo.matrixWorld;
+			input.matrixWorldInverse = objectInfo.inverseMatrixWorld;
+			input.shadingNormal = normal;
+			input.faceNormal = faceNormal;
+			input.viewDirection = view;
+			input.frontFacing = side == 1.0;
+			input.indices = hit.indices;
+			input.attributesOffset = objectInfo.attributesOffset;
+
+			input.position = ( objectInfo.inverseMatrixWorld * vec4f( vertexData.position.xyz, 1.0 ) ).xyz;
+			input.normal = normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( baseNormal, 0.0 ) ).xyz );
+			input.tangent = vec4f( ( objectInfo.inverseMatrixWorld * vec4f( vertexData.tangent.xyz, 0.0 ) ).xyz, vertexData.tangent.w );
 			input.uv = ${ getUvFromChannel }( vertexData, 0 );
 			input.uv1 = ${ getUvFromChannel }( vertexData, 1 << 23 );
-			input.positionWorld = vertexData.position.xyz;
-			input.positionLocal = ( objectInfo.inverseMatrixWorld * vec4f( input.positionWorld, 1.0 ) ).xyz;
-			input.normalWorld = baseNormal;
-			input.normalLocal = normalize( ( transpose( objectInfo.matrixWorld ) * vec4f( baseNormal, 0.0 ) ).xyz );
 			input.color = ${ getColor }( vertexData );
 
 			var graph: ${ materialGraphResultStruct };

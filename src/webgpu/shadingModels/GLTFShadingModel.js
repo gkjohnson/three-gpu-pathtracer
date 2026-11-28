@@ -71,6 +71,12 @@ export class GLTFShadingModel extends ShadingModel {
 
 	}
 
+	updateCamera( camera ) {
+
+		this.materialGraphs.updateCamera( camera );
+
+	}
+
 	updateFunctions() {
 
 		super.updateFunctions();

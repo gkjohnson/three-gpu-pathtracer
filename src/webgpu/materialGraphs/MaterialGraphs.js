@@ -1,5 +1,5 @@
-/** @import { Material } from 'three/webgpu' */
-import { GRAPH_OUTPUTS, getRunMaterialGraphFn } from './materialGraph.wgsl.js';
+/** @import { Camera, Material } from 'three/webgpu' */
+import { GRAPH_OUTPUTS, createCameraUniforms, getRunMaterialGraphFn, updateCameraUniforms } from './materialGraph.wgsl.js';
 
 /**
  * The TSL graphs of node materials, built into the kernels by three.js as the WGSL function from `getRunFn`. Each
@@ -11,7 +11,19 @@ export class MaterialGraphs {
 
 		this.graphs = [];
 		this.indices = new Map();
-		this.runFn = getRunMaterialGraphFn( [] );
+		this.cameraUniforms = createCameraUniforms();
+		this.runFn = getRunMaterialGraphFn( [], this.cameraUniforms );
+
+	}
+
+	/**
+	 * Sets the camera the graphs read, like three.js' "cameraPosition". Changing it doesn't need a rebuild.
+	 *
+	 * @param {Camera} camera
+	 */
+	updateCamera( camera ) {
+
+		updateCameraUniforms( this.cameraUniforms, camera );
 
 	}
 
@@ -41,7 +53,7 @@ export class MaterialGraphs {
 			if ( outputs.length > 0 ) {
 
 				indices.set( material, graphs.length );
-				graphs.push( outputs );
+				graphs.push( { material, outputs } );
 
 			}
 
@@ -52,7 +64,7 @@ export class MaterialGraphs {
 		this.indices = indices;
 		if ( changed ) {
 
-			this.runFn = getRunMaterialGraphFn( graphs );
+			this.runFn = getRunMaterialGraphFn( graphs, this.cameraUniforms );
 
 		}
 
@@ -85,12 +97,13 @@ export class MaterialGraphs {
 
 }
 
-// whether two lists of graphs have the same outputs, with the same nodes
+// whether two lists of graphs have the same materials and outputs, with the same nodes
 function areGraphsEqual( a, b ) {
 
-	return a.length === b.length && a.every( ( outputs, i ) => {
+	return a.length === b.length && a.every( ( { material, outputs }, i ) => {
 
-		return outputs.length === b[ i ].length && outputs.every( ( output, j ) => output.node === b[ i ][ j ].node && output.name === b[ i ][ j ].name );
+		const other = b[ i ].outputs;
+		return material === b[ i ].material && outputs.length === other.length && outputs.every( ( output, j ) => output.node === other[ j ].node && output.name === other[ j ].name );
 
 	} );
 

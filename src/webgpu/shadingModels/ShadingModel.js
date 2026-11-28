@@ -1,4 +1,4 @@
-/** @import { WebGPURenderer } from 'three/webgpu' */
+/** @import { Camera, WebGPURenderer } from 'three/webgpu' */
 import { RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, StorageBufferAttribute, StructTypeNode } from 'three/webgpu';
 import { storage, texture, uniformArray } from 'three/tsl';
 import { wgslTagFn, proxyFn, contextProxy } from 'three-mesh-bvh/webgpu';
@@ -290,6 +290,13 @@ export class ShadingModel {
 		return 0;
 
 	}
+
+	/**
+	 * Reads the camera the rays are generated from, for functions that read it. Called when the camera changes.
+	 *
+	 * @param {Camera} camera
+	 */
+	updateCamera( /* camera */ ) {}
 
 	/**
 	 * Packs the materials' textures into the atlas "fns.sampleTexel" reads. Call after "updateMaterials".

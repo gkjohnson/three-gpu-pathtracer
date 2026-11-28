@@ -1196,6 +1196,12 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		if ( this.camera ) {
+
+			shadingModel.updateCamera( this.camera );
+
+		}
+
 		this._pathTracer.setShadingModel( shadingModel );
 		this.reset();
 
@@ -1276,6 +1282,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		this._bvhData.fns.getCameraRay = this._cameraRayFnHandle.fn;
 		this._cameraRayFnHandle.update();
+		this._shadingModel.updateCamera( camera );
 		this._updateCameraInVolume();
 		this._pathTracer.rebuild();
 		this.reset();
@@ -1335,6 +1342,7 @@ export class WebGPUPathTracer extends EventDispatcher {
 
 		}
 
+		this._shadingModel.updateCamera( this.camera );
 		this._updateCameraInVolume();
 		this.reset();
 
