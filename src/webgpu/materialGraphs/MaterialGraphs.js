@@ -76,13 +76,39 @@ export class MaterialGraphs {
 
 }
 
-function areGraphsEqual( a, b ) {
+// whether the graphs have the same materials, each with the same nodes for the same fields
+function areGraphsEqual( graphsA, graphsB ) {
 
-	return a.length === b.length && a.every( ( { material, outputs }, i ) => {
+	if ( graphsA.length !== graphsB.length ) {
 
-		const other = b[ i ].outputs;
-		return material === b[ i ].material && outputs.length === other.length && outputs.every( ( output, j ) => output.node === other[ j ].node && output.field === other[ j ].field && output.type === other[ j ].type );
+		return false;
 
-	} );
+	}
+
+	for ( let i = 0; i < graphsA.length; i ++ ) {
+
+		const graphA = graphsA[ i ];
+		const graphB = graphsB[ i ];
+		if ( graphA.material !== graphB.material || graphA.outputs.length !== graphB.outputs.length ) {
+
+			return false;
+
+		}
+
+		for ( let j = 0; j < graphA.outputs.length; j ++ ) {
+
+			const outputA = graphA.outputs[ j ];
+			const outputB = graphB.outputs[ j ];
+			if ( outputA.node !== outputB.node || outputA.field !== outputB.field || outputA.type !== outputB.type ) {
+
+				return false;
+
+			}
+
+		}
+
+	}
+
+	return true;
 
 }
