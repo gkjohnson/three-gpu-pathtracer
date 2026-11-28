@@ -23,6 +23,7 @@ import {
 } from './ggx.wgsl.js';
 import { constants, hitRecordStruct, surfaceRecordStruct, transmissionFresnelStruct } from './structs.wgsl.js';
 import { wgslTagFn, contextProxy, contextProxyFn } from 'three-mesh-bvh/webgpu';
+import { ifFeature } from './features.js';
 
 // Correct the shading normal to prevent scattering rays below the geometry surface by bending
 // the normal towards the geometry normal such that the perfect reflection ray is just above the
@@ -288,70 +289,74 @@ export const getSurfaceRecordFunc = ( {
 
 		}
 
-		var clearcoat = material.clearcoat;
-		if ( material.clearcoatMap != -1 ) {
+		${ ifFeature( 'CLEARCOAT' )/* wgsl */`
+			var clearcoat = material.clearcoat;
+			if ( material.clearcoatMap != -1 ) {
 
-			let uvPrime = material.clearcoatMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.clearcoatMap ), 1 );
-			let texColor = ${ sampleTexel }( uvPrime.xy,material.clearcoatMap, 0 );
-			clearcoat *= texColor.r;
-
-		}
-
-		var clearcoatRoughness = material.clearcoatRoughness;
-		if ( material.clearcoatRoughnessMap != -1 ) {
-
-			let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.clearcoatRoughnessMap ), 1 );
-			let texColor = ${ sampleTexel }( uvPrime.xy,material.clearcoatRoughnessMap, 0 );
-			clearcoatRoughness *= texColor.g;
-
-		}
-
-		var clearcoatNormal = baseNormal;
-		if ( material.clearcoatNormalMap != -1 ) {
-
-			// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
-			// resulting in NaNs and slow path tracing.
-			if ( length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
-
-				// TODO: consider re-orthonormalizing against the normal here since attribute
-				// interpolation could result in drift.
-				let tangent = normalize( vertexData.tangent.xyz );
-				let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
-				let vTBN = mat3x3f( tangent, bitangent, baseNormal );
-
-				let uvPrime = material.clearcoatNormalMapTransform * vec3( ${ getUvFromChannel }( vertexData,material.clearcoatNormalMap ), 1.0 );
-				var texNormal = ${ sampleTexel }( uvPrime.xy,material.clearcoatNormalMap, 0 ).xyz;
-				texNormal = texNormal * 2.0 - 1.0;
-				texNormal = texNormal * vec3f( material.clearcoatNormalScale, 1.0 );
-				clearcoatNormal = normalize( vTBN * texNormal );
+				let uvPrime = material.clearcoatMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.clearcoatMap ), 1 );
+				let texColor = ${ sampleTexel }( uvPrime.xy,material.clearcoatMap, 0 );
+				clearcoat *= texColor.r;
 
 			}
 
-		}
+			var clearcoatRoughness = material.clearcoatRoughness;
+			if ( material.clearcoatRoughnessMap != -1 ) {
 
-		clearcoatNormal *= side;
+				let uvPrime = material.clearcoatRoughnessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.clearcoatRoughnessMap ), 1 );
+				let texColor = ${ sampleTexel }( uvPrime.xy,material.clearcoatRoughnessMap, 0 );
+				clearcoatRoughness *= texColor.g;
 
-		clearcoatNormal = ${ ensureValidViewNormal }( clearcoatNormal, faceNormal, view );
+			}
 
-		clearcoatNormal = ${ ensureValidReflectionNormal }( clearcoatNormal, faceNormal, view );
+			var clearcoatNormal = baseNormal;
+			if ( material.clearcoatNormalMap != -1 ) {
 
-		var sheenColor = material.sheenColor;
-		if ( material.sheenColorMap != -1 ) {
+				// some provided tangents can be malformed (0, 0, 0) causing the normal to be degenerate
+				// resulting in NaNs and slow path tracing.
+				if ( length( vertexData.tangent.xyz ) > 0.0 && vertexData.tangent.w != 0.0 ) {
 
-			let uvPrime = material.sheenColorMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.sheenColorMap ), 1 );
-			let texColor = ${ sampleTexel }( uvPrime.xy,material.sheenColorMap, 0 );
-			sheenColor *= texColor.rgb;
+					// TODO: consider re-orthonormalizing against the normal here since attribute
+					// interpolation could result in drift.
+					let tangent = normalize( vertexData.tangent.xyz );
+					let bitangent = normalize( cross( baseNormal, tangent ) * vertexData.tangent.w );
+					let vTBN = mat3x3f( tangent, bitangent, baseNormal );
 
-		}
+					let uvPrime = material.clearcoatNormalMapTransform * vec3( ${ getUvFromChannel }( vertexData,material.clearcoatNormalMap ), 1.0 );
+					var texNormal = ${ sampleTexel }( uvPrime.xy,material.clearcoatNormalMap, 0 ).xyz;
+					texNormal = texNormal * 2.0 - 1.0;
+					texNormal = texNormal * vec3f( material.clearcoatNormalScale, 1.0 );
+					clearcoatNormal = normalize( vTBN * texNormal );
 
-		var sheenRoughness = material.sheenRoughness;
-		if ( material.sheenRoughnessMap != -1 ) {
+				}
 
-			let uvPrime = material.sheenRoughnessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.sheenRoughnessMap ), 1 );
-			let texColor = ${ sampleTexel }( uvPrime.xy,material.sheenRoughnessMap, 0 );
-			sheenRoughness *= texColor.a;
+			}
 
-		}
+			clearcoatNormal *= side;
+
+			clearcoatNormal = ${ ensureValidViewNormal }( clearcoatNormal, faceNormal, view );
+
+			clearcoatNormal = ${ ensureValidReflectionNormal }( clearcoatNormal, faceNormal, view );
+		` }
+
+		${ ifFeature( 'SHEEN' )/* wgsl */`
+			var sheenColor = material.sheenColor;
+			if ( material.sheenColorMap != -1 ) {
+
+				let uvPrime = material.sheenColorMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.sheenColorMap ), 1 );
+				let texColor = ${ sampleTexel }( uvPrime.xy,material.sheenColorMap, 0 );
+				sheenColor *= texColor.rgb;
+
+			}
+
+			var sheenRoughness = material.sheenRoughness;
+			if ( material.sheenRoughnessMap != -1 ) {
+
+				let uvPrime = material.sheenRoughnessMapTransform * vec3f( ${ getUvFromChannel }( vertexData,material.sheenRoughnessMap ), 1 );
+				let texColor = ${ sampleTexel }( uvPrime.xy,material.sheenRoughnessMap, 0 );
+				sheenRoughness *= texColor.a;
+
+			}
+		` }
 
 		var iridescence = material.iridescence;
 		if ( material.iridescenceMap != -1 ) {
@@ -455,9 +460,6 @@ export const getSurfaceRecordFunc = ( {
 		surf.thinWall = material.thinWall == 1;
 		surf.dispersion = material.dispersion;
 
-		surf.clearcoatNormal = clearcoatNormal;
-		surf.clearcoat = clearcoat;
-
 		surf.iridescence = iridescence;
 		surf.iridescenceIor = material.iridescenceIor;
 		surf.iridescenceThickness = iridescenceThickness;
@@ -465,14 +467,15 @@ export const getSurfaceRecordFunc = ( {
 		surf.specularColor = specularColor;
 		surf.specularIntensity = specularIntensity;
 
-		surf.sheen = material.sheen;
-		surf.sheenColor = sheenColor;
-
 		let minRoughness = max( MIN_ROUGHNESS, blurRoughness );
 		surf.roughness = clamp( roughness, minRoughness, 1.0 );
-		surf.clearcoatRoughness = clamp( clearcoatRoughness, minRoughness, 1.0 );
-		surf.sheenRoughness = clamp( sheenRoughness, minRoughness, 1.0 );
 		surf.anisotropy = anisotropyStrength;
+
+		${ ifFeature( 'SHEEN' )/* wgsl */`
+			surf.sheen = material.sheen;
+			surf.sheenColor = sheenColor;
+			surf.sheenRoughness = clamp( sheenRoughness, minRoughness, 1.0 );
+		` }
 
 		// frontFace is used to determine transmissive properties and PDF. If no transmission is used
 		// then we can just always assume this is a front face.
@@ -492,8 +495,13 @@ export const getSurfaceRecordFunc = ( {
 		surf.normalBasis = surfaceBasis;
 		surf.normalInvBasis = ${ inverseMat3x3Func }( surf.normalBasis );
 
-		surf.clearcoatBasis = ${ getBasisFromNormalFunc }( surf.clearcoatNormal );
-		surf.clearcoatInvBasis = ${ inverseMat3x3Func }( surf.clearcoatBasis );
+		${ ifFeature( 'CLEARCOAT' )/* wgsl */`
+			surf.clearcoatNormal = clearcoatNormal;
+			surf.clearcoat = clearcoat;
+			surf.clearcoatRoughness = clamp( clearcoatRoughness, minRoughness, 1.0 );
+			surf.clearcoatBasis = ${ getBasisFromNormalFunc }( surf.clearcoatNormal );
+			surf.clearcoatInvBasis = ${ inverseMat3x3Func }( surf.clearcoatBasis );
+		` }
 
 		return surf;
 	}
