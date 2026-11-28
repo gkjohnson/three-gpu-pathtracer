@@ -234,10 +234,12 @@ export const getSurfaceRecordFunc = ( {
 
 		normal = ${ ensureValidReflectionNormal }( normal, faceNormal, view );
 
-		var albedo = vec4( material.color, material.opacity ) * objectColor;
+		// the object and vertex colors tint the material's color, applied after the material graphs
+		var albedo = vec4( material.color, material.opacity );
+		var tint = objectColor;
 		if ( material.vertexColors == 1 ) {
 
-			albedo *= ${ getColor }( vertexData );
+			tint *= ${ getColor }( vertexData );
 
 		}
 
@@ -453,9 +455,11 @@ export const getSurfaceRecordFunc = ( {
 		surf.roughness = roughness;
 
 		// node material graphs replace the surface values
+		// TODO: build three.js' "setupDiffuseColor" in the graphs once they can discard, so its color cascade applies
 		${ ifFeature( 'MATERIAL_GRAPHS' )/* wgsl */`${ evaluateMaterialGraph }( hit, vertexData, view, &surf );` }
 
-		surf.opacity = select( 1.0, surf.opacity, material.transparent != 0 );
+		surf.color *= tint.rgb;
+		surf.opacity = select( 1.0, surf.opacity * tint.a, material.transparent != 0 );
 		surf.matte = material.matte != 0;
 
 		surf.ior = material.ior;
