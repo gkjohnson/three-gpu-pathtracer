@@ -1,10 +1,103 @@
-import { BatchedMesh, Box3, BoxGeometry, CapsuleGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight, IcosahedronGeometry, MathUtils, Matrix4, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, SphereGeometry, TorusGeometry, TorusKnotGeometry, Vector3 } from 'three';
+import { BatchedMesh, Box3, BoxGeometry, BufferAttribute, BufferGeometry, CapsuleGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight, Group, IcosahedronGeometry, MathUtils, Matrix4, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, RectAreaLight, Sphere, SphereGeometry, TorusGeometry, TorusKnotGeometry, Vector3 } from 'three';
+import { MeshPhysicalNodeMaterial } from 'three/webgpu';
+import {
+	color, float, vec3, mix, smoothstep, dot, cos, positionLocal, normalView, positionViewDirection, mx_noise_float,
+	mx_fractal_noise_float,
+} from 'three/tsl';
 import { FogVolumeNodeMaterial } from 'three-gpu-pathtracer/webgpu';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const LDRAW_CREDIT = 'Model courtesy of the <a href="https://omr.ldraw.org/">LDraw Official Model Repository and Parts Library</a>.';
 const MECABRICKS_CREDIT = 'Model courtesy of <a href="https://mecabricks.com/">MecaBricks library</a>.';
 const LDRAW_MODELS_URL = 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/models';
+
+// The RenderMan teapot as in the depth of field demo, the pot and its base ring and logo, in one space two units tall
+// and standing on the origin, so procedural patterns read from "positionLocal" line up across the parts. The file's
+// quantized attributes are converted to floats so they can be transformed
+const TEAPOT_POT = [ 'teapot_Body_Hollow', 'teapot_Lid', 'teapot_Foot_Left_02', 'teapot_Foot_Right_02', 'teapot_Steps_02' ];
+const TEAPOT_TRIM = [ 'teapot_Base_02', 'renderman_Text' ];
+function getTeapotParts( model ) {
+
+	model.updateMatrixWorld( true );
+	const toFloat = attribute => {
+
+		const array = new Float32Array( attribute.count * attribute.itemSize );
+		for ( let i = 0; i < attribute.count; i ++ ) {
+
+			for ( let c = 0; c < attribute.itemSize; c ++ ) {
+
+				array[ i * attribute.itemSize + c ] = attribute.getComponent( i, c );
+
+			}
+
+		}
+
+		return new BufferAttribute( array, attribute.itemSize );
+
+	};
+
+	const box = new Box3();
+	const getGeometry = name => {
+
+		const mesh = model.getObjectByName( name );
+		const geometry = new BufferGeometry();
+		geometry.setIndex( mesh.geometry.index );
+		geometry.setAttribute( 'position', toFloat( mesh.geometry.attributes.position ) );
+		geometry.setAttribute( 'normal', toFloat( mesh.geometry.attributes.normal ) );
+		geometry.applyMatrix4( mesh.matrixWorld );
+		geometry.computeBoundingBox();
+		box.union( geometry.boundingBox );
+		return geometry;
+
+	};
+
+	const pot = TEAPOT_POT.map( getGeometry );
+	const trim = TEAPOT_TRIM.map( getGeometry );
+	const center = box.getCenter( new Vector3() );
+	const scale = 2 / ( box.max.y - box.min.y );
+	[ ...pot, ...trim ].forEach( geometry => geometry.translate( - center.x, - box.min.y, - center.z ).scale( scale, scale, scale ) );
+	return { pot, trim };
+
+}
+
+// Procedural node materials written in TSL, read in the teapot's space from "getTeapotParts"
+function createTslMaterials() {
+
+	const position = positionLocal;
+
+	// marble: white stone with dark veins where the warped stripes cross zero
+	const marble = new MeshPhysicalNodeMaterial( { roughness: 0.15 } );
+	const veins = mx_fractal_noise_float( position.mul( 1.5 ), 4 ).mul( 3 ).add( position.x.mul( 2 ) ).sin().abs().pow( 0.3 );
+	marble.colorNode = mix( color( 0x30353a ), color( 0xf2eee8 ), veins );
+
+	// lava: dark rock with glowing cracks along the noise's zero crossings
+	const lava = new MeshPhysicalNodeMaterial( { roughness: 0.9 } );
+	const crack = smoothstep( 0.08, 0, mx_noise_float( position.mul( 3 ) ).abs() );
+	lava.colorNode = mix( color( 0x1c1714 ), color( 0x2e2420 ), mx_noise_float( position.mul( 12 ) ).mul( 0.5 ).add( 0.5 ) );
+	lava.emissiveNode = mix( color( 0xff3000 ), color( 0xffb030 ), crack ).mul( crack ).mul( 6 );
+
+	// wood: rings around the vertical axis, warped by noise, under a clear coat
+	const wood = new MeshPhysicalNodeMaterial( { clearcoat: 1, clearcoatRoughness: 0.1 } );
+	const rings = position.xz.length().mul( 9 ).add( mx_noise_float( position.mul( 1.5 ) ).mul( 1.5 ) ).fract();
+	const grain = smoothstep( 0.0, 0.6, rings ).mul( smoothstep( 1.0, 0.8, rings ) );
+	wood.colorNode = mix( color( 0x4a2812 ), color( 0xb07040 ), grain );
+	wood.roughnessNode = mix( float( 0.6 ), float( 0.35 ), grain );
+
+	// rusted steel: rust patches, rougher and not metallic, gathering toward the bottom
+	const rusted = new MeshPhysicalNodeMaterial();
+	const rust = smoothstep( 0.45, 0.6, mx_fractal_noise_float( position.mul( 2.5 ), 5 ).mul( 0.5 ).add( 0.5 ).add( position.y.mul( - 0.15 ).add( 0.1 ) ) );
+	rusted.colorNode = mix( color( 0xa0a6ac ), mix( color( 0x5a200a ), color( 0x9a4a1a ), mx_noise_float( position.mul( 20 ) ).mul( 0.5 ).add( 0.5 ) ), rust );
+	rusted.metalnessNode = rust.oneMinus();
+	rusted.roughnessNode = mix( float( 0.25 ), float( 0.85 ), rust );
+
+	// thin film: a metal whose hue shifts with the angle to the viewer, as a soap film or anodized titanium
+	const film = new MeshPhysicalNodeMaterial( { metalness: 1, roughness: 0.2 } );
+	const hue = dot( normalView, positionViewDirection ).mul( 1.5 ).add( mx_noise_float( position.mul( 2 ) ).mul( 0.3 ) );
+	film.colorNode = cos( hue.add( vec3( 0, 0.33, 0.67 ) ).mul( Math.PI * 2 ) ).mul( 0.4 ).add( 0.6 );
+
+	return [ marble, lava, wood, rusted, film ];
+
+}
 
 // Models that fake glass with a partially transparent material render as noise here, so swap those
 // materials for a physical material with real transmission.
@@ -349,6 +442,45 @@ export const MODEL_LIST = {
 		credit: 'Model by "blendswapisweird" on <a href="https://blendswap.com/blend/22379">Blendswap</a>.',
 		stage: 'none',
 		envMap: 'Vestibule',
+	},
+
+	'RenderMan Teapots, TSL Materials': {
+		url: 'https://raw.githubusercontent.com/gkjohnson/3d-demo-data/main/models/renderman-teapot/renderman-teapot.glb',
+		credit: 'Model courtesy of <a href="https://renderman.pixar.com/official-swatch">Pixar\'s RenderMan</a>.',
+		materialGraphs: true,
+		postProcess: model => {
+
+			// copies of the teapot, each with one of the procedural materials and a matte white base and logo
+			const { pot, trim } = getTeapotParts( model );
+			const trimMaterial = new MeshPhysicalMaterial( { color: 0xf0f0f0, roughness: 1 } );
+
+			// turned so the logo faces the default camera, which looks from ( - 1, 0, 1 )
+			const logo = trim[ TEAPOT_TRIM.indexOf( 'renderman_Text' ) ];
+			logo.computeBoundingBox();
+			const logoCenter = logo.boundingBox.getCenter( new Vector3() );
+			const rotation = Math.atan2( - 1, 1 ) - Math.atan2( logoCenter.x, logoCenter.z );
+
+			model.clear();
+			createTslMaterials().forEach( ( material, i, materials ) => {
+
+				// around a circle, with one teapot nearest the camera
+				const angle = 3 * Math.PI / 4 + i * 2 * Math.PI / materials.length;
+				const teapot = new Group();
+				teapot.position.set( Math.cos( angle ), 0, Math.sin( angle ) ).multiplyScalar( 2.6 );
+				teapot.rotation.y = rotation;
+				pot.forEach( geometry => teapot.add( new Mesh( geometry, material ) ) );
+				trim.forEach( geometry => teapot.add( new Mesh( geometry, trimMaterial ) ) );
+				model.add( teapot );
+
+			} );
+
+			// a closer view than the default, centered on the circle
+			const camera = new PerspectiveCamera( 40, 1 );
+			camera.position.set( - 1, 0.5, 1 ).normalize().multiplyScalar( 8.5 );
+			camera.lookAt( 0, 0.6, 0 );
+			model.add( camera );
+
+		},
 	},
 
 	'Dining Room': {
