@@ -1,5 +1,5 @@
 /** @import { Camera, Material, StorageBufferNode, UniformNode } from 'three/webgpu' */
-import { BufferAttribute, BufferGeometry, Matrix3, Matrix4, Node, PerspectiveCamera, StructTypeNode, Vector3, VaryingNode } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, Matrix3, Matrix4, Node, PerspectiveCamera, StructTypeNode, Vector3, VarNode, VaryingNode } from 'three/webgpu';
 import {
 	Fn, context, expression, overrideNodes, float, mat3, uniform, vec3, vec4, frontFacing, positionViewDirection, normalFlat,
 	modelWorldMatrix, modelWorldMatrixInverse, modelNormalMatrix, modelPosition, modelScale, modelDirection, modelViewPosition,
@@ -34,6 +34,22 @@ VaryingNode.prototype.setup = function ( builder ) {
 	}
 
 	return _varyingSetup.call( this, builder );
+
+};
+
+// TODO: three.js keeps a shader's variables in one cache shared by all of its functions, so a graph function declaring
+// one, like "normalWorld", leaves the next graph function reading it undeclared. Each graph function keeps its own
+// variables until three.js scopes them to the function being built
+const _varIsGlobal = VarNode.prototype.isGlobal;
+VarNode.prototype.isGlobal = function ( builder ) {
+
+	if ( builder.context.materialGraph === true ) {
+
+		return false;
+
+	}
+
+	return _varIsGlobal.call( this, builder );
 
 };
 
@@ -366,6 +382,7 @@ function buildGraphCall( material, node, type, cameraUniforms, name ) {
 			setupNormal: () => inputs.shadingNormal.transformDirection( viewMatrix ),
 			setupPositionView: () => material.setupPositionView( builder ),
 			inlineVaryings: true,
+			materialGraph: true,
 		} ), material );
 
 	} ).setLayout( {
