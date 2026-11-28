@@ -37,6 +37,23 @@ VaryingNode.prototype.setup = function ( builder ) {
 
 };
 
+// TODO: three.js keeps a shader's variables and "once" function results in one cache shared by all of its functions,
+// so a graph function declaring one, like "normalWorld", leaves the next graph function reading it undeclared. Each
+// graph function keeps its own, as if it were its own shader, until three.js scopes them to the function being built.
+// Code nodes stay shared so functions are declared once
+const _isGlobal = Node.prototype.isGlobal;
+Node.prototype.isGlobal = function ( builder ) {
+
+	if ( builder.context.materialGraph === true && this.isCodeNode !== true ) {
+
+		return false;
+
+	}
+
+	return _isGlobal.call( this, builder );
+
+};
+
 // The geometry attributes at the hit, in the object's space. "tangent" is the vertex tangent, which may be missing, and
 // a graph reading the tangent attribute gets it from "getGraphTangent"
 const GRAPH_ATTRIBUTES = [
@@ -375,6 +392,7 @@ function buildGraphCall( material, node, type, { textures, cameraUniforms, sampl
 			setupNormal: () => inputs.shadingNormal.transformDirection( viewMatrix ),
 			setupPositionView: () => material.setupPositionView( builder ),
 			inlineVaryings: true,
+			materialGraph: true,
 		} ), material );
 
 	} ).setLayout( {
